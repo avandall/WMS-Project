@@ -18,18 +18,60 @@ This project implements **Clean Architecture** with clear separation of concerns
 
 ### **Layer Structure**
 ```
-PMKT/
-├── api/                # REST API layer (FastAPI)
-│   ├── __init__.py         # FastAPI app
-│   ├── dependencies.py     # Dependency injection
-│   ├── models.py          # Pydantic request/response models
-│   └── routers/           # API route handlers
-├── domain/             # Business entities and rules
-├── repo/               # Data access layer
-├── services/           # Business logic orchestration
-├── module/             # Shared utilities
-├── utils/              # Utilities
-└── examples/           # Usage examples
+weekend/
+├── app/                          # Main application package
+│   ├── main.py                   # FastAPI app entry point
+│   ├── api/                      # API layer
+│   │   ├── __init__.py          # FastAPI app creation & router inclusion
+│   │   ├── dependencies.py      # Dependency injection
+│   │   ├── routers/             # API endpoints
+│   │   │   ├── products.py
+│   │   │   ├── warehouses.py
+│   │   │   ├── inventory.py
+│   │   │   ├── documents.py
+│   │   │   └── reports.py
+│   │   └── schemas/             # Pydantic models
+│   │       └── product.py       # API request/response schemas
+│   ├── services/                # Business logic layer
+│   │   ├── product_service.py
+│   │   ├── warehouse_service.py
+│   │   ├── inventory_service.py
+│   │   ├── document_service.py
+│   │   ├── report_service.py
+│   │   ├── *_report.py          # Report classes
+│   ├── repositories/            # Data access layer
+│   │   ├── interfaces/          # Repository contracts
+│   │   │   └── interfaces.py
+│   │   ├── sql/                 # SQL implementations (currently in-memory)
+│   │   │   ├── product_repo.py
+│   │   │   ├── warehouse_repo.py
+│   │   │   ├── inventory_repo.py
+│   │   │   └── document_repo.py
+│   │   └── __init__.py
+│   ├── models/                  # Domain models
+│   │   ├── product_domain.py
+│   │   ├── warehouse_domain.py
+│   │   ├── inventory_domain.py
+│   │   ├── document_domain.py
+│   │   └── models.py            # DTOs and enums
+│   ├── core/                    # Configuration & infrastructure
+│   │   ├── database.py
+│   │   └── error_constants.py
+│   ├── exceptions/              # Custom exceptions
+│   │   └── business_exceptions.py
+│   └── utils/                   # Utilities
+│       ├── infrastructure/
+│       ├── domain/
+│       └── application/
+├── tests/                       # Test suite
+│   ├── unit/
+│   ├── integration/
+│   └── functional/
+├── .env                         # Environment variables
+├── .gitignore                   # Git ignore rules
+├── requirements.txt             # Python dependencies
+├── pytest.ini                   # Test configuration
+└── README.md
 ```
 
 ## 📋 Requirements

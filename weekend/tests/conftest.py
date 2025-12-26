@@ -9,14 +9,14 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from PMKT.repo.product_repo import ProductRepo
-from PMKT.repo.warehouse_repo import WarehouseRepo
-from PMKT.repo.document_repo import DocumentRepo
-from PMKT.services.product_service import ProductService
-from PMKT.services.inventory_service import InventoryService
-from PMKT.domain.product_domain import Product
-from PMKT.domain.warehouse_domain import Warehouse
-from PMKT.domain.document_domain import Document, DocumentProduct, DocumentType, DocumentStatus
+from app.repositories.sql.product_repo import ProductRepo
+from app.repositories.sql.warehouse_repo import WarehouseRepo
+from app.repositories.sql.document_repo import DocumentRepo
+from app.services.product_service import ProductService
+from app.services.inventory_service import InventoryService
+from app.models.product_domain import Product
+from app.models.warehouse_domain import Warehouse
+from app.models.document_domain import Document, DocumentProduct, DocumentType, DocumentStatus
 
 
 @pytest.fixture

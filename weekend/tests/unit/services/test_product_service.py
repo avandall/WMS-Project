@@ -4,9 +4,9 @@ Unit tests for ProductService.
 
 import pytest
 from unittest.mock import Mock, MagicMock
-from PMKT.services.product_service import ProductService
-from PMKT.domain.product_domain import Product
-from PMKT.module.custom_exceptions import ValidationError, EntityNotFoundError
+from app.services.product_service import ProductService
+from app.models.product_domain import Product
+from app.exceptions.business_exceptions import ValidationError, EntityNotFoundError
 
 
 class TestProductService:

@@ -4,9 +4,9 @@ Unit tests for ProductRepo.
 
 import pytest
 from unittest.mock import Mock
-from PMKT.repo.product_repo import ProductRepo
-from PMKT.domain.product_domain import Product
-from PMKT.module.custom_exceptions import ValidationError
+from app.repositories.sql.product_repo import ProductRepo
+from app.models.product_domain import Product
+from app.exceptions.business_exceptions import ValidationError
 
 
 class TestProductRepo:
