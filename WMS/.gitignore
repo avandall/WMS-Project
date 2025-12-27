@@ -114,3 +114,12 @@ dmypy.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Docker
+.dockerignore
+Dockerfile*
+docker-compose*
+.docker/
+
+# Database
+warehouse.db

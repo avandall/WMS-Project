@@ -149,7 +149,43 @@ pytest tests/integration/
 pytest tests/api/
 ```
 
-## 📖 Usage Examples
+## � Docker
+
+### **Prerequisites**
+- Docker installed on your system
+- Docker Compose (usually included with Docker Desktop)
+
+### **Build and Run with Docker Compose**
+```bash
+# From the WMS directory
+docker-compose up --build
+```
+
+The API will be available at: **http://localhost:8000**
+
+### **Run in Background**
+```bash
+docker-compose up -d --build
+```
+
+### **Stop the Container**
+```bash
+docker-compose down
+```
+
+### **Build Docker Image Manually**
+```bash
+# Build the image
+docker build -t wms-api .
+
+# Run the container
+docker run -p 8000:8000 wms-api
+```
+
+### **Development with Docker**
+For development with live reload, the docker-compose.yml mounts the current directory as a volume, so changes to the code will be reflected immediately.
+
+## �📖 Usage Examples
 
 ### **Quick Start**
 1. Start the server: `python app/main.py`
