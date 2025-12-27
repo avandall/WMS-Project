@@ -55,7 +55,9 @@ WMS/
 │   │   ├── document_domain.py
 │   │   └── models.py            # DTOs and enums
 │   ├── core/                    # Configuration & infrastructure
+│   │   ├── container.py         # Dependency injection container
 │   │   ├── database.py
+│   │   ├── settings.py          # Application settings
 │   │   └── error_constants.py
 │   ├── exceptions/              # Custom exceptions
 │   │   └── business_exceptions.py
@@ -73,6 +75,13 @@ WMS/
 ├── pytest.ini                   # Test configuration
 └── README.md
 ```
+
+### **Dependency Injection**
+The application uses a centralized dependency injection container (`app/core/container.py`) that manages:
+- Repository instances (singletons)
+- Service instances (singletons)
+- Automatic dependency resolution
+- Clean separation of concerns
 
 ## 📋 Requirements
 
