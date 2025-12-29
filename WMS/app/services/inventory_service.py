@@ -154,6 +154,10 @@ class InventoryService:
 
         return low_stock_products
 
+    def get_all_inventory_items(self):
+        """Return raw inventory items for simple listings."""
+        return self.inventory_repo.get_all()
+
     def get_inventory_summary(self) -> Dict[str, Any]:
         """
         Get comprehensive inventory summary across the entire system.

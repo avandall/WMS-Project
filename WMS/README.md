@@ -4,9 +4,9 @@ A comprehensive Warehouse Management System (WMS) built with Python, implementin
 
 ## 🚀 Features
 
-- **Product Management**: Create, update, and track products with validation
+- **Product Management**: Create, update, and track products with validation (product `price` is catalog/list; transactional pricing is per document item `unit_price`)
 - **Inventory Control**: Real-time inventory tracking across multiple warehouses
-- **Warehouse Operations**: Add/remove products from warehouses with stock validation
+- **Warehouse Operations**: Inventory moves are performed via documents (import/export/transfer) with stock validation
 - **Document Processing**: Handle import, export, and transfer documents
 - **Reporting**: Generate comprehensive inventory and product reports
 - **REST API**: Full REST API built with FastAPI

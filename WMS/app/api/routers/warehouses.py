@@ -6,7 +6,7 @@ Provides endpoints for warehouse management operations.
 from typing import List
 from fastapi import APIRouter, HTTPException, Depends
 from ..dependencies import get_warehouse_service
-from ..schemas.product import WarehouseCreate, WarehouseResponse, InventoryItemResponse, ProductMovement
+from ..schemas.product import WarehouseCreate, WarehouseResponse, InventoryItemResponse
 from app.services.warehouse_service import WarehouseService
 from app.exceptions.business_exceptions import WarehouseNotFoundError
 
@@ -41,36 +41,19 @@ async def get_warehouse(
     except WarehouseNotFoundError:
         raise HTTPException(status_code=404, detail=f"Warehouse {warehouse_id} not found")
 
-@router.post("/{warehouse_id}/products")
-async def add_product_to_warehouse(
+@router.delete("/{warehouse_id}")
+async def delete_warehouse(
     warehouse_id: int,
-    movement: ProductMovement,
     service: WarehouseService = Depends(get_warehouse_service)
 ):
-    """Add product to warehouse."""
+    """Delete a warehouse. Only allowed if warehouse has no inventory (stock = 0)."""
     try:
-        service.add_product_to_warehouse(
-            warehouse_id=warehouse_id,
-            product_id=movement.product_id,
-            quantity=movement.quantity
-        )
-        return {"message": f"Added {movement.quantity} of product {movement.product_id} to warehouse {warehouse_id}"}
-    except Exception as e:
+        service.delete_warehouse(warehouse_id)
+        return {"message": f"Warehouse {warehouse_id} deleted successfully"}
+    except WarehouseNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Warehouse {warehouse_id} not found")
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.delete("/{warehouse_id}/products")
-async def remove_product_from_warehouse(
-    warehouse_id: int,
-    movement: ProductMovement,
-    service: WarehouseService = Depends(get_warehouse_service)
-):
-    """Remove product from warehouse."""
-    try:
-        service.remove_product_from_warehouse(
-            warehouse_id=warehouse_id,
-            product_id=movement.product_id,
-            quantity=movement.quantity
-        )
-        return {"message": f"Removed {movement.quantity} of product {movement.product_id} from warehouse {warehouse_id}"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+# NOTE: Inventory changes must be performed through document endpoints (import/export/transfer)
+# to ensure consistent business rules and pricing. No direct add/remove routes are exposed here.

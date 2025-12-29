@@ -30,12 +30,14 @@ class WarehouseRepo(IWarehouseRepo):
 
     def add_product_to_warehouse(self, warehouse_id: int, product_id: int, quantity: int) -> None:
         warehouse = self.get(warehouse_id)
-        if warehouse:
-            warehouse.add_product(product_id, quantity)
-            self.save(warehouse)
+        if not warehouse:
+            raise WarehouseNotFoundError(f"Warehouse {warehouse_id} not found")
+        warehouse.add_product(product_id, quantity)
+        self.save(warehouse)
 
     def remove_product_from_warehouse(self, warehouse_id: int, product_id: int, quantity: int) -> None:
         warehouse = self.get(warehouse_id)
-        if warehouse:
-            warehouse.remove_product(product_id, quantity)
-            self.save(warehouse)
+        if not warehouse:
+            raise WarehouseNotFoundError(f"Warehouse {warehouse_id} not found")
+        warehouse.remove_product(product_id, quantity)
+        self.save(warehouse)

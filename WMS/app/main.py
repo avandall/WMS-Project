@@ -11,14 +11,14 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 import uvicorn
-from .api import app
-from .core.settings import settings
+from app.api import app
+from app.core.settings import settings
 
 if __name__ == "__main__":
     uvicorn.run(
         "app.api:app",
         host=settings.host,
         port=settings.port,
-        reload=settings.debug,
+        reload=True,  # Enable reload for development
         log_level="info"
     )

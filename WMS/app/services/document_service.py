@@ -203,8 +203,9 @@ class DocumentService:
             enriched_items.append({
                 "product": product,
                 "quantity": item.quantity,
-                "unit_price": product.price if product else None,
-                "total_value": (product.price * item.quantity) if product else None
+                # Use pricing from the document item rather than product catalog price
+                "unit_price": item.unit_price,
+                "total_value": (item.unit_price * item.quantity)
             })
 
         warehouse_info = {}
@@ -304,21 +305,48 @@ class DocumentService:
         return document
 
     def _execute_import_operations(self, document: Document) -> None:
-        """Execute warehouse operations for import document."""
+        """Execute warehouse operations for import document.
+        Ensure destination warehouse exists before any changes and avoid partial updates."""
+        # Validate destination warehouse still exists at posting time
+        to_warehouse = self.warehouse_repo.get(document.to_warehouse_id)
+        if not to_warehouse:
+            raise EntityNotFoundError(f"Warehouse {document.to_warehouse_id} not found")
+
         for item in document.items:
+            # Add to warehouse first; if this fails, do not alter total inventory
             self.warehouse_repo.add_product_to_warehouse(
                 document.to_warehouse_id, item.product_id, item.quantity
             )
 
+            # Then add to total inventory (import brings new stock into system)
+            self.inventory_repo.add_quantity(item.product_id, item.quantity)
+
     def _execute_export_operations(self, document: Document) -> None:
-        """Execute warehouse operations for export document."""
+        """Execute warehouse operations for export document.
+        Validate source warehouse existence before any changes."""
+        from_warehouse = self.warehouse_repo.get(document.from_warehouse_id)
+        if not from_warehouse:
+            raise EntityNotFoundError(f"Warehouse {document.from_warehouse_id} not found")
+
         for item in document.items:
+            # Remove from warehouse
             self.warehouse_repo.remove_product_from_warehouse(
                 document.from_warehouse_id, item.product_id, item.quantity
             )
+            
+            # Remove from total inventory (export removes stock from system)
+            self.inventory_repo.remove_quantity(item.product_id, item.quantity)
 
     def _execute_transfer_operations(self, document: Document) -> None:
-        """Execute warehouse operations for transfer document."""
+        """Execute warehouse operations for transfer document.
+        Validate both warehouses exist before any changes."""
+        from_warehouse = self.warehouse_repo.get(document.from_warehouse_id)
+        to_warehouse = self.warehouse_repo.get(document.to_warehouse_id)
+        if not from_warehouse:
+            raise EntityNotFoundError(f"Warehouse {document.from_warehouse_id} not found")
+        if not to_warehouse:
+            raise EntityNotFoundError(f"Warehouse {document.to_warehouse_id} not found")
+
         for item in document.items:
             # Remove from source
             self.warehouse_repo.remove_product_from_warehouse(

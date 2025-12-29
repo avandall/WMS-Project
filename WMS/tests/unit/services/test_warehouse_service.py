@@ -1,10 +1,11 @@
 """
-Unit tests for WarehouseService.
+Unit tests aligned to document-only operations.
+Tests focus on DocumentService posting import/export operations affecting warehouse inventory.
 """
 
 import pytest
 from unittest.mock import Mock, MagicMock
-from app.services.warehouse_service import WarehouseService
+from app.services.document_service import DocumentService
 from app.models.warehouse_domain import Warehouse
 from app.models.inventory_domain import InventoryItem
 from app.exceptions.business_exceptions import (
@@ -12,8 +13,8 @@ from app.exceptions.business_exceptions import (
 )
 
 
-class TestWarehouseService:
-    """Test cases for WarehouseService."""
+class TestDocumentOperations:
+    """Test cases for document-driven warehouse operations."""
 
     @pytest.fixture
     def mock_warehouse_repo(self):
@@ -36,13 +37,15 @@ class TestWarehouseService:
         return Mock(return_value=123)
 
     @pytest.fixture
-    def warehouse_service(self, mock_warehouse_repo, mock_product_repo, mock_inventory_repo, monkeypatch, mock_id_generator):
-        """Warehouse service with mocked dependencies."""
-        service = WarehouseService(mock_warehouse_repo, mock_product_repo, mock_inventory_repo)
-        # Mock the ID generator
-        monkeypatch.setattr(service, '_warehouse_id_generator', mock_id_generator)
-        # Mock inventory repo to return sufficient quantity
-        mock_inventory_repo.get_quantity.return_value = 100
+    def document_service(self, mock_warehouse_repo, mock_product_repo, mock_inventory_repo):
+        """Document service with mocked dependencies."""
+        from app.repositories.interfaces.interfaces import IDocumentRepo
+        # Create a simple mock document repo
+        mock_document_repo = Mock()
+        mock_document_repo.save = Mock()
+        mock_document_repo.get = Mock()
+        mock_document_repo.get_all = Mock(return_value=[])
+        service = DocumentService(mock_document_repo, mock_warehouse_repo, mock_product_repo, mock_inventory_repo)
         return service
 
     @pytest.fixture
@@ -57,77 +60,86 @@ class TestWarehouseService:
             ]
         )
 
-    def test_add_product_to_warehouse_success(self, warehouse_service, mock_warehouse_repo, mock_product_repo, mock_inventory_repo):
-        """Test adding product to warehouse successfully."""
-        # Arrange
+    def test_import_document_post_updates_inventory(self, document_service, mock_warehouse_repo, mock_product_repo, mock_inventory_repo):
+        """Posting import document adds to total inventory and warehouse."""
         from app.models.warehouse_domain import Warehouse
-        mock_warehouse = Warehouse(warehouse_id=1, location="Test Warehouse")
-        mock_product = Mock()
-        mock_product.product_id = 100
-        
-        mock_warehouse_repo.get.return_value = mock_warehouse
+        mock_warehouse_repo.get.return_value = Warehouse(warehouse_id=1, location="Test Warehouse")
+        mock_product = Mock(); mock_product.product_id = 100; mock_product.price = 25.0
         mock_product_repo.get.return_value = mock_product
-        mock_inventory_repo.get_quantity.return_value = 50  # Total available
-        mock_warehouse_repo.get_warehouse_inventory.return_value = []  # No existing inventory
-        
-        # Act
-        warehouse_service.add_product_to_warehouse(1, 100, 10)
-
-        # Assert
+        # Prepare: create import document
+        doc = document_service.create_import_document(
+            to_warehouse_id=1,
+            items=[{"product_id": 100, "quantity": 10, "unit_price": 25.0}],
+            created_by="tester"
+        )
+        # Act: post document
+        document_service.post_document(doc.document_id, approved_by="manager")
+        # Assert: warehouse and total inventory updated
+        mock_inventory_repo.add_quantity.assert_called_once_with(100, 10)
         mock_warehouse_repo.add_product_to_warehouse.assert_called_once_with(1, 100, 10)
 
-    def test_add_product_to_warehouse_validation_error(self, warehouse_service, mock_warehouse_repo):
-        """Test adding product to warehouse with validation error."""
-        # Act & Assert
-        with pytest.raises(InvalidQuantityError, match="Quantity must be positive"):
-            warehouse_service.add_product_to_warehouse(1, 100, -5)
+    def test_import_document_validation_error(self, document_service, mock_warehouse_repo, mock_product_repo):
+        """Creating import document with invalid quantity fails."""
+        mock_warehouse_repo.get.return_value = Warehouse(warehouse_id=1, location="Test Warehouse")
+        mock_product_repo.get.return_value = Mock(product_id=100)
+        with pytest.raises(InvalidQuantityError):
+            document_service.create_import_document(
+                to_warehouse_id=1,
+                items=[{"product_id": 100, "quantity": -5, "unit_price": 25.0}],
+                created_by="tester"
+            )
 
-    def test_add_product_to_warehouse_not_found(self, warehouse_service, mock_warehouse_repo):
-        """Test adding product to non-existent warehouse."""
-        # Arrange
-        mock_warehouse_repo.add_product_to_warehouse.side_effect = WarehouseNotFoundError("Warehouse not found")
-        mock_warehouse_repo.get_warehouse_inventory.return_value = []
+    def test_import_document_warehouse_not_found(self, document_service, mock_warehouse_repo):
+        """Creating import document for non-existent warehouse fails."""
+        mock_warehouse_repo.get.return_value = None
+        with pytest.raises(WarehouseNotFoundError):
+            document_service.create_import_document(
+                to_warehouse_id=999,
+                items=[{"product_id": 100, "quantity": 10, "unit_price": 25.0}],
+                created_by="tester"
+            )
 
-        # Act & Assert
-        with pytest.raises(WarehouseNotFoundError, match="Warehouse not found"):
-            warehouse_service.add_product_to_warehouse(999, 100, 10)
-
-        mock_warehouse_repo.add_product_to_warehouse.assert_called_once_with(999, 100, 10)
-
-    def test_remove_product_from_warehouse_success(self, warehouse_service, mock_warehouse_repo):
-        """Test removing product from warehouse successfully."""
-        # Arrange
+    def test_export_document_post_updates_inventory(self, document_service, mock_warehouse_repo, mock_product_repo, mock_inventory_repo):
+        """Posting export document removes from warehouse and total inventory."""
+        from app.models.warehouse_domain import Warehouse
         from app.models.inventory_domain import InventoryItem
+        mock_warehouse_repo.get.return_value = Warehouse(warehouse_id=1, location="Test Warehouse")
+        mock_product_repo.get.return_value = Mock(product_id=100, price=25.0)
+        # Simulate initial warehouse inventory
         mock_warehouse_repo.get_warehouse_inventory.return_value = [InventoryItem(product_id=100, quantity=10)]
-        
-        # Act
-        warehouse_service.remove_product_from_warehouse(1, 100, 5)
-
-        # Assert
+        doc = document_service.create_export_document(
+            from_warehouse_id=1,
+            items=[{"product_id": 100, "quantity": 5, "unit_price": 25.0}],
+            created_by="tester"
+        )
+        document_service.post_document(doc.document_id, approved_by="manager")
         mock_warehouse_repo.remove_product_from_warehouse.assert_called_once_with(1, 100, 5)
+        mock_inventory_repo.remove_quantity.assert_called_once_with(100, 5)
 
-    def test_remove_product_from_warehouse_insufficient_stock(self, warehouse_service, mock_warehouse_repo):
-        """Test removing product with insufficient stock."""
-        # Arrange
+    def test_export_post_insufficient_stock(self, document_service, mock_warehouse_repo, mock_product_repo):
+        """Posting export with insufficient stock fails."""
+        from app.models.warehouse_domain import Warehouse
         from app.models.inventory_domain import InventoryItem
+        mock_warehouse_repo.get.return_value = Warehouse(warehouse_id=1, location="Test Warehouse")
+        mock_product_repo.get.return_value = Mock(product_id=100, price=25.0)
         mock_warehouse_repo.get_warehouse_inventory.return_value = [InventoryItem(product_id=100, quantity=10)]
+        doc = document_service.create_export_document(
+            from_warehouse_id=1,
+            items=[{"product_id": 100, "quantity": 50, "unit_price": 25.0}],
+            created_by="tester"
+        )
+        with pytest.raises(InsufficientStockError):
+            document_service.post_document(doc.document_id, approved_by="manager")
 
-        # Act & Assert
-        with pytest.raises(InsufficientStockError, match="Insufficient stock in warehouse"):
-            warehouse_service.remove_product_from_warehouse(1, 100, 50)
-
-    def test_remove_product_from_warehouse_not_found(self, warehouse_service, mock_warehouse_repo):
-        """Test removing product from non-existent warehouse."""
-        # Arrange
-        from app.models.inventory_domain import InventoryItem
-        mock_warehouse_repo.remove_product_from_warehouse.side_effect = WarehouseNotFoundError("Warehouse not found")
-        mock_warehouse_repo.get_warehouse_inventory.return_value = [InventoryItem(product_id=100, quantity=10)]
-
-        # Act & Assert
-        with pytest.raises(WarehouseNotFoundError, match="Warehouse not found"):
-            warehouse_service.remove_product_from_warehouse(999, 100, 5)
-
-        mock_warehouse_repo.remove_product_from_warehouse.assert_called_once_with(999, 100, 5)
+    def test_export_document_warehouse_not_found(self, document_service, mock_warehouse_repo, mock_product_repo):
+        """Creating export document for non-existent warehouse fails on creation or posting."""
+        mock_warehouse_repo.get.return_value = None
+        with pytest.raises(WarehouseNotFoundError):
+            document_service.create_export_document(
+                from_warehouse_id=999,
+                items=[{"product_id": 100, "quantity": 5, "unit_price": 25.0}],
+                created_by="tester"
+            )
 
     def test_get_warehouse_inventory_success(self, warehouse_service, mock_warehouse_repo, mock_product_repo):
         """Test getting warehouse inventory successfully."""

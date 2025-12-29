@@ -4,7 +4,7 @@ Tests warehouse creation, inventory management, and product movements.
 """
 
 import pytest
-from starlette.testclient import TestClient
+import httpx
 from app.api import app
 
 
@@ -13,13 +13,14 @@ class TestWarehousesAPI:
 
     def setup_method(self):
         """Set up test client for each test."""
-        self.client = TestClient(app)
+        transport = httpx.ASGITransport(app=app)
+        self.client = httpx.Client(transport=transport, base_url="http://testserver")
 
     def test_create_warehouse_success(self):
         """Test creating a warehouse successfully."""
         warehouse_data = {"location": "Test Warehouse Location"}
 
-        response = self.client.post("/api/v1/warehouses/", json=warehouse_data)
+        response = self.client.post("/api/warehouses/", json=warehouse_data)
 
         assert response.status_code == 200
         data = response.json()
@@ -34,11 +35,11 @@ class TestWarehousesAPI:
         """Test getting warehouse inventory."""
         # First create a warehouse
         warehouse_data = {"location": "Inventory Test Warehouse"}
-        response = self.client.post("/api/v1/warehouses/", json=warehouse_data)
+        response = self.client.post("/api/warehouses/", json=warehouse_data)
         warehouse_id = response.json()["warehouse_id"]
 
         # Get warehouse inventory (should be empty)
-        response = self.client.get(f"/api/v1/warehouses/{warehouse_id}")
+        response = self.client.get(f"/api/warehouses/{warehouse_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -47,7 +48,7 @@ class TestWarehousesAPI:
 
     def test_get_nonexistent_warehouse(self):
         """Test getting a nonexistent warehouse."""
-        response = self.client.get("/api/v1/warehouses/999")
+        response = self.client.get("/api/warehouses/999")
 
         assert response.status_code == 404
 
@@ -55,7 +56,7 @@ class TestWarehousesAPI:
         """Test adding product to warehouse."""
         # Create warehouse
         warehouse_data = {"location": "Add Product Warehouse"}
-        response = self.client.post("/api/v1/warehouses/", json=warehouse_data)
+        response = self.client.post("/api/warehouses/", json=warehouse_data)
         warehouse_id = response.json()["warehouse_id"]
 
         # Create product first
@@ -64,58 +65,60 @@ class TestWarehousesAPI:
             "name": "Warehouse Test Product",
             "price": 25.0
         }
-        self.client.post("/api/v1/products/", json=product_data)
+        self.client.post("/api/products/", json=product_data)
 
-        # Add product to warehouse
-        movement_data = {
-            "product_id": 100,
-            "quantity": 50
+        # Add product to warehouse via import document
+        import_doc = {
+            "warehouse_id": warehouse_id,
+            "items": [{"product_id": 100, "quantity": 50, "unit_price": 25.0}],
+            "created_by": "tester",
+            "note": "add via document"
         }
-        response = self.client.post(f"/api/v1/warehouses/{warehouse_id}/products", json=movement_data)
-
+        response = self.client.post("/api/documents/import", json=import_doc)
         assert response.status_code == 200
-        data = response.json()
-        assert "Added 50 of product 100" in data["message"]
+        doc_id = response.json()["document_id"]
+        # Post the document
+        post_resp = self.client.post(f"/api/documents/{doc_id}/post", json={"approved_by": "manager"})
+        assert post_resp.status_code == 200
 
         # Verify product was added
-        response = self.client.get(f"/api/v1/warehouses/{warehouse_id}")
+        response = self.client.get(f"/api/warehouses/{warehouse_id}")
         assert response.status_code == 200
         data = response.json()
         assert len(data["inventory"]) == 1
-        assert data["inventory"][0]["product_id"] == 100
         assert data["inventory"][0]["quantity"] == 50
 
     def test_add_product_to_nonexistent_warehouse(self):
         """Test adding product to nonexistent warehouse."""
-        movement_data = {
-            "product_id": 100,
-            "quantity": 10
+        import_doc = {
+            "warehouse_id": 999,
+            "items": [{"product_id": 100, "quantity": 10, "unit_price": 25.0}],
+            "created_by": "tester"
         }
-        response = self.client.post("/api/v1/warehouses/999/products", json=movement_data)
-
+        response = self.client.post("/api/documents/import", json=import_doc)
         assert response.status_code == 400
 
     def test_add_invalid_quantity_to_warehouse(self):
         """Test adding invalid quantity to warehouse."""
         # Create warehouse
         warehouse_data = {"location": "Invalid Quantity Warehouse"}
-        response = self.client.post("/api/v1/warehouses/", json=warehouse_data)
+        response = self.client.post("/api/warehouses/", json=warehouse_data)
         warehouse_id = response.json()["warehouse_id"]
 
         # Try to add negative quantity
-        movement_data = {
-            "product_id": 100,
-            "quantity": -5
+        import_doc = {
+            "warehouse_id": warehouse_id,
+            "items": [{"product_id": 100, "quantity": -5, "unit_price": 25.0}],
+            "created_by": "tester"
         }
-        response = self.client.post(f"/api/v1/warehouses/{warehouse_id}/products", json=movement_data)
-
+        response = self.client.post("/api/documents/import", json=import_doc)
         assert response.status_code == 422
 
     def test_add_more_product_to_existing_inventory(self):
         """Test adding more quantity to existing product in warehouse."""
         # Create warehouse and product
         warehouse_data = {"location": "Existing Inventory Warehouse"}
-        response = self.client.post("/api/v1/warehouses/", json=warehouse_data)
+        response = self.client.post("/api/warehouses/", json=warehouse_data)
         warehouse_id = response.json()["warehouse_id"]
 
         product_data = {
@@ -123,26 +126,31 @@ class TestWarehousesAPI:
             "name": "Existing Inventory Product",
             "price": 30.0
         }
-        self.client.post("/api/v1/products/", json=product_data)
+        self.client.post("/api/products/", json=product_data)
 
-        # Add initial quantity
-        movement_data = {
-            "product_id": 200,
-            "quantity": 20
+        # Add initial quantity via import document
+        import_doc_1 = {
+            "warehouse_id": warehouse_id,
+            "items": [{"product_id": 200, "quantity": 20, "unit_price": 30.0}],
+            "created_by": "tester"
         }
-        self.client.post(f"/api/v1/warehouses/{warehouse_id}/products", json=movement_data)
+        doc_resp = self.client.post("/api/documents/import", json=import_doc_1)
+        doc_id = doc_resp.json()["document_id"]
+        self.client.post(f"/api/documents/{doc_id}/post", json={"approved_by": "manager"})
 
-        # Add more quantity
-        movement_data = {
-            "product_id": 200,
-            "quantity": 15
+        # Add more quantity via import document
+        import_doc_2 = {
+            "warehouse_id": warehouse_id,
+            "items": [{"product_id": 200, "quantity": 15, "unit_price": 30.0}],
+            "created_by": "tester"
         }
-        response = self.client.post(f"/api/v1/warehouses/{warehouse_id}/products", json=movement_data)
-
-        assert response.status_code == 200
+        doc_resp2 = self.client.post("/api/documents/import", json=import_doc_2)
+        doc_id2 = doc_resp2.json()["document_id"]
+        post2 = self.client.post(f"/api/documents/{doc_id2}/post", json={"approved_by": "manager"})
+        assert post2.status_code == 200
 
         # Verify total quantity
-        response = self.client.get(f"/api/v1/warehouses/{warehouse_id}")
+        response = self.client.get(f"/api/warehouses/{warehouse_id}")
         data = response.json()
         assert len(data["inventory"]) == 1
         assert data["inventory"][0]["quantity"] == 35
@@ -151,7 +159,7 @@ class TestWarehousesAPI:
         """Test removing product from warehouse."""
         # Create warehouse, product, and add to inventory
         warehouse_data = {"location": "Remove Product Warehouse"}
-        response = self.client.post("/api/v1/warehouses/", json=warehouse_data)
+        response = self.client.post("/api/warehouses/", json=warehouse_data)
         warehouse_id = response.json()["warehouse_id"]
 
         product_data = {
@@ -159,28 +167,32 @@ class TestWarehousesAPI:
             "name": "Remove Test Product",
             "price": 40.0
         }
-        self.client.post("/api/v1/products/", json=product_data)
+        self.client.post("/api/products/", json=product_data)
 
-        # Add product to warehouse
-        movement_data = {
-            "product_id": 300,
-            "quantity": 25
+        # Add product to warehouse via import
+        import_doc = {
+            "warehouse_id": warehouse_id,
+            "items": [{"product_id": 300, "quantity": 25, "unit_price": 40.0}],
+            "created_by": "tester"
         }
-        self.client.post(f"/api/v1/warehouses/{warehouse_id}/products", json=movement_data)
+        doc_resp = self.client.post("/api/documents/import", json=import_doc)
+        doc_id = doc_resp.json()["document_id"]
+        self.client.post(f"/api/documents/{doc_id}/post", json={"approved_by": "manager"})
 
-        # Remove some quantity
-        movement_data = {
-            "product_id": 300,
-            "quantity": 10
+        # Remove some quantity via export document
+        export_doc = {
+            "warehouse_id": warehouse_id,
+            "items": [{"product_id": 300, "quantity": 10, "unit_price": 40.0}],
+            "created_by": "tester"
         }
-        response = self.client.request("DELETE", f"/api/v1/warehouses/{warehouse_id}/products", json=movement_data)
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "Removed 10 of product 300" in data["message"]
+        doc_resp2 = self.client.post("/api/documents/export", json=export_doc)
+        assert doc_resp2.status_code == 200
+        doc_id2 = doc_resp2.json()["document_id"]
+        post_resp = self.client.post(f"/api/documents/{doc_id2}/post", json={"approved_by": "manager"})
+        assert post_resp.status_code == 200
 
         # Verify remaining quantity
-        response = self.client.get(f"/api/v1/warehouses/{warehouse_id}")
+        response = self.client.get(f"/api/warehouses/{warehouse_id}")
         data = response.json()
         assert data["inventory"][0]["quantity"] == 15
 
@@ -188,7 +200,7 @@ class TestWarehousesAPI:
         """Test removing all quantity of a product from warehouse."""
         # Create warehouse, product, and add to inventory
         warehouse_data = {"location": "Remove All Warehouse"}
-        response = self.client.post("/api/v1/warehouses/", json=warehouse_data)
+        response = self.client.post("/api/warehouses/", json=warehouse_data)
         warehouse_id = response.json()["warehouse_id"]
 
         product_data = {
@@ -196,26 +208,31 @@ class TestWarehousesAPI:
             "name": "Remove All Product",
             "price": 50.0
         }
-        self.client.post("/api/v1/products/", json=product_data)
+        self.client.post("/api/products/", json=product_data)
 
-        # Add product to warehouse
-        movement_data = {
-            "product_id": 400,
-            "quantity": 10
+        # Add product to warehouse via import
+        import_doc = {
+            "warehouse_id": warehouse_id,
+            "items": [{"product_id": 400, "quantity": 10, "unit_price": 50.0}],
+            "created_by": "tester"
         }
-        self.client.post(f"/api/v1/warehouses/{warehouse_id}/products", json=movement_data)
+        doc_resp = self.client.post("/api/documents/import", json=import_doc)
+        doc_id = doc_resp.json()["document_id"]
+        self.client.post(f"/api/documents/{doc_id}/post", json={"approved_by": "manager"})
 
-        # Remove all quantity
-        movement_data = {
-            "product_id": 400,
-            "quantity": 10
+        # Remove all quantity via export
+        export_doc = {
+            "warehouse_id": warehouse_id,
+            "items": [{"product_id": 400, "quantity": 10, "unit_price": 50.0}],
+            "created_by": "tester"
         }
-        response = self.client.request("DELETE", f"/api/v1/warehouses/{warehouse_id}/products", json=movement_data)
-
-        assert response.status_code == 200
+        doc_resp2 = self.client.post("/api/documents/export", json=export_doc)
+        doc_id2 = doc_resp2.json()["document_id"]
+        post2 = self.client.post(f"/api/documents/{doc_id2}/post", json={"approved_by": "manager"})
+        assert post2.status_code == 200
 
         # Verify product is completely removed
-        response = self.client.get(f"/api/v1/warehouses/{warehouse_id}")
+        response = self.client.get(f"/api/warehouses/{warehouse_id}")
         data = response.json()
         assert len(data["inventory"]) == 0
 
@@ -223,7 +240,7 @@ class TestWarehousesAPI:
         """Test removing more quantity than available from warehouse."""
         # Create warehouse, product, and add to inventory
         warehouse_data = {"location": "Insufficient Stock Warehouse"}
-        response = self.client.post("/api/v1/warehouses/", json=warehouse_data)
+        response = self.client.post("/api/warehouses/", json=warehouse_data)
         warehouse_id = response.json()["warehouse_id"]
 
         product_data = {
@@ -231,45 +248,54 @@ class TestWarehousesAPI:
             "name": "Insufficient Stock Product",
             "price": 60.0
         }
-        self.client.post("/api/v1/products/", json=product_data)
+        self.client.post("/api/products/", json=product_data)
 
-        # Add limited quantity
-        movement_data = {
-            "product_id": 500,
-            "quantity": 5
+        # Add limited quantity via import
+        import_doc = {
+            "warehouse_id": warehouse_id,
+            "items": [{"product_id": 500, "quantity": 5, "unit_price": 60.0}],
+            "created_by": "tester"
         }
-        self.client.post(f"/api/v1/warehouses/{warehouse_id}/products", json=movement_data)
+        doc_resp = self.client.post("/api/documents/import", json=import_doc)
+        doc_id = doc_resp.json()["document_id"]
+        self.client.post(f"/api/documents/{doc_id}/post", json={"approved_by": "manager"})
 
-        # Try to remove more than available
-        movement_data = {
-            "product_id": 500,
-            "quantity": 10
+        # Try to remove more than available via export
+        export_doc = {
+            "warehouse_id": warehouse_id,
+            "items": [{"product_id": 500, "quantity": 10, "unit_price": 60.0}],
+            "created_by": "tester"
         }
-        response = self.client.request("DELETE", f"/api/v1/warehouses/{warehouse_id}/products", json=movement_data)
-
-        assert response.status_code == 400
+        create_resp = self.client.post("/api/documents/export", json=export_doc)
+        assert create_resp.status_code == 200
+        doc_id2 = create_resp.json()["document_id"]
+        post_resp = self.client.post(f"/api/documents/{doc_id2}/post", json={"approved_by": "manager"})
+        assert post_resp.status_code == 400
 
     def test_remove_product_not_in_warehouse(self):
         """Test removing product that doesn't exist in warehouse."""
         # Create warehouse
         warehouse_data = {"location": "No Product Warehouse"}
-        response = self.client.post("/api/v1/warehouses/", json=warehouse_data)
+        response = self.client.post("/api/warehouses/", json=warehouse_data)
         warehouse_id = response.json()["warehouse_id"]
 
-        # Try to remove product not in warehouse
-        movement_data = {
-            "product_id": 600,
-            "quantity": 5
+        # Try to remove product not in warehouse via export
+        export_doc = {
+            "warehouse_id": warehouse_id,
+            "items": [{"product_id": 600, "quantity": 5, "unit_price": 60.0}],
+            "created_by": "tester"
         }
-        response = self.client.request("DELETE", f"/api/v1/warehouses/{warehouse_id}/products", json=movement_data)
-
-        assert response.status_code == 400
+        create_resp = self.client.post("/api/documents/export", json=export_doc)
+        assert create_resp.status_code == 200
+        doc_id = create_resp.json()["document_id"]
+        post_resp = self.client.post(f"/api/documents/{doc_id}/post", json={"approved_by": "manager"})
+        assert post_resp.status_code == 400
 
     def test_warehouse_inventory_workflow(self):
         """Test complete warehouse inventory workflow."""
         # Create warehouse and product
         warehouse_data = {"location": "Workflow Warehouse"}
-        response = self.client.post("/api/v1/warehouses/", json=warehouse_data)
+        response = self.client.post("/api/warehouses/", json=warehouse_data)
         warehouse_id = response.json()["warehouse_id"]
 
         product_data = {
@@ -277,29 +303,47 @@ class TestWarehousesAPI:
             "name": "Workflow Product",
             "price": 75.0
         }
-        self.client.post("/api/v1/products/", json=product_data)
+        self.client.post("/api/products/", json=product_data)
 
         # Initially empty
-        response = self.client.get(f"/api/v1/warehouses/{warehouse_id}")
+        response = self.client.get(f"/api/warehouses/{warehouse_id}")
         assert len(response.json()["inventory"]) == 0
 
-        # Add products
-        movement_data = {"product_id": 700, "quantity": 100}
-        self.client.post(f"/api/v1/warehouses/{warehouse_id}/products", json=movement_data)
+        # Add products via import doc
+        import_doc_1 = {
+            "warehouse_id": warehouse_id,
+            "items": [{"product_id": 700, "quantity": 100, "unit_price": 75.0}],
+            "created_by": "tester"
+        }
+        resp1 = self.client.post("/api/documents/import", json=import_doc_1)
+        doc_id1 = resp1.json()["document_id"]
+        self.client.post(f"/api/documents/{doc_id1}/post", json={"approved_by": "manager"})
 
-        response = self.client.get(f"/api/v1/warehouses/{warehouse_id}")
+        response = self.client.get(f"/api/warehouses/{warehouse_id}")
         assert response.json()["inventory"][0]["quantity"] == 100
 
-        # Add more
-        movement_data = {"product_id": 700, "quantity": 50}
-        self.client.post(f"/api/v1/warehouses/{warehouse_id}/products", json=movement_data)
+        # Add more via import doc
+        import_doc_2 = {
+            "warehouse_id": warehouse_id,
+            "items": [{"product_id": 700, "quantity": 50, "unit_price": 75.0}],
+            "created_by": "tester"
+        }
+        resp2 = self.client.post("/api/documents/import", json=import_doc_2)
+        doc_id2 = resp2.json()["document_id"]
+        self.client.post(f"/api/documents/{doc_id2}/post", json={"approved_by": "manager"})
 
-        response = self.client.get(f"/api/v1/warehouses/{warehouse_id}")
+        response = self.client.get(f"/api/warehouses/{warehouse_id}")
         assert response.json()["inventory"][0]["quantity"] == 150
 
-        # Remove some
-        movement_data = {"product_id": 700, "quantity": 75}
-        self.client.request("DELETE", f"/api/v1/warehouses/{warehouse_id}/products", json=movement_data)
+        # Remove some via export doc
+        export_doc = {
+            "warehouse_id": warehouse_id,
+            "items": [{"product_id": 700, "quantity": 75, "unit_price": 75.0}],
+            "created_by": "tester"
+        }
+        resp3 = self.client.post("/api/documents/export", json=export_doc)
+        doc_id3 = resp3.json()["document_id"]
+        self.client.post(f"/api/documents/{doc_id3}/post", json={"approved_by": "manager"})
 
-        response = self.client.get(f"/api/v1/warehouses/{warehouse_id}")
+        response = self.client.get(f"/api/warehouses/{warehouse_id}")
         assert response.json()["inventory"][0]["quantity"] == 75

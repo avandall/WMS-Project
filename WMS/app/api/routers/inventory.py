@@ -16,7 +16,7 @@ async def get_all_inventory(
     service: InventoryService = Depends(get_inventory_service)
 ):
     """Get all inventory items."""
-    items = service.get_all_inventory()
+    items = service.get_all_inventory_items()
     return [InventoryItemResponse.from_domain(item) for item in items]
 
 @router.get("/{product_id}")

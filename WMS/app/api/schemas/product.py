@@ -11,12 +11,18 @@ from app.models.document_domain import DocumentType, DocumentStatus
 class ProductCreate(BaseModel):
     product_id: int = Field(..., gt=0, description="Unique product identifier")
     name: str = Field(..., min_length=1, max_length=100, description="Product name")
-    price: float = Field(..., ge=0, description="Product price")
+    price: float = Field(
+        ..., ge=0,
+        description="Catalog/list price. Transaction pricing is defined per document item unit_price."
+    )
     description: Optional[str] = Field(None, max_length=500, description="Product description")
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
-    price: Optional[float] = Field(None, ge=0)
+    price: Optional[float] = Field(
+        None, ge=0,
+        description="Catalog/list price. Transaction pricing is defined per document item unit_price."
+    )
     description: Optional[str] = Field(None, max_length=500)
 
 class ProductResponse(BaseModel):

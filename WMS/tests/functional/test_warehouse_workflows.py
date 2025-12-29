@@ -81,19 +81,25 @@ class TestWarehouseManagementWorkflow:
             price=50.0
         )
 
-        # Add to total inventory first
-        self.inventory_service.add_to_total_inventory(2, 200)
+        # Import initial stock via document and post
+        import_doc = self.document_service.create_import_document(
+            to_warehouse_id=warehouse_id,
+            items=[{"product_id": 2, "quantity": 200, "unit_price": 50.0}],
+            created_by="functional_test_user"
+        )
+        self.document_service.post_document(import_doc.document_id, approved_by="manager")
 
         # Initially empty inventory
         inventory = self.warehouse_service.get_warehouse_inventory(warehouse_id)
         assert len(inventory) == 0
 
-        # Add product to warehouse
-        self.warehouse_service.add_product_to_warehouse(
-            warehouse_id=warehouse_id,
-            product_id=2,
-            quantity=100
+        # Import to warehouse
+        import_doc2 = self.document_service.create_import_document(
+            to_warehouse_id=warehouse_id,
+            items=[{"product_id": 2, "quantity": 100, "unit_price": 50.0}],
+            created_by="functional_test_user"
         )
+        self.document_service.post_document(import_doc2.document_id, approved_by="manager")
 
         # Check inventory
         inventory = self.warehouse_service.get_warehouse_inventory(warehouse_id)
@@ -101,32 +107,35 @@ class TestWarehouseManagementWorkflow:
         assert inventory[0]["product"].product_id == 2
         assert inventory[0]["quantity"] == 100
 
-        # Add more of the same product
-        self.warehouse_service.add_product_to_warehouse(
-            warehouse_id=warehouse_id,
-            product_id=2,
-            quantity=50
+        # Import more of the same product
+        import_doc3 = self.document_service.create_import_document(
+            to_warehouse_id=warehouse_id,
+            items=[{"product_id": 2, "quantity": 50, "unit_price": 50.0}],
+            created_by="functional_test_user"
         )
+        self.document_service.post_document(import_doc3.document_id, approved_by="manager")
 
         inventory = self.warehouse_service.get_warehouse_inventory(warehouse_id)
         assert inventory[0]["quantity"] == 150
 
-        # Remove some product
-        self.warehouse_service.remove_product_from_warehouse(
-            warehouse_id=warehouse_id,
-            product_id=2,
-            quantity=75
+        # Export some product
+        export_doc = self.document_service.create_export_document(
+            from_warehouse_id=warehouse_id,
+            items=[{"product_id": 2, "quantity": 75, "unit_price": 50.0}],
+            created_by="functional_test_user"
         )
+        self.document_service.post_document(export_doc.document_id, approved_by="manager")
 
         inventory = self.warehouse_service.get_warehouse_inventory(warehouse_id)
         assert inventory[0]["quantity"] == 75
 
-        # Remove remaining product
-        self.warehouse_service.remove_product_from_warehouse(
-            warehouse_id=warehouse_id,
-            product_id=2,
-            quantity=75
+        # Export remaining product
+        export_doc2 = self.document_service.create_export_document(
+            from_warehouse_id=warehouse_id,
+            items=[{"product_id": 2, "quantity": 75, "unit_price": 50.0}],
+            created_by="functional_test_user"
         )
+        self.document_service.post_document(export_doc2.document_id, approved_by="manager")
 
         inventory = self.warehouse_service.get_warehouse_inventory(warehouse_id)
         assert len(inventory) == 0
@@ -174,15 +183,13 @@ class TestWarehouseManagementWorkflow:
             price=60.0
         )
 
-        # Add to total inventory first
-        self.inventory_service.add_to_total_inventory(4, 100)
-
-        # Add product to warehouse
-        self.warehouse_service.add_product_to_warehouse(
-            warehouse_id=warehouse_id,
-            product_id=4,
-            quantity=100
+        # Import product to warehouse via document
+        import_doc = self.document_service.create_import_document(
+            to_warehouse_id=warehouse_id,
+            items=[{"product_id": 4, "quantity": 100, "unit_price": 60.0}],
+            created_by="functional_test_user"
         )
+        self.document_service.post_document(import_doc.document_id, approved_by="manager")
 
         # Create export document
         items = [
@@ -215,14 +222,13 @@ class TestWarehouseManagementWorkflow:
             price=80.0
         )
 
-        # Add to total inventory first
-        self.inventory_service.add_to_total_inventory(5, 150)
-
-        self.warehouse_service.add_product_to_warehouse(
-            warehouse_id=source_id,
-            product_id=5,
-            quantity=150
+        # Import stock into source warehouse
+        import_doc = self.document_service.create_import_document(
+            to_warehouse_id=source_id,
+            items=[{"product_id": 5, "quantity": 150, "unit_price": 80.0}],
+            created_by="functional_test_user"
         )
+        self.document_service.post_document(import_doc.document_id, approved_by="manager")
 
         # Create transfer document
         items = [
@@ -254,15 +260,13 @@ class TestWarehouseManagementWorkflow:
             price=90.0
         )
 
-        # Add limited quantity to total inventory
-        self.inventory_service.add_to_total_inventory(6, 50)
-
-        # Add limited quantity
-        self.warehouse_service.add_product_to_warehouse(
-            warehouse_id=warehouse_id,
-            product_id=6,
-            quantity=50
+        # Import limited quantity
+        import_doc = self.document_service.create_import_document(
+            to_warehouse_id=warehouse_id,
+            items=[{"product_id": 6, "quantity": 50, "unit_price": 90.0}],
+            created_by="functional_test_user"
         )
+        self.document_service.post_document(import_doc.document_id, approved_by="manager")
 
         # Try to create export document with more than available
         items = [
@@ -277,13 +281,14 @@ class TestWarehouseManagementWorkflow:
         )
         assert document is not None
 
-        # But trying to remove more than available from warehouse should fail
-        with pytest.raises(Exception):  # Could be InsufficientStockError or similar
-            self.warehouse_service.remove_product_from_warehouse(
-                warehouse_id=warehouse_id,
-                product_id=6,
-                quantity=75  # More than the 50 available
-            )
+        # Posting export with more than available should fail
+        export_doc2 = self.document_service.create_export_document(
+            from_warehouse_id=warehouse_id,
+            items=[{"product_id": 6, "quantity": 75, "unit_price": 90.0}],
+            created_by="test_user"
+        )
+        with pytest.raises(Exception):
+            self.document_service.post_document(export_doc2.document_id, approved_by="manager")
 
     def test_multiple_warehouses_inventory_tracking(self):
         """Test inventory tracking across multiple warehouses."""
@@ -300,14 +305,20 @@ class TestWarehouseManagementWorkflow:
             price=45.0
         )
 
-        # Add to total inventory first
-        self.inventory_service.add_to_total_inventory(7, 300)
+        # Import to warehouses via documents
+        import_doc1 = self.document_service.create_import_document(
+            to_warehouse_id=w1_id,
+            items=[{"product_id": 7, "quantity": 100, "unit_price": 45.0}],
+            created_by="functional_test_user"
+        )
+        self.document_service.post_document(import_doc1.document_id, approved_by="manager")
 
-        # Add to warehouse 1
-        self.warehouse_service.add_product_to_warehouse(w1_id, 7, 100)
-
-        # Add to warehouse 2
-        self.warehouse_service.add_product_to_warehouse(w2_id, 7, 200)
+        import_doc2 = self.document_service.create_import_document(
+            to_warehouse_id=w2_id,
+            items=[{"product_id": 7, "quantity": 200, "unit_price": 45.0}],
+            created_by="functional_test_user"
+        )
+        self.document_service.post_document(import_doc2.document_id, approved_by="manager")
 
         # Check individual warehouse inventories
         w1_inventory = self.warehouse_service.get_warehouse_inventory(w1_id)
@@ -347,8 +358,8 @@ class TestWarehouseManagementWorkflow:
         product = self.product_service.create_product(10, "Rules Product", 25.0)
 
         with pytest.raises(Exception):  # InvalidQuantityError
-            self.warehouse_service.add_product_to_warehouse(
-                warehouse_id=warehouse.warehouse_id,
-                product_id=10,
-                quantity=-10  # Negative quantity
+            self.document_service.create_import_document(
+                to_warehouse_id=warehouse.warehouse_id,
+                items=[{"product_id": 10, "quantity": -10, "unit_price": 25.0}],
+                created_by="functional_test_user"
             )

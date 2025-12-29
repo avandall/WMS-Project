@@ -50,7 +50,7 @@ async def update_product(
 ):
     """Update product information."""
     try:
-        updated_product = service.update(
+        updated_product = service.update_product(
             product_id=product_id,
             name=product_update.name,
             price=product_update.price,

@@ -210,4 +210,26 @@ class WarehouseService:
                 return item.quantity
         return 0
 
+    def delete_warehouse(self, warehouse_id: int) -> None:
+        """
+        Delete a warehouse with business validation.
+        - Validates warehouse exists
+        - Ensures warehouse has no inventory (stock = 0)
+        - Deletes the warehouse
+        """
+        # Validate warehouse exists
+        warehouse = self.get_warehouse(warehouse_id)
+
+        # Check if warehouse has any inventory
+        inventory = self.warehouse_repo.get_warehouse_inventory(warehouse_id)
+        if inventory and len(inventory) > 0:
+            total_items = sum(item.quantity for item in inventory)
+            raise ValidationError(
+                f"Cannot delete warehouse {warehouse_id}: warehouse still has {total_items} items in stock. "
+                f"Please remove all inventory before deleting."
+            )
+
+        # Delete warehouse
+        self.warehouse_repo.delete(warehouse_id)
+
     

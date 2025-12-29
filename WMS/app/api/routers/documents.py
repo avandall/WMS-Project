@@ -18,9 +18,11 @@ async def create_import_document(
 ):
     """Create an import document."""
     try:
+        # Convert DocumentProductItem objects to dictionaries for the service
+        items_dict = [item.model_dump() for item in doc.items]
         document = service.create_import_document(
             to_warehouse_id=doc.warehouse_id,
-            items=doc.items,
+            items=items_dict,
             created_by=doc.created_by,
             note=doc.note
         )
@@ -35,9 +37,11 @@ async def create_export_document(
 ):
     """Create an export document."""
     try:
+        # Convert DocumentProductItem objects to dictionaries for the service
+        items_dict = [item.dict() for item in doc.items]
         document = service.create_export_document(
             from_warehouse_id=doc.warehouse_id,
-            items=doc.items,
+            items=items_dict,
             created_by=doc.created_by,
             note=doc.note
         )
@@ -52,10 +56,12 @@ async def create_transfer_document(
 ):
     """Create a transfer document."""
     try:
+        # Convert DocumentProductItem objects to dictionaries for the service
+        items_dict = [item.dict() for item in doc.items]
         document = service.create_transfer_document(
             from_warehouse_id=doc.from_warehouse_id,
             to_warehouse_id=doc.to_warehouse_id,
-            items=doc.items,
+            items=items_dict,
             created_by=doc.created_by,
             note=doc.note
         )
@@ -98,7 +104,7 @@ async def get_documents(
         doc_type_enum = None
         if doc_type:
             doc_type_enum = DocumentType(doc_type.upper())
-        documents = service.get_all_documents(doc_type_enum)
+        documents = service.get_documents_by_status(doc_type_enum)
         return [DocumentResponse.from_domain(doc) for doc in documents]
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
