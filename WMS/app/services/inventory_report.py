@@ -5,7 +5,7 @@ Inventory Report classes for PMKT Warehouse Management System.
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from dataclasses import dataclass
-from app.models.models import InventoryItem as InventoryItemDTO
+from app.models.inventory_domain import InventoryItem as InventoryItemDomain
 
 @dataclass
 class InventoryReportItem:

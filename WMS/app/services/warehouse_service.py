@@ -15,11 +15,11 @@ class WarehouseService:
     Coordinates between warehouse, product, and inventory repositories.
     """
 
-    def __init__(self, warehouse_repo: IWarehouseRepo, product_repo: IProductRepo, inventory_repo: IInventoryRepo):
+    def __init__(self, warehouse_repo: IWarehouseRepo, product_repo: IProductRepo, inventory_repo: IInventoryRepo, id_generator=None):
         self.warehouse_repo = warehouse_repo
         self.product_repo = product_repo
         self.inventory_repo = inventory_repo
-        self._warehouse_id_generator = warehouse_id_generator()
+        self._warehouse_id_generator = id_generator or warehouse_id_generator()
 
     def create_warehouse(self, location: str) -> Warehouse:
         """
@@ -118,10 +118,10 @@ class WarehouseService:
         # Remove from warehouse
         self.warehouse_repo.remove_product_from_warehouse(warehouse_id, product_id, quantity)
 
-    def get_warehouse_inventory(self, warehouse_id: int) -> List[Dict[str, Any]]:
+    def get_warehouse_inventory(self, warehouse_id: int) -> List[InventoryItem]:
         """
-        Get warehouse inventory with enriched product information.
-        Orchestrates between warehouse and product repositories.
+        Get warehouse inventory items.
+        Returns raw inventory items for API responses.
         """
         # Validate warehouse exists
         warehouse = self.get_warehouse(warehouse_id)
@@ -129,18 +129,7 @@ class WarehouseService:
         # Get raw inventory
         inventory_items = self.warehouse_repo.get_warehouse_inventory(warehouse_id)
 
-        # Enrich with product details
-        enriched_inventory = []
-        for item in inventory_items:
-            product = self.product_repo.get(item.product_id)
-            if product:  # Product might have been deleted
-                enriched_inventory.append({
-                    "product": product,
-                    "quantity": item.quantity,
-                    "warehouse_id": warehouse_id
-                })
-
-        return enriched_inventory
+        return inventory_items
 
     def transfer_product(self, from_warehouse_id: int, to_warehouse_id: int, product_id: int, quantity: int) -> None:
         """
@@ -186,7 +175,7 @@ class WarehouseService:
 
         for warehouse in warehouses.values():
             inventory = self.get_warehouse_inventory(warehouse.warehouse_id)
-            total_items = sum(item["quantity"] for item in inventory)
+            total_items = sum(item.quantity for item in inventory)
             unique_products = len(inventory)
 
             result.append({

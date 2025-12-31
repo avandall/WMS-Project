@@ -5,19 +5,16 @@ Tests the complete request/response cycle including FastAPI routing and service 
 
 import pytest
 import httpx
-from app.api import app
+
 from app.api.schemas.product import ProductCreate, ProductUpdate
+
+TestClient = httpx.Client  # Type alias for test client
 
 
 class TestProductsAPI:
     """Integration tests for Products API."""
 
-    def setup_method(self):
-        """Set up test client for each test."""
-        transport = httpx.ASGITransport(app=app)
-        self.client = httpx.Client(transport=transport, base_url="http://testserver")
-
-    def test_create_product_success(self):
+    def test_create_product_success(self, client: TestClient):
         """Test creating a product successfully."""
         product_data = {
             "product_id": 1,
@@ -26,7 +23,7 @@ class TestProductsAPI:
             "description": "A test product"
         }
 
-        response = self.client.post("/api/products/", json=product_data)
+        response = client.post("/api/products/", json=product_data)
 
         assert response.status_code == 200
         data = response.json()
@@ -35,7 +32,7 @@ class TestProductsAPI:
         assert data["price"] == 29.99
         assert data["description"] == "A test product"
 
-    def test_create_product_without_description(self):
+    def test_create_product_without_description(self, client: TestClient):
         """Test creating a product without description."""
         product_data = {
             "product_id": 2,
@@ -43,14 +40,14 @@ class TestProductsAPI:
             "price": 19.99
         }
 
-        response = self.client.post("/api/products/", json=product_data)
+        response = client.post("/api/products/", json=product_data)
 
         assert response.status_code == 200
         data = response.json()
         assert data["product_id"] == 2
         assert data["description"] is None
 
-    def test_create_product_invalid_data(self):
+    def test_create_product_invalid_data(self, client: TestClient):
         """Test creating a product with invalid data."""
         # Test empty name
         product_data = {
@@ -59,10 +56,10 @@ class TestProductsAPI:
             "price": 10.0
         }
 
-        response = self.client.post("/api/products/", json=product_data)
+        response = client.post("/api/products/", json=product_data)
         assert response.status_code == 422
 
-    def test_get_product_success(self):
+    def test_get_product_success(self, client: TestClient):
         """Test getting a product successfully."""
         # First create a product
         product_data = {
@@ -70,10 +67,10 @@ class TestProductsAPI:
             "name": "Get Test Product",
             "price": 39.99
         }
-        self.client.post("/api/products/", json=product_data)
+        client.post("/api/products/", json=product_data)
 
         # Then get it
-        response = self.client.get("/api/products/4")
+        response = client.get("/api/products/4")
 
         assert response.status_code == 200
         data = response.json()
@@ -81,13 +78,13 @@ class TestProductsAPI:
         assert data["name"] == "Get Test Product"
         assert data["price"] == 39.99
 
-    def test_get_product_not_found(self):
+    def test_get_product_not_found(self, client: TestClient):
         """Test getting a nonexistent product."""
-        response = self.client.get("/api/products/999")
+        response = client.get("/api/products/999")
 
         assert response.status_code == 404
 
-    def test_update_product_success(self):
+    def test_update_product_success(self, client: TestClient):
         """Test updating a product successfully."""
         # Create product
         product_data = {
@@ -96,7 +93,7 @@ class TestProductsAPI:
             "price": 20.0,
             "description": "Original desc"
         }
-        self.client.post("/api/products/", json=product_data)
+        client.post("/api/products/", json=product_data)
 
         # Update it
         update_data = {
@@ -104,7 +101,7 @@ class TestProductsAPI:
             "price": 25.0,
             "description": "Updated desc"
         }
-        response = self.client.put("/api/products/5", json=update_data)
+        response = client.put("/api/products/5", json=update_data)
 
         assert response.status_code == 200
         data = response.json()
@@ -112,7 +109,7 @@ class TestProductsAPI:
         assert data["price"] == 25.0
         assert data["description"] == "Updated desc"
 
-    def test_update_product_partial(self):
+    def test_update_product_partial(self, client: TestClient):
         """Test updating only some fields of a product."""
         # Create product
         product_data = {
@@ -121,11 +118,11 @@ class TestProductsAPI:
             "price": 30.0,
             "description": "Original desc"
         }
-        self.client.post("/api/products/", json=product_data)
+        client.post("/api/products/", json=product_data)
 
         # Update only price
         update_data = {"price": 35.0}
-        response = self.client.put("/api/products/6", json=update_data)
+        response = client.put("/api/products/6", json=update_data)
 
         assert response.status_code == 200
         data = response.json()
@@ -133,14 +130,14 @@ class TestProductsAPI:
         assert data["price"] == 35.0  # Changed
         assert data["description"] == "Original desc"  # Unchanged
 
-    def test_update_product_not_found(self):
+    def test_update_product_not_found(self, client: TestClient):
         """Test updating a nonexistent product."""
         update_data = {"name": "New Name"}
-        response = self.client.put("/api/products/999", json=update_data)
+        response = client.put("/api/products/999", json=update_data)
 
         assert response.status_code == 404
 
-    def test_update_product_invalid_data(self):
+    def test_update_product_invalid_data(self, client: TestClient):
         """Test updating a product with invalid data."""
         # Create valid product
         product_data = {
@@ -148,15 +145,15 @@ class TestProductsAPI:
             "name": "Valid Product",
             "price": 10.0
         }
-        self.client.post("/api/products/", json=product_data)
+        client.post("/api/products/", json=product_data)
 
         # Try to update with invalid data
         update_data = {"name": ""}  # Empty name
-        response = self.client.put("/api/products/7", json=update_data)
+        response = client.put("/api/products/7", json=update_data)
 
         assert response.status_code == 422
 
-    def test_delete_product_success(self):
+    def test_delete_product_success(self, client: TestClient):
         """Test deleting a product successfully."""
         # Create product
         product_data = {
@@ -164,26 +161,26 @@ class TestProductsAPI:
             "name": "Delete Test",
             "price": 15.0
         }
-        self.client.post("/api/products/", json=product_data)
+        client.post("/api/products/", json=product_data)
 
         # Delete it
-        response = self.client.delete("/api/products/8")
+        response = client.delete("/api/products/8")
 
         assert response.status_code == 200
         data = response.json()
         assert "deleted successfully" in data["message"]
 
         # Verify it's gone
-        response = self.client.get("/api/products/8")
+        response = client.get("/api/products/8")
         assert response.status_code == 404
 
-    def test_delete_product_not_found(self):
+    def test_delete_product_not_found(self, client: TestClient):
         """Test deleting a nonexistent product."""
-        response = self.client.delete("/api/products/999")
+        response = client.delete("/api/products/999")
 
         assert response.status_code == 404
 
-    def test_product_workflow(self):
+    def test_product_workflow(self, client: TestClient):
         """Test complete product workflow: create, read, update, delete."""
         product_id = 9
 
@@ -194,30 +191,30 @@ class TestProductsAPI:
             "price": 50.0,
             "description": "Testing workflow"
         }
-        response = self.client.post("/api/products/", json=product_data)
+        response = client.post("/api/products/", json=product_data)
         assert response.status_code == 200
 
         # Read
-        response = self.client.get(f"/api/products/{product_id}")
+        response = client.get(f"/api/products/{product_id}")
         assert response.status_code == 200
         assert response.json()["name"] == "Workflow Product"
 
         # Update
         update_data = {"name": "Updated Workflow Product", "price": 55.0}
-        response = self.client.put(f"/api/products/{product_id}", json=update_data)
+        response = client.put(f"/api/products/{product_id}", json=update_data)
         assert response.status_code == 200
 
         # Verify update
-        response = self.client.get(f"/api/products/{product_id}")
+        response = client.get(f"/api/products/{product_id}")
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "Updated Workflow Product"
         assert data["price"] == 55.0
 
         # Delete
-        response = self.client.delete(f"/api/products/{product_id}")
+        response = client.delete(f"/api/products/{product_id}")
         assert response.status_code == 200
 
         # Verify deletion
-        response = self.client.get(f"/api/products/{product_id}")
+        response = client.get(f"/api/products/{product_id}")
         assert response.status_code == 404

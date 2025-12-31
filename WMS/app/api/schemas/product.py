@@ -80,7 +80,7 @@ class DocumentProductItem(BaseModel):
     unit_price: float = Field(..., ge=0)
 
 class DocumentCreate(BaseModel):
-    warehouse_id: int = Field(..., gt=0, description="Target warehouse for import/export")
+    warehouse_id: Optional[int] = Field(None, gt=0, description="Target warehouse for import/export")
     from_warehouse_id: Optional[int] = Field(None, gt=0, description="Source warehouse for transfer")
     to_warehouse_id: Optional[int] = Field(None, gt=0, description="Target warehouse for transfer")
     items: List[DocumentProductItem] = Field(..., min_items=1, description="Document items")

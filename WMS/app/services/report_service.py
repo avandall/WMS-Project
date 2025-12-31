@@ -7,13 +7,12 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, date, timedelta
 from app.exceptions.business_exceptions import ReportGenerationError, InvalidReportParametersError
 from app.repositories.interfaces.interfaces import IProductRepo, IDocumentRepo, IWarehouseRepo, IInventoryRepo
-from app.models.models import DocumentType, DocumentStatus
+from app.models.document_domain import DocumentType, DocumentStatus, Document
 from app.models.product_domain import Product
-from app.models.document_domain import Document
 from app.services.document_report import DocumentReport, DocumentReportItem
 from app.services.inventory_report import InventoryReportItem, WarehouseInventoryReport, TotalInventoryReport
-from app.services.product_report import ProductMovementReport
-from app.services.warehouse_report import WarehousePerformanceReport
+from app.services.product_report import ProductMovementReport, ProductMovementItem
+from app.services.warehouse_report import WarehousePerformanceReport, WarehousePerformanceItem
 
 class ReportService:
     """
@@ -555,16 +554,19 @@ class ReportService:
     def _get_products_dict(self) -> Dict[int, Product]:
         """Get all products as a dictionary for quick lookup."""
         products = {}
-        for product_id, product in self.product_repo.get_all().items():
-            products[product_id] = product
+        all_products = self.product_repo.get_all()
+        # Handle both dict and list return types
+        if isinstance(all_products, dict):
+            for product_id, product in all_products.items():
+                products[product_id] = product
+        else:
+            for product in all_products:
+                products[product.product_id] = product
         return products
 
     def _get_warehouses_dict(self) -> Dict[int, Any]:
         """Get all warehouses as a dictionary for quick lookup."""
-        warehouses = {}
-        for warehouse_id, warehouse in self.warehouse_repo.get_all().items():
-            warehouses[warehouse_id] = warehouse
-        return warehouses
+        return self.warehouse_repo.get_all()
 
     def _calculate_inventory_value(self, inventory_items: List) -> float:
         """Calculate total value of inventory items."""
@@ -651,100 +653,3 @@ class ReportService:
             )
         except Exception as e:
             raise ReportGenerationError(f"Failed to generate document report: {str(e)}")
-
-    def generate_product_movement_report(self, product_id: int,
-                                       start_date: Optional[date] = None,
-                                       end_date: Optional[date] = None) -> ProductMovementReport:
-        """
-        Generate product movement report showing all documents affecting a product.
-
-        Args:
-            product_id: Product ID to report on
-            start_date: Start date for the report
-            end_date: End date for the report
-
-        Returns:
-            ProductMovementReport instance
-        """
-        try:
-            product = self.product_repo.get(product_id)
-            if not product:
-                raise InvalidReportParametersError(f"Product {product_id} not found")
-
-            all_docs = self.document_repo.get_all()
-            movements = []
-
-            for doc in all_docs:
-                if start_date and doc.date.date() < start_date:
-                    continue
-                if end_date and doc.date.date() > end_date:
-                    continue
-
-                # Check if document contains the product
-                for item in doc.items:
-                    if item.product_id == product_id:
-                        movements.append(ProductMovementItem(
-                            document_id=doc.document_id,
-                            doc_type=doc.doc_type.value,
-                            status=doc.status.value,
-                            date=doc.date.isoformat(),
-                            quantity=item.quantity,
-                            unit_price=item.unit_price,
-                            total_value=item.calculate_total_value(),
-                            from_warehouse=doc.from_warehouse_id,
-                            to_warehouse=doc.to_warehouse_id
-                        ))
-                        break
-
-            filters = {
-                'start_date': start_date.isoformat() if start_date else None,
-                'end_date': end_date.isoformat() if end_date else None
-            }
-
-            return ProductMovementReport(
-                product_id=product_id,
-                product_name=product.name,
-                filters=filters,
-                movements=movements,
-                generated_at=datetime.now()
-            )
-        except Exception as e:
-            raise ReportGenerationError(f"Failed to generate product movement report: {str(e)}")
-
-    def generate_warehouse_performance_report(self) -> WarehousePerformanceReport:
-        """
-        Generate warehouse performance report.
-
-        Returns:
-            WarehousePerformanceReport instance
-        """
-        try:
-            warehouses = []
-            products = self._get_products_dict()
-
-            for warehouse in self.warehouse_repo.warehouses.values():
-                total_value = warehouse.calculate_total_value(products)
-                item_count = len(warehouse.inventory)
-                total_quantity = sum(item.quantity for item in warehouse.inventory)
-
-                warehouses.append(WarehousePerformanceItem(
-                    warehouse_id=warehouse.warehouse_id,
-                    location=warehouse.location,
-                    item_count=item_count,
-                    total_quantity=total_quantity,
-                    total_value=total_value
-                ))
-
-            return WarehousePerformanceReport(
-                warehouses=warehouses,
-                generated_at=datetime.now()
-            )
-        except Exception as e:
-            raise ReportGenerationError(f"Failed to generate warehouse performance report: {str(e)}")
-
-    def _get_products_dict(self) -> Dict[int, Product]:
-        """Helper method to get all products as a dict."""
-        products = {}
-        for product in self.product_repo.products.values():
-            products[product.product_id] = product
-        return products

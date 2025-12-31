@@ -5,7 +5,7 @@ Document Report classes for PMKT Warehouse Management System.
 from typing import List, Dict, Any, Optional
 from datetime import datetime, date
 from dataclasses import dataclass
-from app.models.models import DocumentType, DocumentStatus
+from app.models.document_domain import DocumentType, DocumentStatus
 
 @dataclass
 class DocumentReportItem:

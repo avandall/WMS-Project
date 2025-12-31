@@ -79,6 +79,10 @@ class Document:
         self.doc_type = doc_type
         self.status = DocumentStatus.DRAFT
         self.date = datetime.now()
+        self.created_at = self.date  # Alias for compatibility
+        self.posted_at: Optional[datetime] = None
+        self.cancelled_at: Optional[datetime] = None
+        self.cancellation_reason: Optional[str] = None
         self.from_warehouse_id = from_warehouse_id
         self.to_warehouse_id = to_warehouse_id
         self.items: List[DocumentProduct] = items or []
@@ -158,12 +162,14 @@ class Document:
 
         self.status = DocumentStatus.POSTED
         self.approved_by = approved_by
+        self.posted_at = datetime.now()
 
     def cancel(self) -> None:
         """Cancel the document."""
         if self.status == DocumentStatus.POSTED:
             raise InvalidDocumentStatusError(f"Cannot cancel a posted document {self.document_id}")
         self.status = DocumentStatus.CANCELLED
+        self.cancelled_at = datetime.now()
 
     def _ensure_draft_status(self) -> None:
         """Ensure document is in draft status for modifications."""

@@ -1,14 +1,41 @@
 """
 Pytest configuration and fixtures for PMKT tests.
+Sets up common fixtures and resets in-memory repositories between tests.
 """
 import pytest
-import sys
-from pathlib import Path
+import httpx
+import asyncio
+from typing import Any
 
-# Add the project root to Python path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+from app.api import app
+from app.api import dependencies
 
+
+class SyncASGITransport(httpx.ASGITransport):
+    """Custom sync ASGI transport that bridges async/sync."""
+    
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        """Handle sync request by running async handler in event loop."""
+        # Create a new event loop for this request
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            # Get the async response
+            response = loop.run_until_complete(self.handle_async_request(request))
+            # Convert async stream to sync
+            if hasattr(response.stream, "__aiter__"):
+                # Drain the async stream into a sync byte stream
+                content = loop.run_until_complete(response.aread())
+                response = httpx.Response(
+                    status_code=response.status_code,
+                    headers=response.headers,
+                    content=content,
+                    request=request,
+                    extensions=response.extensions,
+                )
+            return response
+        finally:
+            loop.close()
 from app.repositories.sql.product_repo import ProductRepo
 from app.repositories.sql.warehouse_repo import WarehouseRepo
 from app.repositories.sql.document_repo import DocumentRepo
@@ -17,6 +44,32 @@ from app.services.inventory_service import InventoryService
 from app.models.product_domain import Product
 from app.models.warehouse_domain import Warehouse
 from app.models.document_domain import Document, DocumentProduct, DocumentType, DocumentStatus
+
+
+@pytest.fixture(autouse=True)
+def reset_state():
+    """Reset singleton in-memory repos between tests to avoid cross-test bleed."""
+    # Re-initialize the singletons instead of clearing internal dicts to avoid attribute errors
+    dependencies._product_repo = dependencies.ProductRepo()
+    dependencies._inventory_repo = dependencies.InventoryRepo()
+    dependencies._warehouse_repo = dependencies.WarehouseRepo()
+    dependencies._document_repo = dependencies.DocumentRepo()
+
+    # Reset services so they pick up the fresh repositories
+    dependencies._product_service = None
+    dependencies._inventory_service = None
+    dependencies._warehouse_service = None
+    dependencies._document_service = None
+    dependencies._report_service = None
+    dependencies._warehouse_operations_service = None
+    yield
+
+
+@pytest.fixture
+def client():
+    """FastAPI test client for integration tests using custom sync ASGI transport."""
+    transport = SyncASGITransport(app=app)
+    return httpx.Client(transport=transport, base_url="http://testserver")
 
 
 @pytest.fixture

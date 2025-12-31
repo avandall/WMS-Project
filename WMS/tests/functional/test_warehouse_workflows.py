@@ -81,14 +81,6 @@ class TestWarehouseManagementWorkflow:
             price=50.0
         )
 
-        # Import initial stock via document and post
-        import_doc = self.document_service.create_import_document(
-            to_warehouse_id=warehouse_id,
-            items=[{"product_id": 2, "quantity": 200, "unit_price": 50.0}],
-            created_by="functional_test_user"
-        )
-        self.document_service.post_document(import_doc.document_id, approved_by="manager")
-
         # Initially empty inventory
         inventory = self.warehouse_service.get_warehouse_inventory(warehouse_id)
         assert len(inventory) == 0
@@ -104,8 +96,8 @@ class TestWarehouseManagementWorkflow:
         # Check inventory
         inventory = self.warehouse_service.get_warehouse_inventory(warehouse_id)
         assert len(inventory) == 1
-        assert inventory[0]["product"].product_id == 2
-        assert inventory[0]["quantity"] == 100
+        assert inventory[0].product_id == 2
+        assert inventory[0].quantity == 100
 
         # Import more of the same product
         import_doc3 = self.document_service.create_import_document(
@@ -116,7 +108,7 @@ class TestWarehouseManagementWorkflow:
         self.document_service.post_document(import_doc3.document_id, approved_by="manager")
 
         inventory = self.warehouse_service.get_warehouse_inventory(warehouse_id)
-        assert inventory[0]["quantity"] == 150
+        assert inventory[0].quantity == 150
 
         # Export some product
         export_doc = self.document_service.create_export_document(
@@ -127,7 +119,7 @@ class TestWarehouseManagementWorkflow:
         self.document_service.post_document(export_doc.document_id, approved_by="manager")
 
         inventory = self.warehouse_service.get_warehouse_inventory(warehouse_id)
-        assert inventory[0]["quantity"] == 75
+        assert inventory[0].quantity == 75
 
         # Export remaining product
         export_doc2 = self.document_service.create_export_document(
@@ -325,9 +317,9 @@ class TestWarehouseManagementWorkflow:
         w2_inventory = self.warehouse_service.get_warehouse_inventory(w2_id)
 
         assert len(w1_inventory) == 1
-        assert w1_inventory[0]["quantity"] == 100
+        assert w1_inventory[0].quantity == 100
         assert len(w2_inventory) == 1
-        assert w2_inventory[0]["quantity"] == 200
+        assert w2_inventory[0].quantity == 200
 
         # Total inventory should be tracked separately
         # (This would require additional service methods to aggregate)

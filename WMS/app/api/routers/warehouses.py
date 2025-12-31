@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from ..dependencies import get_warehouse_service
 from ..schemas.product import WarehouseCreate, WarehouseResponse, InventoryItemResponse
 from app.services.warehouse_service import WarehouseService
-from app.exceptions.business_exceptions import WarehouseNotFoundError
+from app.exceptions.business_exceptions import WarehouseNotFoundError, ValidationError
 
 router = APIRouter()
 
@@ -52,7 +52,7 @@ async def delete_warehouse(
         return {"message": f"Warehouse {warehouse_id} deleted successfully"}
     except WarehouseNotFoundError:
         raise HTTPException(status_code=404, detail=f"Warehouse {warehouse_id} not found")
-    except ValueError as e:
+    except (ValueError, ValidationError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 # NOTE: Inventory changes must be performed through document endpoints (import/export/transfer)

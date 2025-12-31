@@ -9,7 +9,8 @@ from pathlib import Path
 
 
 def run_tests(test_type=None, coverage=True, verbose=False):
-    """Run the test suite."""
+    """Run the test suite from repo root."""
+    project_root = Path(__file__).resolve().parent.parent
     cmd = [sys.executable, "-m", "pytest"]
 
     if test_type:
@@ -24,13 +25,13 @@ def run_tests(test_type=None, coverage=True, verbose=False):
             return 1
 
     if coverage:
-        cmd.extend(["--cov=PMKT", "--cov-report=term-missing"])
+        cmd.extend(["--cov=app", "--cov-report=term-missing"])
 
     if verbose:
         cmd.append("-v")
 
     print(f"Running command: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=Path(__file__).parent)
+    result = subprocess.run(cmd, cwd=project_root)
     return result.returncode
 
 

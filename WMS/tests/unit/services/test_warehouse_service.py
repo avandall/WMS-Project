@@ -6,6 +6,7 @@ Tests focus on DocumentService posting import/export operations affecting wareho
 import pytest
 from unittest.mock import Mock, MagicMock
 from app.services.document_service import DocumentService
+from app.services.warehouse_service import WarehouseService
 from app.models.warehouse_domain import Warehouse
 from app.models.inventory_domain import InventoryItem
 from app.exceptions.business_exceptions import (
@@ -37,14 +38,24 @@ class TestDocumentOperations:
         return Mock(return_value=123)
 
     @pytest.fixture
+    def warehouse_service(self, mock_warehouse_repo, mock_product_repo, mock_inventory_repo, mock_id_generator):
+        """Warehouse service with injected mock ID generator."""
+        return WarehouseService(mock_warehouse_repo, mock_product_repo, mock_inventory_repo, id_generator=mock_id_generator)
+
+    @pytest.fixture
     def document_service(self, mock_warehouse_repo, mock_product_repo, mock_inventory_repo):
         """Document service with mocked dependencies."""
         from app.repositories.interfaces.interfaces import IDocumentRepo
-        # Create a simple mock document repo
+        # Create a simple mock document repo with in-memory storage
         mock_document_repo = Mock()
-        mock_document_repo.save = Mock()
-        mock_document_repo.get = Mock()
-        mock_document_repo.get_all = Mock(return_value=[])
+        stored_docs = {}
+
+        def save(doc):
+            stored_docs[doc.document_id] = doc
+
+        mock_document_repo.save.side_effect = save
+        mock_document_repo.get.side_effect = lambda doc_id: stored_docs.get(doc_id)
+        mock_document_repo.get_all.side_effect = lambda: list(stored_docs.values())
         service = DocumentService(mock_document_repo, mock_warehouse_repo, mock_product_repo, mock_inventory_repo)
         return service
 
@@ -169,10 +180,10 @@ class TestDocumentOperations:
 
         # Assert
         assert len(result) == 2
-        assert result[0]["product"] == mock_product1
-        assert result[0]["quantity"] == 10
-        assert result[1]["product"] == mock_product2
-        assert result[1]["quantity"] == 5
+        assert result[0].product_id == 1
+        assert result[0].quantity == 10
+        assert result[1].product_id == 2
+        assert result[1].quantity == 5
         mock_warehouse_repo.get_warehouse_inventory.assert_called_once_with(1)
 
     def test_get_warehouse_inventory_not_found(self, warehouse_service, mock_warehouse_repo):
