@@ -4,13 +4,24 @@ Contains business rules and validation for products.
 """
 
 from typing import Optional
-from app.exceptions.business_exceptions import ValidationError, InvalidIDError, InvalidQuantityError
+from app.exceptions.business_exceptions import (
+    ValidationError,
+    InvalidIDError,
+    InvalidQuantityError,
+)
 from app.core.error_constants import ErrorMessages
+
 
 class Product:
     """Domain class for Product with business logic and validation."""
 
-    def __init__(self, product_id: int, name: str, description: Optional[str] = None, price: float = 0.0):
+    def __init__(
+        self,
+        product_id: int,
+        name: str,
+        description: Optional[str] = None,
+        price: float = 0.0,
+    ):
         self._validate_product_id(product_id)
         self._validate_name(name)
         self._validate_price(price)

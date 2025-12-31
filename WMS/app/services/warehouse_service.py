@@ -1,13 +1,21 @@
 from typing import List, Dict, Any
 from app.models.warehouse_domain import Warehouse
 from app.models.inventory_domain import InventoryItem
-from app.models.product_domain import Product
 from app.exceptions.business_exceptions import (
-    InvalidQuantityError, WarehouseNotFoundError, InsufficientStockError,
-    ProductNotFoundError, ValidationError, EntityAlreadyExistsError
+    InvalidQuantityError,
+    WarehouseNotFoundError,
+    InsufficientStockError,
+    ProductNotFoundError,
+    ValidationError,
+    EntityAlreadyExistsError,
 )
-from app.repositories.interfaces.interfaces import IWarehouseRepo, IProductRepo, IInventoryRepo
+from app.repositories.interfaces.interfaces import (
+    IWarehouseRepo,
+    IProductRepo,
+    IInventoryRepo,
+)
 from app.utils.infrastructure import warehouse_id_generator
+
 
 class WarehouseService:
     """
@@ -15,7 +23,13 @@ class WarehouseService:
     Coordinates between warehouse, product, and inventory repositories.
     """
 
-    def __init__(self, warehouse_repo: IWarehouseRepo, product_repo: IProductRepo, inventory_repo: IInventoryRepo, id_generator=None):
+    def __init__(
+        self,
+        warehouse_repo: IWarehouseRepo,
+        product_repo: IProductRepo,
+        inventory_repo: IInventoryRepo,
+        id_generator=None,
+    ):
         self.warehouse_repo = warehouse_repo
         self.product_repo = product_repo
         self.inventory_repo = inventory_repo
@@ -42,7 +56,9 @@ class WarehouseService:
         """
         existing = self.warehouse_repo.get(warehouse.warehouse_id)
         if existing:
-            raise EntityAlreadyExistsError(f"Warehouse with ID {warehouse.warehouse_id} already exists")
+            raise EntityAlreadyExistsError(
+                f"Warehouse with ID {warehouse.warehouse_id} already exists"
+            )
 
         self.warehouse_repo.create_warehouse(warehouse)
 
@@ -55,7 +71,9 @@ class WarehouseService:
             raise WarehouseNotFoundError(f"Warehouse {warehouse_id} not found")
         return warehouse
 
-    def add_product_to_warehouse(self, warehouse_id: int, product_id: int, quantity: int) -> None:
+    def add_product_to_warehouse(
+        self, warehouse_id: int, product_id: int, quantity: int
+    ) -> None:
         """
         Add product to warehouse with business orchestration.
         - Validates warehouse exists
@@ -69,7 +87,7 @@ class WarehouseService:
             raise InvalidQuantityError("Quantity must be positive")
 
         # Validate warehouse exists
-        warehouse = self.get_warehouse(warehouse_id)
+        self.get_warehouse(warehouse_id)
 
         # Validate product exists
         product = self.product_repo.get(product_id)
@@ -78,7 +96,9 @@ class WarehouseService:
 
         # Business rule: Check if there's enough total inventory
         total_available = self.inventory_repo.get_quantity(product_id)
-        current_warehouse_quantity = self._get_warehouse_product_quantity(warehouse_id, product_id)
+        current_warehouse_quantity = self._get_warehouse_product_quantity(
+            warehouse_id, product_id
+        )
 
         if total_available < current_warehouse_quantity + quantity:
             raise InsufficientStockError(
@@ -89,7 +109,9 @@ class WarehouseService:
         # Add to warehouse (repository handles the actual storage)
         self.warehouse_repo.add_product_to_warehouse(warehouse_id, product_id, quantity)
 
-    def remove_product_from_warehouse(self, warehouse_id: int, product_id: int, quantity: int) -> None:
+    def remove_product_from_warehouse(
+        self, warehouse_id: int, product_id: int, quantity: int
+    ) -> None:
         """
         Remove product from warehouse with business orchestration.
         - Validates warehouse and product exist
@@ -101,7 +123,7 @@ class WarehouseService:
             raise InvalidQuantityError("Quantity must be positive")
 
         # Validate warehouse exists
-        warehouse = self.get_warehouse(warehouse_id)
+        self.get_warehouse(warehouse_id)
 
         # Validate product exists
         product = self.product_repo.get(product_id)
@@ -109,14 +131,18 @@ class WarehouseService:
             raise ProductNotFoundError(f"Product {product_id} not found")
 
         # Check current warehouse quantity
-        current_quantity = self._get_warehouse_product_quantity(warehouse_id, product_id)
+        current_quantity = self._get_warehouse_product_quantity(
+            warehouse_id, product_id
+        )
         if current_quantity < quantity:
             raise InsufficientStockError(
                 f"Insufficient stock in warehouse: only {current_quantity} items available"
             )
 
         # Remove from warehouse
-        self.warehouse_repo.remove_product_from_warehouse(warehouse_id, product_id, quantity)
+        self.warehouse_repo.remove_product_from_warehouse(
+            warehouse_id, product_id, quantity
+        )
 
     def get_warehouse_inventory(self, warehouse_id: int) -> List[InventoryItem]:
         """
@@ -124,14 +150,20 @@ class WarehouseService:
         Returns raw inventory items for API responses.
         """
         # Validate warehouse exists
-        warehouse = self.get_warehouse(warehouse_id)
+        self.get_warehouse(warehouse_id)
 
         # Get raw inventory
         inventory_items = self.warehouse_repo.get_warehouse_inventory(warehouse_id)
 
         return inventory_items
 
-    def transfer_product(self, from_warehouse_id: int, to_warehouse_id: int, product_id: int, quantity: int) -> None:
+    def transfer_product(
+        self,
+        from_warehouse_id: int,
+        to_warehouse_id: int,
+        product_id: int,
+        quantity: int,
+    ) -> None:
         """
         Transfer product between warehouses with business orchestration.
         - Validates both warehouses exist
@@ -155,15 +187,21 @@ class WarehouseService:
             raise ProductNotFoundError(f"Product {product_id} not found")
 
         # Check source warehouse has enough
-        source_quantity = self._get_warehouse_product_quantity(from_warehouse_id, product_id)
+        source_quantity = self._get_warehouse_product_quantity(
+            from_warehouse_id, product_id
+        )
         if source_quantity < quantity:
             raise InsufficientStockError(
                 f"Source warehouse only has {source_quantity} items"
             )
 
         # Perform transfer (remove from source, add to destination)
-        self.warehouse_repo.remove_product_from_warehouse(from_warehouse_id, product_id, quantity)
-        self.warehouse_repo.add_product_to_warehouse(to_warehouse_id, product_id, quantity)
+        self.warehouse_repo.remove_product_from_warehouse(
+            from_warehouse_id, product_id, quantity
+        )
+        self.warehouse_repo.add_product_to_warehouse(
+            to_warehouse_id, product_id, quantity
+        )
 
     def get_all_warehouses_with_inventory_summary(self) -> List[Dict[str, Any]]:
         """
@@ -178,18 +216,22 @@ class WarehouseService:
             total_items = sum(item.quantity for item in inventory)
             unique_products = len(inventory)
 
-            result.append({
-                "warehouse": warehouse,
-                "inventory_summary": {
-                    "total_items": total_items,
-                    "unique_products": unique_products,
-                    "inventory_details": inventory
+            result.append(
+                {
+                    "warehouse": warehouse,
+                    "inventory_summary": {
+                        "total_items": total_items,
+                        "unique_products": unique_products,
+                        "inventory_details": inventory,
+                    },
                 }
-            })
+            )
 
         return result
 
-    def _get_warehouse_product_quantity(self, warehouse_id: int, product_id: int) -> int:
+    def _get_warehouse_product_quantity(
+        self, warehouse_id: int, product_id: int
+    ) -> int:
         """
         Helper method to get quantity of specific product in warehouse.
         """
@@ -207,7 +249,7 @@ class WarehouseService:
         - Deletes the warehouse
         """
         # Validate warehouse exists
-        warehouse = self.get_warehouse(warehouse_id)
+        self.get_warehouse(warehouse_id)
 
         # Check if warehouse has any inventory
         inventory = self.warehouse_repo.get_warehouse_inventory(warehouse_id)
@@ -220,5 +262,3 @@ class WarehouseService:
 
         # Delete warehouse
         self.warehouse_repo.delete(warehouse_id)
-
-    

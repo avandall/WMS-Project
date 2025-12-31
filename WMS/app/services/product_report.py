@@ -3,12 +3,14 @@ Product Report classes for PMKT Warehouse Management System.
 """
 
 from typing import List, Dict, Any, Optional
-from datetime import datetime, date
+from datetime import datetime
 from dataclasses import dataclass
+
 
 @dataclass
 class ProductMovementItem:
     """Represents a product movement in report."""
+
     document_id: int
     doc_type: str
     status: str
@@ -19,9 +21,11 @@ class ProductMovementItem:
     from_warehouse: Optional[str]
     to_warehouse: Optional[str]
 
+
 @dataclass
 class ProductMovementReport:
     """Product movement report."""
+
     product_id: int
     product_name: str
     filters: Dict[str, Any]

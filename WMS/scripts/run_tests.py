@@ -2,6 +2,7 @@
 """
 Test runner script for PMKT Warehouse Management System.
 """
+
 import subprocess
 import sys
 import argparse
@@ -42,25 +43,17 @@ def main():
         "test_type",
         nargs="?",
         choices=["unit", "integration", "functional"],
-        help="Type of tests to run"
+        help="Type of tests to run",
     )
     parser.add_argument(
-        "--no-coverage",
-        action="store_true",
-        help="Skip coverage reporting"
+        "--no-coverage", action="store_true", help="Skip coverage reporting"
     )
-    parser.add_argument(
-        "-v", "--verbose",
-        action="store_true",
-        help="Verbose output"
-    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
     args = parser.parse_args()
 
     return run_tests(
-        test_type=args.test_type,
-        coverage=not args.no_coverage,
-        verbose=args.verbose
+        test_type=args.test_type, coverage=not args.no_coverage, verbose=args.verbose
     )
 
 

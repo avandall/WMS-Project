@@ -5,7 +5,7 @@ Unit tests for InventoryService.
 import pytest
 from unittest.mock import Mock
 from app.services.inventory_service import InventoryService
-from app.exceptions.business_exceptions import ValidationError, EntityNotFoundError, InvalidQuantityError
+from app.exceptions.business_exceptions import EntityNotFoundError, InvalidQuantityError
 
 
 class TestInventoryService:
@@ -27,9 +27,13 @@ class TestInventoryService:
         return Mock()
 
     @pytest.fixture
-    def inventory_service(self, mock_inventory_repo, mock_product_repo, mock_warehouse_repo):
+    def inventory_service(
+        self, mock_inventory_repo, mock_product_repo, mock_warehouse_repo
+    ):
         """Inventory service with mocked repositories."""
-        return InventoryService(mock_inventory_repo, mock_product_repo, mock_warehouse_repo)
+        return InventoryService(
+            mock_inventory_repo, mock_product_repo, mock_warehouse_repo
+        )
 
     def test_add_to_total_success(self, inventory_service, mock_inventory_repo):
         """Test adding quantity to total inventory successfully."""
@@ -39,10 +43,14 @@ class TestInventoryService:
         # Assert
         mock_inventory_repo.add_quantity.assert_called_once_with(1, 10)
 
-    def test_add_to_total_validation_error(self, inventory_service, mock_inventory_repo):
+    def test_add_to_total_validation_error(
+        self, inventory_service, mock_inventory_repo
+    ):
         """Test adding quantity with validation error."""
         # Act & Assert
-        with pytest.raises(InvalidQuantityError, match="Cannot add negative quantity to inventory"):
+        with pytest.raises(
+            InvalidQuantityError, match="Cannot add negative quantity to inventory"
+        ):
             inventory_service.add_to_total_inventory(1, -5)
 
     def test_get_total_quantity_success(self, inventory_service, mock_inventory_repo):
@@ -60,7 +68,9 @@ class TestInventoryService:
     def test_get_total_quantity_not_found(self, inventory_service, mock_inventory_repo):
         """Test getting total quantity for non-existent product."""
         # Arrange
-        mock_inventory_repo.get_quantity.side_effect = EntityNotFoundError("Product not found")
+        mock_inventory_repo.get_quantity.side_effect = EntityNotFoundError(
+            "Product not found"
+        )
 
         # Act & Assert
         with pytest.raises(EntityNotFoundError, match="Product not found"):
@@ -68,32 +78,40 @@ class TestInventoryService:
 
         mock_inventory_repo.get_quantity.assert_called_once_with(999)
 
-    def test_get_all_inventory_success(self, inventory_service, mock_inventory_repo, mock_product_repo, mock_warehouse_repo):
+    def test_get_all_inventory_success(
+        self,
+        inventory_service,
+        mock_inventory_repo,
+        mock_product_repo,
+        mock_warehouse_repo,
+    ):
         """Test getting all inventory successfully."""
         # Arrange
         from app.models.inventory_domain import InventoryItem
         from app.models.warehouse_domain import Warehouse
-        
+
         mock_items = [
             InventoryItem(product_id=1, quantity=10),
-            InventoryItem(product_id=2, quantity=5)
+            InventoryItem(product_id=2, quantity=5),
         ]
         mock_inventory_repo.get_all.return_value = mock_items
         mock_inventory_repo.get_quantity.side_effect = lambda pid: 10 if pid == 1 else 5
-        
+
         # Mock product repo to return products
         mock_product1 = Mock()
         mock_product1.product_id = 1
         mock_product1.name = "Product 1"
         mock_product1.price = 10.0
-        
+
         mock_product2 = Mock()
         mock_product2.product_id = 2
-        mock_product2.name = "Product 2" 
+        mock_product2.name = "Product 2"
         mock_product2.price = 20.0
-        
-        mock_product_repo.get.side_effect = lambda pid: mock_product1 if pid == 1 else mock_product2
-        
+
+        mock_product_repo.get.side_effect = (
+            lambda pid: mock_product1 if pid == 1 else mock_product2
+        )
+
         # Mock warehouse repo
         mock_warehouse = Warehouse(warehouse_id=1, location="Test Warehouse")
         mock_warehouse_repo.get_all.return_value = {1: mock_warehouse}

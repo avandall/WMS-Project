@@ -3,9 +3,8 @@ Unit tests for DocumentRepo.
 """
 
 import pytest
-from datetime import datetime
 from app.repositories.sql.document_repo import DocumentRepo
-from app.models.document_domain import Document, DocumentType, DocumentStatus, DocumentProduct
+from app.models.document_domain import Document, DocumentType, DocumentStatus
 from app.exceptions.business_exceptions import DocumentNotFoundError
 
 
@@ -22,7 +21,7 @@ class TestDocumentRepo:
             document_id=1,
             doc_type=DocumentType.IMPORT,
             to_warehouse_id=1,
-            created_by="test_user"
+            created_by="test_user",
         )
 
         self.repo.save(doc)
@@ -40,8 +39,18 @@ class TestDocumentRepo:
 
     def test_get_all_documents(self):
         """Test getting all documents."""
-        doc1 = Document(document_id=1, doc_type=DocumentType.IMPORT, to_warehouse_id=1, created_by="user1")
-        doc2 = Document(document_id=2, doc_type=DocumentType.EXPORT, from_warehouse_id=1, created_by="user2")
+        doc1 = Document(
+            document_id=1,
+            doc_type=DocumentType.IMPORT,
+            to_warehouse_id=1,
+            created_by="user1",
+        )
+        doc2 = Document(
+            document_id=2,
+            doc_type=DocumentType.EXPORT,
+            from_warehouse_id=1,
+            created_by="user2",
+        )
 
         self.repo.save(doc1)
         self.repo.save(doc2)
@@ -58,7 +67,12 @@ class TestDocumentRepo:
 
     def test_update_status_existing_document(self):
         """Test updating status of existing document."""
-        doc = Document(document_id=1, doc_type=DocumentType.IMPORT, to_warehouse_id=1, created_by="user")
+        doc = Document(
+            document_id=1,
+            doc_type=DocumentType.IMPORT,
+            to_warehouse_id=1,
+            created_by="user",
+        )
         self.repo.save(doc)
 
         self.repo.update_status(1, DocumentStatus.POSTED)
@@ -72,7 +86,12 @@ class TestDocumentRepo:
 
     def test_delete_existing_document(self):
         """Test deleting an existing document."""
-        doc = Document(document_id=1, doc_type=DocumentType.IMPORT, to_warehouse_id=1, created_by="user")
+        doc = Document(
+            document_id=1,
+            doc_type=DocumentType.IMPORT,
+            to_warehouse_id=1,
+            created_by="user",
+        )
         self.repo.save(doc)
 
         self.repo.delete(1)
@@ -85,7 +104,12 @@ class TestDocumentRepo:
 
     def test_get_document_existing(self):
         """Test getting document details for existing document."""
-        doc = Document(document_id=1, doc_type=DocumentType.IMPORT, to_warehouse_id=1, created_by="user")
+        doc = Document(
+            document_id=1,
+            doc_type=DocumentType.IMPORT,
+            to_warehouse_id=1,
+            created_by="user",
+        )
         self.repo.save(doc)
 
         retrieved = self.repo.get_document(1)

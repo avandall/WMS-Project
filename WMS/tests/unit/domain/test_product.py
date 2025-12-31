@@ -4,7 +4,11 @@ Unit tests for Product domain entity.
 
 import pytest
 from app.models.product_domain import Product
-from app.exceptions.business_exceptions import ValidationError, InvalidIDError, InvalidQuantityError
+from app.exceptions.business_exceptions import (
+    ValidationError,
+    InvalidIDError,
+    InvalidQuantityError,
+)
 
 
 class TestProduct:
@@ -13,10 +17,7 @@ class TestProduct:
     def test_product_creation_valid(self):
         """Test creating a product with valid data."""
         product = Product(
-            product_id=1,
-            name="Test Product",
-            description="A test product",
-            price=29.99
+            product_id=1, name="Test Product", description="A test product", price=29.99
         )
 
         assert product.product_id == 1
@@ -36,7 +37,9 @@ class TestProduct:
     @pytest.mark.parametrize("invalid_id", [0, -1, "1", None, 1.5])
     def test_product_invalid_id(self, invalid_id):
         """Test creating product with invalid ID."""
-        with pytest.raises(InvalidIDError, match="Product ID must be a positive integer"):
+        with pytest.raises(
+            InvalidIDError, match="Product ID must be a positive integer"
+        ):
             Product(product_id=invalid_id, name="Test")
 
     @pytest.mark.parametrize("invalid_name", ["", "   ", None, "x" * 101])
@@ -48,7 +51,9 @@ class TestProduct:
     @pytest.mark.parametrize("invalid_price", [-1, -0.01, "10", None])
     def test_product_invalid_price(self, invalid_price):
         """Test creating product with invalid price."""
-        with pytest.raises(InvalidQuantityError, match="Product price must be non-negative"):
+        with pytest.raises(
+            InvalidQuantityError, match="Product price must be non-negative"
+        ):
             Product(product_id=1, name="Test", price=invalid_price)
 
     def test_update_price_valid(self):

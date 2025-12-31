@@ -6,20 +6,31 @@ Contains business rules and validation for document operations.
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
-from app.exceptions.business_exceptions import ValidationError, BusinessRuleViolationError, EntityNotFoundError, InvalidIDError, InvalidQuantityError, InvalidDocumentStatusError
+from app.exceptions.business_exceptions import (
+    ValidationError,
+    BusinessRuleViolationError,
+    EntityNotFoundError,
+    InvalidIDError,
+    InvalidQuantityError,
+    InvalidDocumentStatusError,
+)
 from app.core.error_constants import ErrorMessages
+
 
 # Local enums to avoid dependency on models.py
 class DocumentType(str, Enum):
     """Enumeration for document types."""
-    IMPORT = "IMPORT"   # Nhập
-    EXPORT = "EXPORT"   # Xuất
+
+    IMPORT = "IMPORT"  # Nhập
+    EXPORT = "EXPORT"  # Xuất
     TRANSFER = "TRANSFER"  # Chuyển kho
+
 
 class DocumentStatus(str, Enum):
     """Enumeration for document statuses."""
-    DRAFT = "DRAFT"      # Nháp
-    POSTED = "POSTED"    # Đã xác nhận (Không được sửa)
+
+    DRAFT = "DRAFT"  # Nháp
+    POSTED = "POSTED"  # Đã xác nhận (Không được sửa)
     CANCELLED = "CANCELLED"  # Đã hủy
 
 
@@ -67,9 +78,16 @@ class DocumentProduct:
 class Document:
     """Domain class for Document with business logic and validation."""
 
-    def __init__(self, document_id: int, doc_type: DocumentType, from_warehouse_id: Optional[int] = None,
-                 to_warehouse_id: Optional[int] = None, items: Optional[List[DocumentProduct]] = None,
-                 created_by: str = "", note: Optional[str] = None):
+    def __init__(
+        self,
+        document_id: int,
+        doc_type: DocumentType,
+        from_warehouse_id: Optional[int] = None,
+        to_warehouse_id: Optional[int] = None,
+        items: Optional[List[DocumentProduct]] = None,
+        created_by: str = "",
+        note: Optional[str] = None,
+    ):
         self._validate_document_id(document_id)
         self._validate_document_type(doc_type)
         self._validate_warehouses(doc_type, from_warehouse_id, to_warehouse_id)
@@ -99,11 +117,19 @@ class Document:
     @staticmethod
     def _validate_document_type(doc_type) -> None:
         """Validate document type."""
-        if doc_type not in [DocumentType.IMPORT, DocumentType.EXPORT, DocumentType.TRANSFER]:
+        if doc_type not in [
+            DocumentType.IMPORT,
+            DocumentType.EXPORT,
+            DocumentType.TRANSFER,
+        ]:
             raise ValidationError(ErrorMessages.INVALID_DOCUMENT_TYPE)
 
     @staticmethod
-    def _validate_warehouses(doc_type: DocumentType, from_warehouse_id: Optional[int], to_warehouse_id: Optional[int]) -> None:
+    def _validate_warehouses(
+        doc_type: DocumentType,
+        from_warehouse_id: Optional[int],
+        to_warehouse_id: Optional[int],
+    ) -> None:
         """Validate warehouse requirements based on document type."""
         if doc_type == DocumentType.IMPORT:
             if to_warehouse_id is None:
@@ -120,7 +146,11 @@ class Document:
     @staticmethod
     def _validate_created_by(created_by: str) -> None:
         """Validate created_by field."""
-        if not created_by or not isinstance(created_by, str) or len(created_by.strip()) == 0:
+        if (
+            not created_by
+            or not isinstance(created_by, str)
+            or len(created_by.strip()) == 0
+        ):
             raise ValidationError(ErrorMessages.INVALID_CREATED_BY_EMPTY)
 
     def add_item(self, item: DocumentProduct) -> None:
@@ -129,7 +159,9 @@ class Document:
         # Check if product already exists
         for existing_item in self.items:
             if existing_item.product_id == item.product_id:
-                raise BusinessRuleViolationError(f"Product {item.product_id} already exists in document")
+                raise BusinessRuleViolationError(
+                    f"Product {item.product_id} already exists in document"
+                )
         self.items.append(item)
 
     def remove_item(self, product_id: int) -> None:
@@ -154,7 +186,9 @@ class Document:
     def post(self, approved_by: str) -> None:
         """Post the document (change status to POSTED)."""
         if self.status != DocumentStatus.DRAFT:
-            raise InvalidDocumentStatusError(f"Document {self.document_id} is not in DRAFT status")
+            raise InvalidDocumentStatusError(
+                f"Document {self.document_id} is not in DRAFT status"
+            )
         if not approved_by or not isinstance(approved_by, str):
             raise ValidationError("Approved by cannot be empty")
         if not self.items:
@@ -167,14 +201,18 @@ class Document:
     def cancel(self) -> None:
         """Cancel the document."""
         if self.status == DocumentStatus.POSTED:
-            raise InvalidDocumentStatusError(f"Cannot cancel a posted document {self.document_id}")
+            raise InvalidDocumentStatusError(
+                f"Cannot cancel a posted document {self.document_id}"
+            )
         self.status = DocumentStatus.CANCELLED
         self.cancelled_at = datetime.now()
 
     def _ensure_draft_status(self) -> None:
         """Ensure document is in draft status for modifications."""
         if self.status != DocumentStatus.DRAFT:
-            raise InvalidDocumentStatusError(f"Cannot modify document {self.document_id} that is not in DRAFT status")
+            raise InvalidDocumentStatusError(
+                f"Cannot modify document {self.document_id} that is not in DRAFT status"
+            )
 
     def calculate_total_value(self) -> float:
         """Calculate total value of all items in the document."""
@@ -183,17 +221,17 @@ class Document:
     def get_summary(self) -> dict:
         """Get document summary."""
         return {
-            'document_id': self.document_id,
-            'type': self.doc_type.value,
-            'status': self.status.value,
-            'date': self.date.isoformat(),
-            'from_warehouse': self.from_warehouse_id,
-            'to_warehouse': self.to_warehouse_id,
-            'total_items': len(self.items),
-            'total_quantity': sum(item.quantity for item in self.items),
-            'total_value': self.calculate_total_value(),
-            'created_by': self.created_by,
-            'approved_by': self.approved_by
+            "document_id": self.document_id,
+            "type": self.doc_type.value,
+            "status": self.status.value,
+            "date": self.date.isoformat(),
+            "from_warehouse": self.from_warehouse_id,
+            "to_warehouse": self.to_warehouse_id,
+            "total_items": len(self.items),
+            "total_quantity": sum(item.quantity for item in self.items),
+            "total_value": self.calculate_total_value(),
+            "created_by": self.created_by,
+            "approved_by": self.approved_by,
         }
 
     def can_be_modified(self) -> bool:

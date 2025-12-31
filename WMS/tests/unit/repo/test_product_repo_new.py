@@ -16,7 +16,12 @@ class TestProductRepo:
 
     def test_save_and_get_product(self):
         """Test saving and retrieving a product."""
-        product = Product(product_id=1, name="Test Product", price=10.0, description="Test description")
+        product = Product(
+            product_id=1,
+            name="Test Product",
+            price=10.0,
+            description="Test description",
+        )
 
         self.repo.save(product)
         retrieved = self.repo.get(1)
@@ -59,7 +64,9 @@ class TestProductRepo:
 
     def test_get_product_details_existing(self):
         """Test getting product details for existing product."""
-        product = Product(product_id=1, name="Test Product", price=10.0, description="Test desc")
+        product = Product(
+            product_id=1, name="Test Product", price=10.0, description="Test desc"
+        )
         self.repo.save(product)
 
         retrieved = self.repo.get_product_details(1)

@@ -4,7 +4,11 @@ Unit tests for InventoryItem domain entity.
 
 import pytest
 from app.models.inventory_domain import InventoryItem
-from app.exceptions.business_exceptions import ValidationError, InvalidQuantityError, InsufficientStockError
+from app.exceptions.business_exceptions import (
+    ValidationError,
+    InvalidQuantityError,
+    InsufficientStockError,
+)
 
 
 class TestInventoryItem:
@@ -27,13 +31,17 @@ class TestInventoryItem:
     @pytest.mark.parametrize("invalid_id", [0, -1, "1", None, 1.5])
     def test_inventory_item_invalid_product_id(self, invalid_id):
         """Test creating inventory item with invalid product ID."""
-        with pytest.raises(ValidationError, match="Product ID must be a positive integer"):
+        with pytest.raises(
+            ValidationError, match="Product ID must be a positive integer"
+        ):
             InventoryItem(product_id=invalid_id, quantity=5)
 
     @pytest.mark.parametrize("invalid_quantity", [-1, -5, "10", None, 1.5])
     def test_inventory_item_invalid_quantity(self, invalid_quantity):
         """Test creating inventory item with invalid quantity."""
-        with pytest.raises(InvalidQuantityError, match="Quantity must be a non-negative integer"):
+        with pytest.raises(
+            InvalidQuantityError, match="Quantity must be a non-negative integer"
+        ):
             InventoryItem(product_id=1, quantity=invalid_quantity)
 
     def test_add_quantity_valid(self):
@@ -82,7 +90,9 @@ class TestInventoryItem:
         """Test removing invalid quantity."""
         item = InventoryItem(product_id=1, quantity=10)
 
-        with pytest.raises(InvalidQuantityError, match="Cannot remove negative quantity"):
+        with pytest.raises(
+            InvalidQuantityError, match="Cannot remove negative quantity"
+        ):
             item.remove_quantity(-3)
 
     def test_has_sufficient_stock(self):

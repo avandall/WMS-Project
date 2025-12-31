@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional, List, Dict
+from typing import Optional, List, Dict
 from app.models.product_domain import Product
 from app.models.warehouse_domain import Warehouse
 from app.models.inventory_domain import InventoryItem
-from app.models.document_domain import Document, DocumentType, DocumentStatus, DocumentProduct
+from app.models.document_domain import Document, DocumentStatus
+
 
 class IProductRepo(ABC):
     @abstractmethod
@@ -29,6 +30,7 @@ class IProductRepo(ABC):
     @abstractmethod
     def get_product_details(self, product_id: int) -> Product:
         pass
+
 
 class IWarehouseRepo(ABC):
     @abstractmethod
@@ -56,12 +58,17 @@ class IWarehouseRepo(ABC):
         pass
 
     @abstractmethod
-    def add_product_to_warehouse(self, warehouse_id: int, product_id: int, quantity: int) -> None:
+    def add_product_to_warehouse(
+        self, warehouse_id: int, product_id: int, quantity: int
+    ) -> None:
         pass
 
     @abstractmethod
-    def remove_product_from_warehouse(self, warehouse_id: int, product_id: int, quantity: int) -> None:
+    def remove_product_from_warehouse(
+        self, warehouse_id: int, product_id: int, quantity: int
+    ) -> None:
         pass
+
 
 class IInventoryRepo(ABC):
     @abstractmethod
@@ -87,6 +94,7 @@ class IInventoryRepo(ABC):
     @abstractmethod
     def remove_quantity(self, product_id: int, quantity: int) -> None:
         pass
+
 
 class IDocumentRepo(ABC):
     @abstractmethod

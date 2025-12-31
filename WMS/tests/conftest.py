@@ -2,18 +2,26 @@
 Pytest configuration and fixtures for PMKT tests.
 Sets up common fixtures and resets in-memory repositories between tests.
 """
+
 import pytest
 import httpx
 import asyncio
-from typing import Any
 
 from app.api import app
 from app.api import dependencies
+from app.repositories.sql.product_repo import ProductRepo
+from app.repositories.sql.warehouse_repo import WarehouseRepo
+from app.repositories.sql.document_repo import DocumentRepo
+from app.services.product_service import ProductService
+from app.services.inventory_service import InventoryService
+from app.models.product_domain import Product
+from app.models.warehouse_domain import Warehouse
+from app.models.document_domain import Document, DocumentProduct, DocumentType
 
 
 class SyncASGITransport(httpx.ASGITransport):
     """Custom sync ASGI transport that bridges async/sync."""
-    
+
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         """Handle sync request by running async handler in event loop."""
         # Create a new event loop for this request
@@ -36,14 +44,6 @@ class SyncASGITransport(httpx.ASGITransport):
             return response
         finally:
             loop.close()
-from app.repositories.sql.product_repo import ProductRepo
-from app.repositories.sql.warehouse_repo import WarehouseRepo
-from app.repositories.sql.document_repo import DocumentRepo
-from app.services.product_service import ProductService
-from app.services.inventory_service import InventoryService
-from app.models.product_domain import Product
-from app.models.warehouse_domain import Warehouse
-from app.models.document_domain import Document, DocumentProduct, DocumentType, DocumentStatus
 
 
 @pytest.fixture(autouse=True)
@@ -100,7 +100,7 @@ def product_service(product_repo):
 def inventory_service():
     """Fixture for inventory service."""
     from app.repositories.sql.inventory_repo import InventoryRepo
-    from app.services.inventory_service import InventoryService
+
     return InventoryService(InventoryRepo())
 
 
@@ -111,7 +111,7 @@ def sample_product():
         product_id=1,
         name="Test Laptop",
         description="High-performance laptop",
-        price=999.99
+        price=999.99,
     )
 
 
@@ -119,13 +119,14 @@ def sample_product():
 def sample_warehouse():
     """Fixture for a sample warehouse."""
     from app.models.inventory_domain import InventoryItem
+
     return Warehouse(
         warehouse_id=1,
         location="Main Warehouse",
         inventory=[
             InventoryItem(product_id=1, quantity=10),
-            InventoryItem(product_id=2, quantity=5)
-        ]
+            InventoryItem(product_id=2, quantity=5),
+        ],
     )
 
 
@@ -134,12 +135,12 @@ def sample_document():
     """Fixture for a sample inventory document."""
     items = [
         DocumentProduct(product_id=1, quantity=10, unit_price=99.99),
-        DocumentProduct(product_id=2, quantity=5, unit_price=49.99)
+        DocumentProduct(product_id=2, quantity=5, unit_price=49.99),
     ]
     return Document(
         document_id=1,
         doc_type=DocumentType.IMPORT,
         to_warehouse_id=1,
         items=items,
-        created_by="Test User"
+        created_by="Test User",
     )

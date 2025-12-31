@@ -3,7 +3,7 @@ Unit tests for ProductService.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 from app.services.product_service import ProductService
 from app.models.product_domain import Product
 from app.exceptions.business_exceptions import ValidationError, EntityNotFoundError
@@ -26,21 +26,19 @@ class TestProductService:
     def product_service(self, mock_product_repo, mock_inventory_repo):
         """Product service with mocked repositories."""
         return ProductService(
-            product_repo=mock_product_repo,
-            inventory_repo=mock_inventory_repo
+            product_repo=mock_product_repo, inventory_repo=mock_inventory_repo
         )
 
     @pytest.fixture
     def sample_product(self):
         """Sample product for testing."""
         return Product(
-            product_id=1,
-            name="Test Product",
-            description="A test product",
-            price=29.99
+            product_id=1, name="Test Product", description="A test product", price=29.99
         )
 
-    def test_create_product_success(self, product_service, mock_product_repo, mock_inventory_repo, sample_product):
+    def test_create_product_success(
+        self, product_service, mock_product_repo, mock_inventory_repo, sample_product
+    ):
         """Test creating a product successfully."""
         # Arrange
         mock_product_repo.get.return_value = None  # Product doesn't exist
@@ -48,7 +46,9 @@ class TestProductService:
         mock_inventory_repo.add_quantity.return_value = None
 
         # Act
-        result = product_service.create_product(1, "Test Product", 29.99, "A test product")
+        result = product_service.create_product(
+            1, "Test Product", 29.99, "A test product"
+        )
 
         # Assert
         assert result.product_id == 1
@@ -59,7 +59,9 @@ class TestProductService:
         mock_product_repo.save.assert_called_once()
         mock_inventory_repo.add_quantity.assert_called_once_with(1, 0)
 
-    def test_create_product_minimal(self, product_service, mock_product_repo, mock_inventory_repo):
+    def test_create_product_minimal(
+        self, product_service, mock_product_repo, mock_inventory_repo
+    ):
         """Test creating a product with minimal data."""
         # Arrange
         mock_product_repo.get.return_value = None  # Product doesn't exist
@@ -75,7 +77,9 @@ class TestProductService:
         assert result.price == 19.99
         assert result.description is None
 
-    def test_create_product_validation_error(self, product_service, mock_product_repo, mock_inventory_repo):
+    def test_create_product_validation_error(
+        self, product_service, mock_product_repo, mock_inventory_repo
+    ):
         """Test creating a product with validation error."""
         # Arrange
         mock_product_repo.get.return_value = None
@@ -84,7 +88,9 @@ class TestProductService:
         with pytest.raises(ValidationError):
             product_service.create_product(1, "", 29.99)  # Empty name
 
-    def test_get_product_details_success(self, product_service, mock_product_repo, sample_product):
+    def test_get_product_details_success(
+        self, product_service, mock_product_repo, sample_product
+    ):
         """Test getting product details successfully."""
         # Arrange
         mock_product_repo.get.return_value = sample_product
@@ -105,7 +111,9 @@ class TestProductService:
         with pytest.raises(EntityNotFoundError):
             product_service.get_product_details(999)
 
-    def test_update_product_success(self, product_service, mock_product_repo, sample_product):
+    def test_update_product_success(
+        self, product_service, mock_product_repo, sample_product
+    ):
         """Test updating a product successfully."""
         # Arrange
         mock_product_repo.get.return_value = sample_product
@@ -119,7 +127,9 @@ class TestProductService:
         assert result.price == 39.99
         mock_product_repo.save.assert_called_once()
 
-    def test_update_product_partial(self, product_service, mock_product_repo, sample_product):
+    def test_update_product_partial(
+        self, product_service, mock_product_repo, sample_product
+    ):
         """Test updating a product with partial data."""
         # Arrange
         mock_product_repo.get.return_value = sample_product
@@ -141,7 +151,9 @@ class TestProductService:
         with pytest.raises(EntityNotFoundError):
             product_service.update_product(999, name="New Name")
 
-    def test_delete_product_success(self, product_service, mock_product_repo, mock_inventory_repo):
+    def test_delete_product_success(
+        self, product_service, mock_product_repo, mock_inventory_repo
+    ):
         """Test deleting a product successfully."""
         # Arrange
         sample_product = Product(product_id=1, name="Test", price=10.0)

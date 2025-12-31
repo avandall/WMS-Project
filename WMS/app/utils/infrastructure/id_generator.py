@@ -46,9 +46,11 @@ def document_id_generator() -> Callable[[], int]:
     """Get document ID generator."""
     return IDGenerator.get_generator("document", 1)
 
+
 def warehouse_id_generator() -> Callable[[], int]:
     """Get warehouse ID generator."""
     return IDGenerator.get_generator("warehouse", 1)
+
 
 def product_id_generator() -> Callable[[], int]:
     """Get product ID generator."""

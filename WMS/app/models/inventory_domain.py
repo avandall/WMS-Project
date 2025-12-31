@@ -3,10 +3,13 @@ Inventory domain logic for PMKT Warehouse Management System.
 Contains business rules and validation for inventory management.
 """
 
-from app.exceptions.business_exceptions import ValidationError
-from app.exceptions.business_exceptions import InvalidIDError, InvalidQuantityError, InsufficientStockError
+from app.exceptions.business_exceptions import (
+    InvalidIDError,
+    InvalidQuantityError,
+    InsufficientStockError,
+)
 from app.core.error_constants import ErrorMessages
-from .product_domain import Product
+
 
 class InventoryItem:
     """Domain class for InventoryItem with business logic and validation."""
@@ -28,7 +31,9 @@ class InventoryItem:
     def _validate_quantity(quantity: int) -> None:
         """Validate quantity."""
         if not isinstance(quantity, int) or quantity < 0:
-            raise InvalidQuantityError(ErrorMessages.INVALID_QUANTITY_NON_NEGATIVE_INTEGER)
+            raise InvalidQuantityError(
+                ErrorMessages.INVALID_QUANTITY_NON_NEGATIVE_INTEGER
+            )
 
     def add_quantity(self, amount: int) -> None:
         """Add quantity to inventory."""
@@ -45,8 +50,7 @@ class InventoryItem:
         if amount > self.quantity:
             raise InsufficientStockError(
                 ErrorMessages.INSUFFICIENT_STOCK.format(
-                    available=self.quantity,
-                    requested=amount
+                    available=self.quantity, requested=amount
                 )
             )
         self.quantity -= amount
@@ -60,7 +64,9 @@ class InventoryItem:
         return self.quantity == 0
 
     def __str__(self) -> str:
-        return f"InventoryItem(product_id='{self.product_id}', quantity={self.quantity})"
+        return (
+            f"InventoryItem(product_id='{self.product_id}', quantity={self.quantity})"
+        )
 
     def __repr__(self) -> str:
         return self.__str__()

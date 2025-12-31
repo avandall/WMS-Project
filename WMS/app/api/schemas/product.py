@@ -5,25 +5,31 @@ Pydantic models for API requests and responses.
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
-from app.models.document_domain import DocumentType, DocumentStatus
+
 
 # Product models
 class ProductCreate(BaseModel):
     product_id: int = Field(..., gt=0, description="Unique product identifier")
     name: str = Field(..., min_length=1, max_length=100, description="Product name")
     price: float = Field(
-        ..., ge=0,
-        description="Catalog/list price. Transaction pricing is defined per document item unit_price."
+        ...,
+        ge=0,
+        description="Catalog/list price. Transaction pricing is defined per document item unit_price.",
     )
-    description: Optional[str] = Field(None, max_length=500, description="Product description")
+    description: Optional[str] = Field(
+        None, max_length=500, description="Product description"
+    )
+
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     price: Optional[float] = Field(
-        None, ge=0,
-        description="Catalog/list price. Transaction pricing is defined per document item unit_price."
+        None,
+        ge=0,
+        description="Catalog/list price. Transaction pricing is defined per document item unit_price.",
     )
     description: Optional[str] = Field(None, max_length=500)
+
 
 class ProductResponse(BaseModel):
     product_id: int
@@ -37,8 +43,9 @@ class ProductResponse(BaseModel):
             product_id=product.product_id,
             name=product.name,
             price=product.price,
-            description=product.description
+            description=product.description,
         )
+
 
 # Inventory models
 class InventoryItemResponse(BaseModel):
@@ -47,14 +54,15 @@ class InventoryItemResponse(BaseModel):
 
     @classmethod
     def from_domain(cls, item):
-        return cls(
-            product_id=item.product_id,
-            quantity=item.quantity
-        )
+        return cls(product_id=item.product_id, quantity=item.quantity)
+
 
 # Warehouse models
 class WarehouseCreate(BaseModel):
-    location: str = Field(..., min_length=1, max_length=200, description="Warehouse location")
+    location: str = Field(
+        ..., min_length=1, max_length=200, description="Warehouse location"
+    )
+
 
 class WarehouseResponse(BaseModel):
     warehouse_id: int
@@ -66,12 +74,16 @@ class WarehouseResponse(BaseModel):
         return cls(
             warehouse_id=warehouse.warehouse_id,
             location=warehouse.location,
-            inventory=[InventoryItemResponse.from_domain(item) for item in warehouse.inventory]
+            inventory=[
+                InventoryItemResponse.from_domain(item) for item in warehouse.inventory
+            ],
         )
+
 
 class ProductMovement(BaseModel):
     product_id: int = Field(..., gt=0, description="Product identifier")
     quantity: int = Field(..., gt=0, description="Quantity to move")
+
 
 # Document models
 class DocumentProductItem(BaseModel):
@@ -79,16 +91,27 @@ class DocumentProductItem(BaseModel):
     quantity: int = Field(..., gt=0)
     unit_price: float = Field(..., ge=0)
 
+
 class DocumentCreate(BaseModel):
-    warehouse_id: Optional[int] = Field(None, gt=0, description="Target warehouse for import/export")
-    from_warehouse_id: Optional[int] = Field(None, gt=0, description="Source warehouse for transfer")
-    to_warehouse_id: Optional[int] = Field(None, gt=0, description="Target warehouse for transfer")
-    items: List[DocumentProductItem] = Field(..., min_items=1, description="Document items")
+    warehouse_id: Optional[int] = Field(
+        None, gt=0, description="Target warehouse for import/export"
+    )
+    from_warehouse_id: Optional[int] = Field(
+        None, gt=0, description="Source warehouse for transfer"
+    )
+    to_warehouse_id: Optional[int] = Field(
+        None, gt=0, description="Target warehouse for transfer"
+    )
+    items: List[DocumentProductItem] = Field(
+        ..., min_items=1, description="Document items"
+    )
     created_by: str = Field(..., min_length=1, description="Creator name")
     note: Optional[str] = Field(None, description="Optional note")
 
+
 class DocumentPost(BaseModel):
     approved_by: str = Field(..., min_length=1, description="Approver name")
+
 
 class DocumentResponse(BaseModel):
     document_id: int
@@ -114,14 +137,16 @@ class DocumentResponse(BaseModel):
                 DocumentProductItem(
                     product_id=item.product_id,
                     quantity=item.quantity,
-                    unit_price=item.unit_price
-                ) for item in document.items
+                    unit_price=item.unit_price,
+                )
+                for item in document.items
             ],
             created_by=document.created_by,
             approved_by=document.approved_by,
             date=document.date,
-            note=document.note
+            note=document.note,
         )
+
 
 # Report models
 class InventoryReportItem(BaseModel):
@@ -130,6 +155,7 @@ class InventoryReportItem(BaseModel):
     product_name: Optional[str]
     unit_value: Optional[float]
 
+
 class WarehouseInventoryReport(BaseModel):
     warehouse_id: int
     warehouse_location: str
@@ -137,14 +163,16 @@ class WarehouseInventoryReport(BaseModel):
     low_stock_items: List[InventoryReportItem]
     generated_at: datetime
 
+
 class TotalInventoryReport(BaseModel):
     product_totals: List[InventoryReportItem]
     generated_at: datetime
 
+
 class InventoryReportResponse(BaseModel):
     @classmethod
     def from_domain(cls, report):
-        if hasattr(report, 'warehouse_id'):
+        if hasattr(report, "warehouse_id"):
             # WarehouseInventoryReport
             return {
                 "type": "warehouse_inventory",
@@ -155,18 +183,20 @@ class InventoryReportResponse(BaseModel):
                         "product_id": item.product_id,
                         "quantity": item.quantity,
                         "product_name": item.product_name,
-                        "unit_value": item.unit_value
-                    } for item in report.items
+                        "unit_value": item.unit_value,
+                    }
+                    for item in report.items
                 ],
                 "low_stock_items": [
                     {
                         "product_id": item.product_id,
                         "quantity": item.quantity,
                         "product_name": item.product_name,
-                        "unit_value": item.unit_value
-                    } for item in report.low_stock_items
+                        "unit_value": item.unit_value,
+                    }
+                    for item in report.low_stock_items
                 ],
-                "generated_at": report.generated_at
+                "generated_at": report.generated_at,
             }
         else:
             # TotalInventoryReport
@@ -177,8 +207,9 @@ class InventoryReportResponse(BaseModel):
                         "product_id": item.product_id,
                         "quantity": item.quantity,
                         "product_name": item.product_name,
-                        "unit_value": item.unit_value
-                    } for item in report.product_totals
+                        "unit_value": item.unit_value,
+                    }
+                    for item in report.product_totals
                 ],
-                "generated_at": report.generated_at
+                "generated_at": report.generated_at,
             }

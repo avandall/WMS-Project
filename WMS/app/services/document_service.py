@@ -1,12 +1,28 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from app.models.document_domain import Document, DocumentType, DocumentStatus, DocumentProduct
-from app.exceptions.business_exceptions import (
-    DocumentNotFoundError, InvalidDocumentStatusError, ValidationError,
-    InsufficientStockError, InvalidQuantityError, WarehouseNotFoundError, ProductNotFoundError
+from app.models.document_domain import (
+    Document,
+    DocumentType,
+    DocumentStatus,
+    DocumentProduct,
 )
-from app.repositories.interfaces.interfaces import IDocumentRepo, IWarehouseRepo, IProductRepo, IInventoryRepo
+from app.exceptions.business_exceptions import (
+    DocumentNotFoundError,
+    InvalidDocumentStatusError,
+    ValidationError,
+    InsufficientStockError,
+    InvalidQuantityError,
+    WarehouseNotFoundError,
+    ProductNotFoundError,
+)
+from app.repositories.interfaces.interfaces import (
+    IDocumentRepo,
+    IWarehouseRepo,
+    IProductRepo,
+    IInventoryRepo,
+)
 from app.utils.infrastructure import document_id_generator
+
 
 class DocumentService:
     """
@@ -14,16 +30,26 @@ class DocumentService:
     Handles the complete workflow from creation to posting/cancellation.
     """
 
-    def __init__(self, document_repo: IDocumentRepo, warehouse_repo: IWarehouseRepo,
-                 product_repo: IProductRepo, inventory_repo: IInventoryRepo):
+    def __init__(
+        self,
+        document_repo: IDocumentRepo,
+        warehouse_repo: IWarehouseRepo,
+        product_repo: IProductRepo,
+        inventory_repo: IInventoryRepo,
+    ):
         self.document_repo = document_repo
         self.warehouse_repo = warehouse_repo
         self.product_repo = product_repo
         self.inventory_repo = inventory_repo
         self._doc_id_generator = document_id_generator()
 
-    def create_import_document(self, to_warehouse_id: int, items: List[Dict[str, Any]],
-                             created_by: str, note: Optional[str] = None) -> Document:
+    def create_import_document(
+        self,
+        to_warehouse_id: int,
+        items: List[Dict[str, Any]],
+        created_by: str,
+        note: Optional[str] = None,
+    ) -> Document:
         """
         Create an import document with full validation and business rules.
 
@@ -49,14 +75,19 @@ class DocumentService:
             to_warehouse_id=to_warehouse_id,
             items=document_items,
             created_by=created_by,
-            note=note
+            note=note,
         )
 
         self.document_repo.save(document)
         return document
 
-    def create_export_document(self, from_warehouse_id: int, items: List[Dict[str, Any]],
-                             created_by: str, note: Optional[str] = None) -> Document:
+    def create_export_document(
+        self,
+        from_warehouse_id: int,
+        items: List[Dict[str, Any]],
+        created_by: str,
+        note: Optional[str] = None,
+    ) -> Document:
         """
         Create an export document with inventory validation.
 
@@ -81,15 +112,20 @@ class DocumentService:
             from_warehouse_id=from_warehouse_id,
             items=document_items,
             created_by=created_by,
-            note=note
+            note=note,
         )
 
         self.document_repo.save(document)
         return document
 
-    def create_transfer_document(self, from_warehouse_id: int, to_warehouse_id: int,
-                               items: List[Dict[str, Any]], created_by: str,
-                               note: Optional[str] = None) -> Document:
+    def create_transfer_document(
+        self,
+        from_warehouse_id: int,
+        to_warehouse_id: int,
+        items: List[Dict[str, Any]],
+        created_by: str,
+        note: Optional[str] = None,
+    ) -> Document:
         """
         Create a transfer document with comprehensive validation.
 
@@ -105,9 +141,13 @@ class DocumentService:
         from_warehouse = self.warehouse_repo.get(from_warehouse_id)
         to_warehouse = self.warehouse_repo.get(to_warehouse_id)
         if not from_warehouse:
-            raise WarehouseNotFoundError(f"Source warehouse {from_warehouse_id} not found")
+            raise WarehouseNotFoundError(
+                f"Source warehouse {from_warehouse_id} not found"
+            )
         if not to_warehouse:
-            raise WarehouseNotFoundError(f"Destination warehouse {to_warehouse_id} not found")
+            raise WarehouseNotFoundError(
+                f"Destination warehouse {to_warehouse_id} not found"
+            )
 
         # Validate and convert items without product check (deferred to posting)
         document_items = self._validate_and_convert_items_without_product_check(items)
@@ -121,7 +161,7 @@ class DocumentService:
             to_warehouse_id=to_warehouse_id,
             items=document_items,
             created_by=created_by,
-            note=note
+            note=note,
         )
 
         self.document_repo.save(document)
@@ -162,7 +202,9 @@ class DocumentService:
             # In a real system, you would rollback any partial operations here
             raise ValidationError(f"Failed to post document {document_id}: {str(e)}")
 
-    def cancel_document(self, document_id: int, cancelled_by: str, reason: Optional[str] = None) -> Document:
+    def cancel_document(
+        self, document_id: int, cancelled_by: str, reason: Optional[str] = None
+    ) -> Document:
         """
         Cancel a document with validation.
 
@@ -176,9 +218,13 @@ class DocumentService:
             raise DocumentNotFoundError(f"Document {document_id} not found")
 
         if document.status == DocumentStatus.POSTED:
-            raise InvalidDocumentStatusError(f"Cannot cancel a posted document {document_id}")
+            raise InvalidDocumentStatusError(
+                f"Cannot cancel a posted document {document_id}"
+            )
         if document.status == DocumentStatus.CANCELLED:
-            raise InvalidDocumentStatusError(f"Document {document_id} is already cancelled")
+            raise InvalidDocumentStatusError(
+                f"Document {document_id} is already cancelled"
+            )
 
         document.status = DocumentStatus.CANCELLED
         document.cancelled_by = cancelled_by
@@ -200,13 +246,15 @@ class DocumentService:
         enriched_items = []
         for item in document.items:
             product = self.product_repo.get(item.product_id)
-            enriched_items.append({
-                "product": product,
-                "quantity": item.quantity,
-                # Use pricing from the document item rather than product catalog price
-                "unit_price": item.unit_price,
-                "total_value": (item.unit_price * item.quantity)
-            })
+            enriched_items.append(
+                {
+                    "product": product,
+                    "quantity": item.quantity,
+                    # Use pricing from the document item rather than product catalog price
+                    "unit_price": item.unit_price,
+                    "total_value": (item.unit_price * item.quantity),
+                }
+            )
 
         warehouse_info = {}
         if document.from_warehouse_id:
@@ -220,7 +268,9 @@ class DocumentService:
             "document": document,
             "items": enriched_items,
             "warehouses": warehouse_info,
-            "total_value": sum(item["total_value"] for item in enriched_items if item["total_value"])
+            "total_value": sum(
+                item["total_value"] for item in enriched_items if item["total_value"]
+            ),
         }
 
     def get_pending_documents(self) -> List[Document]:
@@ -237,7 +287,18 @@ class DocumentService:
         all_docs = self.document_repo.get_all()
         return [doc for doc in all_docs if doc.status == status]
 
-    def _validate_and_convert_items_without_product_check(self, items: List[Dict[str, Any]]) -> List[DocumentProduct]:
+    def get_document(self, document_id: int) -> Document:
+        """
+        Get a document by ID.
+        """
+        document = self.document_repo.get(document_id)
+        if not document:
+            raise DocumentNotFoundError(f"Document {document_id} not found")
+        return document
+
+    def _validate_and_convert_items_without_product_check(
+        self, items: List[Dict[str, Any]]
+    ) -> List[DocumentProduct]:
         """Validate items without checking product existence (for exports/transfers in draft)."""
         if not items:
             raise ValidationError("Document must contain at least one item")
@@ -249,7 +310,9 @@ class DocumentService:
             unit_price = item_data.get("unit_price")
 
             if product_id is None or quantity is None or unit_price is None:
-                raise ValidationError("Each item must have product_id, quantity, and unit_price")
+                raise ValidationError(
+                    "Each item must have product_id, quantity, and unit_price"
+                )
 
             if quantity <= 0:
                 raise InvalidQuantityError("Quantity must be positive")
@@ -257,15 +320,17 @@ class DocumentService:
             if unit_price < 0:
                 raise ValidationError("Unit price cannot be negative")
 
-            document_items.append(DocumentProduct(
-                product_id=product_id,
-                quantity=quantity,
-                unit_price=unit_price
-            ))
+            document_items.append(
+                DocumentProduct(
+                    product_id=product_id, quantity=quantity, unit_price=unit_price
+                )
+            )
 
         return document_items
 
-    def _validate_and_convert_items(self, items: List[Dict[str, Any]]) -> List[DocumentProduct]:
+    def _validate_and_convert_items(
+        self, items: List[Dict[str, Any]]
+    ) -> List[DocumentProduct]:
         """Validate items and convert to domain objects."""
         if not items:
             raise ValidationError("Document must contain at least one item")
@@ -277,7 +342,9 @@ class DocumentService:
             unit_price = item_data.get("unit_price")
 
             if product_id is None or quantity is None or unit_price is None:
-                raise ValidationError("Each item must have product_id, quantity, and unit_price")
+                raise ValidationError(
+                    "Each item must have product_id, quantity, and unit_price"
+                )
 
             if quantity <= 0:
                 raise InvalidQuantityError("Quantity must be positive")
@@ -290,22 +357,25 @@ class DocumentService:
             if not product:
                 raise ProductNotFoundError(f"Product {product_id} not found")
 
-            document_items.append(DocumentProduct(
-                product_id=product_id,
-                quantity=quantity,
-                unit_price=unit_price
-            ))
+            document_items.append(
+                DocumentProduct(
+                    product_id=product_id, quantity=quantity, unit_price=unit_price
+                )
+            )
 
         return document_items
 
-    def _validate_and_convert_items_with_warehouse_stock(self, items: List[Dict[str, Any]],
-                                                       warehouse_id: int) -> List[DocumentProduct]:
+    def _validate_and_convert_items_with_warehouse_stock(
+        self, items: List[Dict[str, Any]], warehouse_id: int
+    ) -> List[DocumentProduct]:
         """Validate items and check warehouse stock availability."""
         document_items = self._validate_and_convert_items(items)
 
         # Check warehouse stock for each item
         for item in document_items:
-            warehouse_inventory = self.warehouse_repo.get_warehouse_inventory(warehouse_id)
+            warehouse_inventory = self.warehouse_repo.get_warehouse_inventory(
+                warehouse_id
+            )
             current_quantity = 0
 
             for wh_item in warehouse_inventory:
@@ -329,7 +399,9 @@ class DocumentService:
         if not document:
             raise DocumentNotFoundError(f"Document {document_id} not found")
         if document.status != DocumentStatus.DRAFT:
-            raise InvalidDocumentStatusError(f"Document {document_id} is not in DRAFT status")
+            raise InvalidDocumentStatusError(
+                f"Document {document_id} is not in DRAFT status"
+            )
         return document
 
     def _execute_import_operations(self, document: Document) -> None:
@@ -338,7 +410,9 @@ class DocumentService:
         # Validate destination warehouse still exists at posting time
         to_warehouse = self.warehouse_repo.get(document.to_warehouse_id)
         if not to_warehouse:
-            raise WarehouseNotFoundError(f"Warehouse {document.to_warehouse_id} not found")
+            raise WarehouseNotFoundError(
+                f"Warehouse {document.to_warehouse_id} not found"
+            )
 
         for item in document.items:
             # Add to warehouse first; if this fails, do not alter total inventory
@@ -354,11 +428,22 @@ class DocumentService:
         Validate source warehouse existence before any changes."""
         from_warehouse = self.warehouse_repo.get(document.from_warehouse_id)
         if not from_warehouse:
-            raise WarehouseNotFoundError(f"Warehouse {document.from_warehouse_id} not found")
+            raise WarehouseNotFoundError(
+                f"Warehouse {document.from_warehouse_id} not found"
+            )
 
         for item in document.items:
-            warehouse_inventory = self.warehouse_repo.get_warehouse_inventory(document.from_warehouse_id)
-            available = next((entry.quantity for entry in warehouse_inventory if entry.product_id == item.product_id), 0)
+            warehouse_inventory = self.warehouse_repo.get_warehouse_inventory(
+                document.from_warehouse_id
+            )
+            available = next(
+                (
+                    entry.quantity
+                    for entry in warehouse_inventory
+                    if entry.product_id == item.product_id
+                ),
+                0,
+            )
             if available < item.quantity:
                 raise InsufficientStockError(
                     f"Insufficient stock for product {item.product_id}: requested {item.quantity}, available {available}"
@@ -368,7 +453,7 @@ class DocumentService:
             self.warehouse_repo.remove_product_from_warehouse(
                 document.from_warehouse_id, item.product_id, item.quantity
             )
-            
+
             # Remove from total inventory (export removes stock from system)
             self.inventory_repo.remove_quantity(item.product_id, item.quantity)
 
@@ -378,9 +463,13 @@ class DocumentService:
         from_warehouse = self.warehouse_repo.get(document.from_warehouse_id)
         to_warehouse = self.warehouse_repo.get(document.to_warehouse_id)
         if not from_warehouse:
-            raise WarehouseNotFoundError(f"Warehouse {document.from_warehouse_id} not found")
+            raise WarehouseNotFoundError(
+                f"Warehouse {document.from_warehouse_id} not found"
+            )
         if not to_warehouse:
-            raise WarehouseNotFoundError(f"Warehouse {document.to_warehouse_id} not found")
+            raise WarehouseNotFoundError(
+                f"Warehouse {document.to_warehouse_id} not found"
+            )
 
         for item in document.items:
             # Remove from source

@@ -4,15 +4,31 @@ Contains business rules and validation for warehouse operations.
 """
 
 from typing import Optional, List
-from app.exceptions.business_exceptions import ValidationError, BusinessRuleViolationError, EntityAlreadyExistsError
-from app.exceptions.business_exceptions import InvalidIDError, InvalidQuantityError, WarehouseNotFoundError, ProductNotFoundError, InsufficientStockError
+from app.exceptions.business_exceptions import (
+    ValidationError,
+    BusinessRuleViolationError,
+    EntityAlreadyExistsError,
+)
+from app.exceptions.business_exceptions import (
+    InvalidIDError,
+    InvalidQuantityError,
+    WarehouseNotFoundError,
+    ProductNotFoundError,
+    InsufficientStockError,
+)
 from app.core.error_constants import ErrorMessages
 from .inventory_domain import InventoryItem
+
 
 class Warehouse:
     """Domain class for Warehouse with business logic and validation."""
 
-    def __init__(self, warehouse_id: int, location: str, inventory: Optional[List[InventoryItem]] = None):
+    def __init__(
+        self,
+        warehouse_id: int,
+        location: str,
+        inventory: Optional[List[InventoryItem]] = None,
+    ):
         self._validate_warehouse_id(warehouse_id)
         self._validate_location(location)
 
@@ -59,8 +75,7 @@ class Warehouse:
                 if item.quantity < quantity:
                     raise InsufficientStockError(
                         ErrorMessages.INSUFFICIENT_STOCK.format(
-                            available=item.quantity,
-                            requested=quantity
+                            available=item.quantity, requested=quantity
                         )
                     )
                 item.remove_quantity(quantity)
@@ -71,8 +86,7 @@ class Warehouse:
 
         raise ProductNotFoundError(
             ErrorMessages.PRODUCT_NOT_FOUND_IN_WAREHOUSE.format(
-                product_id=product_id,
-                warehouse_id=self.warehouse_id
+                product_id=product_id, warehouse_id=self.warehouse_id
             )
         )
 
@@ -99,16 +113,20 @@ class Warehouse:
     def get_inventory_summary(self) -> dict:
         """Get summary of warehouse inventory."""
         return {
-            'warehouse_id': self.warehouse_id,
-            'location': self.location,
-            'total_products': len(self.inventory),
-            'total_items': sum(item.quantity for item in self.inventory)
+            "warehouse_id": self.warehouse_id,
+            "location": self.location,
+            "total_products": len(self.inventory),
+            "total_items": sum(item.quantity for item in self.inventory),
         }
 
-    def transfer_product_to(self, other_warehouse: 'Warehouse', product_id: str, quantity: int) -> None:
+    def transfer_product_to(
+        self, other_warehouse: "Warehouse", product_id: str, quantity: int
+    ) -> None:
         """Transfer product to another warehouse."""
         if other_warehouse.warehouse_id == self.warehouse_id:
-            raise BusinessRuleViolationError(ErrorMessages.CANNOT_TRANSFER_SAME_WAREHOUSE)
+            raise BusinessRuleViolationError(
+                ErrorMessages.CANNOT_TRANSFER_SAME_WAREHOUSE
+            )
 
         # Remove from this warehouse
         self.remove_product(product_id, quantity)
@@ -144,7 +162,9 @@ class WarehouseManager:
     def add_warehouse(self, warehouse: Warehouse) -> None:
         """Add a warehouse."""
         if warehouse.warehouse_id in self._warehouses:
-            raise EntityAlreadyExistsError(f"Warehouse {warehouse.warehouse_id} already exists")
+            raise EntityAlreadyExistsError(
+                f"Warehouse {warehouse.warehouse_id} already exists"
+            )
         self._warehouses[warehouse.warehouse_id] = warehouse
 
     def get_warehouse(self, warehouse_id: int) -> Warehouse:
@@ -169,7 +189,9 @@ class WarehouseManager:
 
     def get_total_product_quantity(self, product_id: str) -> int:
         """Get total quantity of a product across all warehouses."""
-        return sum(w.get_product_quantity(product_id) for w in self._warehouses.values())
+        return sum(
+            w.get_product_quantity(product_id) for w in self._warehouses.values()
+        )
 
     def __len__(self) -> int:
         return len(self._warehouses)

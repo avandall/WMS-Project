@@ -2,7 +2,6 @@
 Unit tests for WarehouseRepo.
 """
 
-import pytest
 from app.repositories.sql.warehouse_repo import WarehouseRepo
 from app.models.warehouse_domain import Warehouse
 from app.models.inventory_domain import InventoryItem

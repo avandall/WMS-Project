@@ -9,10 +9,10 @@ from .warehouse_domain import Warehouse, WarehouseManager
 from .document_domain import Document, DocumentProduct
 
 __all__ = [
-    'Product',
-    'InventoryItem',
-    'Warehouse',
-    'WarehouseManager',
-    'Document',
-    'DocumentProduct'
+    "Product",
+    "InventoryItem",
+    "Warehouse",
+    "WarehouseManager",
+    "Document",
+    "DocumentProduct",
 ]

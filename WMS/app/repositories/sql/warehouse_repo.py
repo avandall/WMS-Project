@@ -1,25 +1,26 @@
-from typing import Any, Dict, List
+from typing import Dict, List, Optional
 from app.models.warehouse_domain import Warehouse
 from app.models.inventory_domain import InventoryItem
-from app.exceptions.business_exceptions import InvalidQuantityError, WarehouseNotFoundError, InsufficientStockError, ProductNotFoundError
+from app.exceptions.business_exceptions import WarehouseNotFoundError
 from ..interfaces.interfaces import IWarehouseRepo
+
 
 class WarehouseRepo(IWarehouseRepo):
     def __init__(self):
         self.warehouses = {}
-    
+
     def create_warehouse(self, warehouse: Warehouse) -> None:
         self.warehouses[warehouse.warehouse_id] = warehouse
-    
+
     def save(self, warehouse: Warehouse) -> None:
         self.warehouses[warehouse.warehouse_id] = warehouse
-    
-    def get(self, warehouse_id: int) -> Warehouse:
+
+    def get(self, warehouse_id: int) -> Optional[Warehouse]:
         return self.warehouses.get(warehouse_id)
-    
+
     def get_all(self) -> Dict[int, Warehouse]:
         return self.warehouses.copy()
-   
+
     def delete(self, warehouse_id: int) -> None:
         if warehouse_id in self.warehouses:
             del self.warehouses[warehouse_id]
@@ -28,14 +29,18 @@ class WarehouseRepo(IWarehouseRepo):
         warehouse = self.get(warehouse_id)
         return warehouse.inventory if warehouse else []
 
-    def add_product_to_warehouse(self, warehouse_id: int, product_id: int, quantity: int) -> None:
+    def add_product_to_warehouse(
+        self, warehouse_id: int, product_id: int, quantity: int
+    ) -> None:
         warehouse = self.get(warehouse_id)
         if not warehouse:
             raise WarehouseNotFoundError(f"Warehouse {warehouse_id} not found")
         warehouse.add_product(product_id, quantity)
         self.save(warehouse)
 
-    def remove_product_from_warehouse(self, warehouse_id: int, product_id: int, quantity: int) -> None:
+    def remove_product_from_warehouse(
+        self, warehouse_id: int, product_id: int, quantity: int
+    ) -> None:
         warehouse = self.get(warehouse_id)
         if not warehouse:
             raise WarehouseNotFoundError(f"Warehouse {warehouse_id} not found")

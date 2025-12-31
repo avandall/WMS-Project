@@ -1,9 +1,15 @@
-from typing import List, Dict, Any, Optional
-from app.repositories.interfaces.interfaces import IInventoryRepo, IProductRepo, IWarehouseRepo
-from app.exceptions.business_exceptions import (
-    InvalidQuantityError, EntityNotFoundError, ValidationError,
-    InsufficientStockError
+from typing import List, Dict, Any
+from app.repositories.interfaces.interfaces import (
+    IInventoryRepo,
+    IProductRepo,
+    IWarehouseRepo,
 )
+from app.exceptions.business_exceptions import (
+    InvalidQuantityError,
+    EntityNotFoundError,
+    InsufficientStockError,
+)
+
 
 class InventoryService:
     """
@@ -11,7 +17,12 @@ class InventoryService:
     Coordinates inventory operations across the system and provides business-level inventory insights.
     """
 
-    def __init__(self, inventory_repo: IInventoryRepo, product_repo: IProductRepo, warehouse_repo: IWarehouseRepo):
+    def __init__(
+        self,
+        inventory_repo: IInventoryRepo,
+        product_repo: IProductRepo,
+        warehouse_repo: IWarehouseRepo,
+    ):
         self.inventory_repo = inventory_repo
         self.product_repo = product_repo
         self.warehouse_repo = warehouse_repo
@@ -89,11 +100,13 @@ class InventoryService:
             inventory = self.warehouse_repo.get_warehouse_inventory(warehouse_id)
             for item in inventory:
                 if item.product_id == product_id:
-                    warehouse_distribution.append({
-                        "warehouse_id": warehouse_id,
-                        "warehouse_location": warehouse.location,
-                        "quantity": item.quantity
-                    })
+                    warehouse_distribution.append(
+                        {
+                            "warehouse_id": warehouse_id,
+                            "warehouse_location": warehouse.location,
+                            "quantity": item.quantity,
+                        }
+                    )
                     total_warehouses += 1
                     total_allocated += item.quantity
                     break
@@ -106,7 +119,7 @@ class InventoryService:
             "allocated_quantity": total_allocated,
             "unallocated_quantity": unallocated_quantity,
             "warehouse_count": total_warehouses,
-            "warehouse_distribution": warehouse_distribution
+            "warehouse_distribution": warehouse_distribution,
         }
 
     def get_all_inventory_with_details(self) -> List[Dict[str, Any]]:
@@ -143,12 +156,14 @@ class InventoryService:
             try:
                 product = self.product_repo.get(item.product_id)
                 if product and item.quantity <= threshold:
-                    low_stock_products.append({
-                        "product": product,
-                        "current_quantity": item.quantity,
-                        "threshold": threshold,
-                        "needs_restock": True
-                    })
+                    low_stock_products.append(
+                        {
+                            "product": product,
+                            "current_quantity": item.quantity,
+                            "threshold": threshold,
+                            "needs_restock": True,
+                        }
+                    )
             except EntityNotFoundError:
                 continue
 
@@ -176,7 +191,7 @@ class InventoryService:
             warehouse_summary[warehouse_id] = {
                 "location": warehouse.location,
                 "total_items": warehouse_items,
-                "unique_products": warehouse_products
+                "unique_products": warehouse_products,
             }
 
         return {
@@ -184,7 +199,7 @@ class InventoryService:
             "total_inventory_items": total_items,
             "warehouse_count": len(warehouse_summary),
             "warehouse_summary": warehouse_summary,
-            "low_stock_products": self.get_low_stock_products()
+            "low_stock_products": self.get_low_stock_products(),
         }
 
     def validate_inventory_consistency(self) -> List[str]:
@@ -199,13 +214,17 @@ class InventoryService:
             try:
                 product = self.product_repo.get(item.product_id)
                 if not product:
-                    issues.append(f"Orphaned inventory: product {item.product_id} not found")
+                    issues.append(
+                        f"Orphaned inventory: product {item.product_id} not found"
+                    )
                     continue
 
                 # Check consistency with warehouse allocations
                 total_allocated = 0
                 for warehouse_id in self.warehouse_repo.get_all().keys():
-                    inventory = self.warehouse_repo.get_warehouse_inventory(warehouse_id)
+                    inventory = self.warehouse_repo.get_warehouse_inventory(
+                        warehouse_id
+                    )
                     for wh_item in inventory:
                         if wh_item.product_id == item.product_id:
                             total_allocated += wh_item.quantity
@@ -218,8 +237,8 @@ class InventoryService:
                     )
 
             except EntityNotFoundError:
-                issues.append(f"Product {item.product_id} not found for inventory validation")
+                issues.append(
+                    f"Product {item.product_id} not found for inventory validation"
+                )
 
         return issues
-    
-    

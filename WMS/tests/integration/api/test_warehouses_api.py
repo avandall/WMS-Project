@@ -3,10 +3,8 @@ Integration tests for Warehouses API endpoints.
 Tests warehouse creation, inventory management, and product movements.
 """
 
-import pytest
 import httpx
 
-from app.exceptions.business_exceptions import WarehouseNotFoundError
 
 TestClient = httpx.Client  # Type alias for test client
 
@@ -61,7 +59,7 @@ class TestWarehousesAPI:
         product_data = {
             "product_id": 100,
             "name": "Warehouse Test Product",
-            "price": 25.0
+            "price": 25.0,
         }
         client.post("/api/products/", json=product_data)
 
@@ -70,13 +68,15 @@ class TestWarehousesAPI:
             "warehouse_id": warehouse_id,
             "items": [{"product_id": 100, "quantity": 50, "unit_price": 25.0}],
             "created_by": "tester",
-            "note": "add via document"
+            "note": "add via document",
         }
         response = client.post("/api/documents/import", json=import_doc)
         assert response.status_code == 200
         doc_id = response.json()["document_id"]
         # Post the document
-        post_resp = client.post(f"/api/documents/{doc_id}/post", json={"approved_by": "manager"})
+        post_resp = client.post(
+            f"/api/documents/{doc_id}/post", json={"approved_by": "manager"}
+        )
         assert post_resp.status_code == 200
 
         # Verify product was added
@@ -91,10 +91,10 @@ class TestWarehousesAPI:
         import_doc = {
             "warehouse_id": 999,
             "items": [{"product_id": 100, "quantity": 10, "unit_price": 25.0}],
-            "created_by": "tester"
+            "created_by": "tester",
         }
         response = client.post("/api/documents/import", json=import_doc)
-        assert response.status_code == 400
+        assert response.status_code == 404
 
     def test_add_invalid_quantity_to_warehouse(self, client: TestClient):
         """Test adding invalid quantity to warehouse."""
@@ -107,7 +107,7 @@ class TestWarehousesAPI:
         import_doc = {
             "warehouse_id": warehouse_id,
             "items": [{"product_id": 100, "quantity": -5, "unit_price": 25.0}],
-            "created_by": "tester"
+            "created_by": "tester",
         }
         response = client.post("/api/documents/import", json=import_doc)
         assert response.status_code == 422
@@ -122,7 +122,7 @@ class TestWarehousesAPI:
         product_data = {
             "product_id": 200,
             "name": "Existing Inventory Product",
-            "price": 30.0
+            "price": 30.0,
         }
         client.post("/api/products/", json=product_data)
 
@@ -130,7 +130,7 @@ class TestWarehousesAPI:
         import_doc_1 = {
             "warehouse_id": warehouse_id,
             "items": [{"product_id": 200, "quantity": 20, "unit_price": 30.0}],
-            "created_by": "tester"
+            "created_by": "tester",
         }
         doc_resp = client.post("/api/documents/import", json=import_doc_1)
         doc_id = doc_resp.json()["document_id"]
@@ -140,11 +140,13 @@ class TestWarehousesAPI:
         import_doc_2 = {
             "warehouse_id": warehouse_id,
             "items": [{"product_id": 200, "quantity": 15, "unit_price": 30.0}],
-            "created_by": "tester"
+            "created_by": "tester",
         }
         doc_resp2 = client.post("/api/documents/import", json=import_doc_2)
         doc_id2 = doc_resp2.json()["document_id"]
-        post2 = client.post(f"/api/documents/{doc_id2}/post", json={"approved_by": "manager"})
+        post2 = client.post(
+            f"/api/documents/{doc_id2}/post", json={"approved_by": "manager"}
+        )
         assert post2.status_code == 200
 
         # Verify total quantity
@@ -160,18 +162,14 @@ class TestWarehousesAPI:
         response = client.post("/api/warehouses/", json=warehouse_data)
         warehouse_id = response.json()["warehouse_id"]
 
-        product_data = {
-            "product_id": 300,
-            "name": "Remove Test Product",
-            "price": 40.0
-        }
+        product_data = {"product_id": 300, "name": "Remove Test Product", "price": 40.0}
         client.post("/api/products/", json=product_data)
 
         # Add product to warehouse via import
         import_doc = {
             "warehouse_id": warehouse_id,
             "items": [{"product_id": 300, "quantity": 25, "unit_price": 40.0}],
-            "created_by": "tester"
+            "created_by": "tester",
         }
         doc_resp = client.post("/api/documents/import", json=import_doc)
         doc_id = doc_resp.json()["document_id"]
@@ -181,12 +179,14 @@ class TestWarehousesAPI:
         export_doc = {
             "warehouse_id": warehouse_id,
             "items": [{"product_id": 300, "quantity": 10, "unit_price": 40.0}],
-            "created_by": "tester"
+            "created_by": "tester",
         }
         doc_resp2 = client.post("/api/documents/export", json=export_doc)
         assert doc_resp2.status_code == 200
         doc_id2 = doc_resp2.json()["document_id"]
-        post_resp = client.post(f"/api/documents/{doc_id2}/post", json={"approved_by": "manager"})
+        post_resp = client.post(
+            f"/api/documents/{doc_id2}/post", json={"approved_by": "manager"}
+        )
         assert post_resp.status_code == 200
 
         # Verify remaining quantity
@@ -201,18 +201,14 @@ class TestWarehousesAPI:
         response = client.post("/api/warehouses/", json=warehouse_data)
         warehouse_id = response.json()["warehouse_id"]
 
-        product_data = {
-            "product_id": 400,
-            "name": "Remove All Product",
-            "price": 50.0
-        }
+        product_data = {"product_id": 400, "name": "Remove All Product", "price": 50.0}
         client.post("/api/products/", json=product_data)
 
         # Add product to warehouse via import
         import_doc = {
             "warehouse_id": warehouse_id,
             "items": [{"product_id": 400, "quantity": 10, "unit_price": 50.0}],
-            "created_by": "tester"
+            "created_by": "tester",
         }
         doc_resp = client.post("/api/documents/import", json=import_doc)
         doc_id = doc_resp.json()["document_id"]
@@ -222,11 +218,13 @@ class TestWarehousesAPI:
         export_doc = {
             "warehouse_id": warehouse_id,
             "items": [{"product_id": 400, "quantity": 10, "unit_price": 50.0}],
-            "created_by": "tester"
+            "created_by": "tester",
         }
         doc_resp2 = client.post("/api/documents/export", json=export_doc)
         doc_id2 = doc_resp2.json()["document_id"]
-        post2 = client.post(f"/api/documents/{doc_id2}/post", json={"approved_by": "manager"})
+        post2 = client.post(
+            f"/api/documents/{doc_id2}/post", json={"approved_by": "manager"}
+        )
         assert post2.status_code == 200
 
         # Verify product is completely removed
@@ -244,7 +242,7 @@ class TestWarehousesAPI:
         product_data = {
             "product_id": 500,
             "name": "Insufficient Stock Product",
-            "price": 60.0
+            "price": 60.0,
         }
         client.post("/api/products/", json=product_data)
 
@@ -252,7 +250,7 @@ class TestWarehousesAPI:
         import_doc = {
             "warehouse_id": warehouse_id,
             "items": [{"product_id": 500, "quantity": 5, "unit_price": 60.0}],
-            "created_by": "tester"
+            "created_by": "tester",
         }
         doc_resp = client.post("/api/documents/import", json=import_doc)
         doc_id = doc_resp.json()["document_id"]
@@ -262,12 +260,14 @@ class TestWarehousesAPI:
         export_doc = {
             "warehouse_id": warehouse_id,
             "items": [{"product_id": 500, "quantity": 10, "unit_price": 60.0}],
-            "created_by": "tester"
+            "created_by": "tester",
         }
         create_resp = client.post("/api/documents/export", json=export_doc)
         assert create_resp.status_code == 200
         doc_id2 = create_resp.json()["document_id"]
-        post_resp = client.post(f"/api/documents/{doc_id2}/post", json={"approved_by": "manager"})
+        post_resp = client.post(
+            f"/api/documents/{doc_id2}/post", json={"approved_by": "manager"}
+        )
         assert post_resp.status_code == 400
 
     def test_remove_product_not_in_warehouse(self, client: TestClient):
@@ -281,12 +281,14 @@ class TestWarehousesAPI:
         export_doc = {
             "warehouse_id": warehouse_id,
             "items": [{"product_id": 600, "quantity": 5, "unit_price": 60.0}],
-            "created_by": "tester"
+            "created_by": "tester",
         }
         create_resp = client.post("/api/documents/export", json=export_doc)
         assert create_resp.status_code == 200
         doc_id = create_resp.json()["document_id"]
-        post_resp = client.post(f"/api/documents/{doc_id}/post", json={"approved_by": "manager"})
+        post_resp = client.post(
+            f"/api/documents/{doc_id}/post", json={"approved_by": "manager"}
+        )
         assert post_resp.status_code == 400
 
     def test_warehouse_inventory_workflow(self, client: TestClient):
@@ -296,11 +298,7 @@ class TestWarehousesAPI:
         response = client.post("/api/warehouses/", json=warehouse_data)
         warehouse_id = response.json()["warehouse_id"]
 
-        product_data = {
-            "product_id": 700,
-            "name": "Workflow Product",
-            "price": 75.0
-        }
+        product_data = {"product_id": 700, "name": "Workflow Product", "price": 75.0}
         client.post("/api/products/", json=product_data)
 
         # Initially empty
@@ -311,7 +309,7 @@ class TestWarehousesAPI:
         import_doc_1 = {
             "warehouse_id": warehouse_id,
             "items": [{"product_id": 700, "quantity": 100, "unit_price": 75.0}],
-            "created_by": "tester"
+            "created_by": "tester",
         }
         resp1 = client.post("/api/documents/import", json=import_doc_1)
         doc_id1 = resp1.json()["document_id"]
@@ -324,7 +322,7 @@ class TestWarehousesAPI:
         import_doc_2 = {
             "warehouse_id": warehouse_id,
             "items": [{"product_id": 700, "quantity": 50, "unit_price": 75.0}],
-            "created_by": "tester"
+            "created_by": "tester",
         }
         resp2 = client.post("/api/documents/import", json=import_doc_2)
         doc_id2 = resp2.json()["document_id"]
@@ -337,7 +335,7 @@ class TestWarehousesAPI:
         export_doc = {
             "warehouse_id": warehouse_id,
             "items": [{"product_id": 700, "quantity": 75, "unit_price": 75.0}],
-            "created_by": "tester"
+            "created_by": "tester",
         }
         resp3 = client.post("/api/documents/export", json=export_doc)
         doc_id3 = resp3.json()["document_id"]

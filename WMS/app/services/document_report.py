@@ -3,13 +3,15 @@ Document Report classes for PMKT Warehouse Management System.
 """
 
 from typing import List, Dict, Any, Optional
-from datetime import datetime, date
+from datetime import datetime
 from dataclasses import dataclass
 from app.models.document_domain import DocumentType, DocumentStatus
+
 
 @dataclass
 class DocumentReportItem:
     """Represents a document in report."""
+
     document_id: int
     doc_type: DocumentType
     status: DocumentStatus
@@ -22,9 +24,11 @@ class DocumentReportItem:
     created_by: str
     approved_by: Optional[str]
 
+
 @dataclass
 class DocumentReport:
     """Document report with filters and summary."""
+
     filters: Dict[str, Any]
     documents: List[DocumentReportItem]
     type_summary: Dict[str, int]

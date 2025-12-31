@@ -3,10 +3,8 @@ Integration tests for Products API endpoints.
 Tests the complete request/response cycle including FastAPI routing and service layer.
 """
 
-import pytest
 import httpx
 
-from app.api.schemas.product import ProductCreate, ProductUpdate
 
 TestClient = httpx.Client  # Type alias for test client
 
@@ -20,7 +18,7 @@ class TestProductsAPI:
             "product_id": 1,
             "name": "Test Product",
             "price": 29.99,
-            "description": "A test product"
+            "description": "A test product",
         }
 
         response = client.post("/api/products/", json=product_data)
@@ -34,11 +32,7 @@ class TestProductsAPI:
 
     def test_create_product_without_description(self, client: TestClient):
         """Test creating a product without description."""
-        product_data = {
-            "product_id": 2,
-            "name": "Product No Desc",
-            "price": 19.99
-        }
+        product_data = {"product_id": 2, "name": "Product No Desc", "price": 19.99}
 
         response = client.post("/api/products/", json=product_data)
 
@@ -50,11 +44,7 @@ class TestProductsAPI:
     def test_create_product_invalid_data(self, client: TestClient):
         """Test creating a product with invalid data."""
         # Test empty name
-        product_data = {
-            "product_id": 3,
-            "name": "",
-            "price": 10.0
-        }
+        product_data = {"product_id": 3, "name": "", "price": 10.0}
 
         response = client.post("/api/products/", json=product_data)
         assert response.status_code == 422
@@ -62,11 +52,7 @@ class TestProductsAPI:
     def test_get_product_success(self, client: TestClient):
         """Test getting a product successfully."""
         # First create a product
-        product_data = {
-            "product_id": 4,
-            "name": "Get Test Product",
-            "price": 39.99
-        }
+        product_data = {"product_id": 4, "name": "Get Test Product", "price": 39.99}
         client.post("/api/products/", json=product_data)
 
         # Then get it
@@ -91,7 +77,7 @@ class TestProductsAPI:
             "product_id": 5,
             "name": "Original Name",
             "price": 20.0,
-            "description": "Original desc"
+            "description": "Original desc",
         }
         client.post("/api/products/", json=product_data)
 
@@ -99,7 +85,7 @@ class TestProductsAPI:
         update_data = {
             "name": "Updated Name",
             "price": 25.0,
-            "description": "Updated desc"
+            "description": "Updated desc",
         }
         response = client.put("/api/products/5", json=update_data)
 
@@ -116,7 +102,7 @@ class TestProductsAPI:
             "product_id": 6,
             "name": "Partial Update",
             "price": 30.0,
-            "description": "Original desc"
+            "description": "Original desc",
         }
         client.post("/api/products/", json=product_data)
 
@@ -140,11 +126,7 @@ class TestProductsAPI:
     def test_update_product_invalid_data(self, client: TestClient):
         """Test updating a product with invalid data."""
         # Create valid product
-        product_data = {
-            "product_id": 7,
-            "name": "Valid Product",
-            "price": 10.0
-        }
+        product_data = {"product_id": 7, "name": "Valid Product", "price": 10.0}
         client.post("/api/products/", json=product_data)
 
         # Try to update with invalid data
@@ -156,11 +138,7 @@ class TestProductsAPI:
     def test_delete_product_success(self, client: TestClient):
         """Test deleting a product successfully."""
         # Create product
-        product_data = {
-            "product_id": 8,
-            "name": "Delete Test",
-            "price": 15.0
-        }
+        product_data = {"product_id": 8, "name": "Delete Test", "price": 15.0}
         client.post("/api/products/", json=product_data)
 
         # Delete it
@@ -189,7 +167,7 @@ class TestProductsAPI:
             "product_id": product_id,
             "name": "Workflow Product",
             "price": 50.0,
-            "description": "Testing workflow"
+            "description": "Testing workflow",
         }
         response = client.post("/api/products/", json=product_data)
         assert response.status_code == 200

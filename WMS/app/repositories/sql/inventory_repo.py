@@ -5,6 +5,7 @@ from ..interfaces.interfaces import IInventoryRepo
 
 # Repository for total inventory of all warehouses
 
+
 class InventoryRepo(IInventoryRepo):
     def __init__(self):
         self.inventory: Dict[int, InventoryItem] = {}
@@ -17,7 +18,9 @@ class InventoryRepo(IInventoryRepo):
             self.inventory[product_id].add_quantity(quantity)
         else:
             if quantity < 0:
-                raise InvalidQuantityError(f"Cannot start with negative inventory for {product_id}")
+                raise InvalidQuantityError(
+                    f"Cannot start with negative inventory for {product_id}"
+                )
             item = InventoryItem(product_id, quantity)
             self.inventory[product_id] = item
 
@@ -36,7 +39,7 @@ class InventoryRepo(IInventoryRepo):
             del self.inventory[product_id]
         else:
             raise KeyError("Product ID not found in inventory")
-    
+
     def remove_quantity(self, product_id: int, quantity: int) -> None:
         if product_id not in self.inventory:
             raise KeyError(f"Product {product_id} not found in inventory")

@@ -6,8 +6,14 @@ import pytest
 from app.models.warehouse_domain import Warehouse, WarehouseManager
 from app.models.inventory_domain import InventoryItem
 from app.exceptions.business_exceptions import (
-    ValidationError, BusinessRuleViolationError, EntityAlreadyExistsError,
-    InvalidQuantityError, WarehouseNotFoundError, ProductNotFoundError, InsufficientStockError, InvalidIDError
+    ValidationError,
+    BusinessRuleViolationError,
+    EntityAlreadyExistsError,
+    InvalidQuantityError,
+    WarehouseNotFoundError,
+    ProductNotFoundError,
+    InsufficientStockError,
+    InvalidIDError,
 )
 
 
@@ -26,9 +32,11 @@ class TestWarehouse:
         """Test creating a warehouse with initial inventory."""
         inventory = [
             InventoryItem(product_id=1, quantity=10),
-            InventoryItem(product_id=2, quantity=5)
+            InventoryItem(product_id=2, quantity=5),
         ]
-        warehouse = Warehouse(warehouse_id=1, location="Main Warehouse", inventory=inventory)
+        warehouse = Warehouse(
+            warehouse_id=1, location="Main Warehouse", inventory=inventory
+        )
 
         assert warehouse.warehouse_id == 1
         assert warehouse.location == "Main Warehouse"
@@ -39,7 +47,9 @@ class TestWarehouse:
     @pytest.mark.parametrize("invalid_id", [0, -1, "1", None, 1.5])
     def test_warehouse_invalid_id(self, invalid_id):
         """Test creating warehouse with invalid ID."""
-        with pytest.raises(InvalidIDError, match="Warehouse ID must be a positive integer"):
+        with pytest.raises(
+            InvalidIDError, match="Warehouse ID must be a positive integer"
+        ):
             Warehouse(warehouse_id=invalid_id, location="Test")
 
     @pytest.mark.parametrize("invalid_location", ["", "   ", None, "x" * 201])
@@ -73,10 +83,14 @@ class TestWarehouse:
         """Test adding product with invalid quantity."""
         warehouse = Warehouse(warehouse_id=1, location="Test")
 
-        with pytest.raises(InvalidQuantityError, match="Quantity must be a positive integer"):
+        with pytest.raises(
+            InvalidQuantityError, match="Quantity must be a positive integer"
+        ):
             warehouse.add_product(product_id=1, quantity=0)
 
-        with pytest.raises(InvalidQuantityError, match="Quantity must be a positive integer"):
+        with pytest.raises(
+            InvalidQuantityError, match="Quantity must be a positive integer"
+        ):
             warehouse.add_product(product_id=1, quantity=-5)
 
     def test_remove_product_existing(self):
@@ -102,7 +116,9 @@ class TestWarehouse:
         """Test removing product that doesn't exist."""
         warehouse = Warehouse(warehouse_id=1, location="Test")
 
-        with pytest.raises(ProductNotFoundError, match="Product 1 not found in warehouse 1"):
+        with pytest.raises(
+            ProductNotFoundError, match="Product 1 not found in warehouse 1"
+        ):
             warehouse.remove_product(product_id=1, quantity=5)
 
     def test_remove_product_insufficient_stock(self):
@@ -118,7 +134,9 @@ class TestWarehouse:
         warehouse = Warehouse(warehouse_id=1, location="Test")
         warehouse.add_product(product_id=1, quantity=10)
 
-        with pytest.raises(InvalidQuantityError, match="Quantity must be a positive integer"):
+        with pytest.raises(
+            InvalidQuantityError, match="Quantity must be a positive integer"
+        ):
             warehouse.remove_product(product_id=1, quantity=0)
 
     def test_get_product_quantity(self):
@@ -149,7 +167,7 @@ class TestWarehouse:
 
         products = {
             1: Product(product_id=1, name="Product 1", price=10.0),
-            2: Product(product_id=2, name="Product 2", price=5.0)
+            2: Product(product_id=2, name="Product 2", price=5.0),
         }
 
         total_value = warehouse.get_inventory_value(products)
@@ -163,10 +181,10 @@ class TestWarehouse:
 
         summary = warehouse.get_inventory_summary()
 
-        assert summary['warehouse_id'] == 1
-        assert summary['location'] == "Test Warehouse"
-        assert summary['total_products'] == 2
-        assert summary['total_items'] == 15
+        assert summary["warehouse_id"] == 1
+        assert summary["location"] == "Test Warehouse"
+        assert summary["total_products"] == 2
+        assert summary["total_items"] == 15
 
     def test_transfer_product_to(self):
         """Test transferring product to another warehouse."""
@@ -184,7 +202,9 @@ class TestWarehouse:
         warehouse = Warehouse(warehouse_id=1, location="Test")
         warehouse.add_product(product_id=1, quantity=10)
 
-        with pytest.raises(BusinessRuleViolationError, match="Cannot transfer to the same warehouse"):
+        with pytest.raises(
+            BusinessRuleViolationError, match="Cannot transfer to the same warehouse"
+        ):
             warehouse.transfer_product_to(warehouse, product_id=1, quantity=5)
 
     def test_transfer_product_insufficient_stock(self):
@@ -261,7 +281,9 @@ class TestWarehouseManager:
 
         manager.add_warehouse(warehouse1)
 
-        with pytest.raises(EntityAlreadyExistsError, match="Warehouse 1 already exists"):
+        with pytest.raises(
+            EntityAlreadyExistsError, match="Warehouse 1 already exists"
+        ):
             manager.add_warehouse(warehouse2)
 
     def test_get_warehouse_not_found(self):

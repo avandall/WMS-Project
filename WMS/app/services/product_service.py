@@ -1,7 +1,12 @@
 from typing import Optional
 from app.models.product_domain import Product
 from app.repositories.interfaces.interfaces import IProductRepo, IInventoryRepo
-from app.exceptions.business_exceptions import ValidationError, EntityAlreadyExistsError, EntityNotFoundError
+from app.exceptions.business_exceptions import (
+    ValidationError,
+    EntityAlreadyExistsError,
+    EntityNotFoundError,
+)
+
 
 class ProductService:
     """
@@ -13,7 +18,13 @@ class ProductService:
         self.product_repo = product_repo
         self.inventory_repo = inventory_repo
 
-    def create_product(self, product_id: int, name: str, price: float, description: Optional[str] = None) -> Product:
+    def create_product(
+        self,
+        product_id: int,
+        name: str,
+        price: float,
+        description: Optional[str] = None,
+    ) -> Product:
         """
         Create a new product with business orchestration.
         - Validates business rules (product doesn't already exist)
@@ -23,10 +34,14 @@ class ProductService:
         # Business rule: Check if product already exists
         existing_product = self.product_repo.get(product_id)
         if existing_product:
-            raise EntityAlreadyExistsError(f"Product with ID {product_id} already exists")
+            raise EntityAlreadyExistsError(
+                f"Product with ID {product_id} already exists"
+            )
 
         # Create product domain entity (validation happens in constructor)
-        product = Product(product_id=product_id, name=name, price=price, description=description)
+        product = Product(
+            product_id=product_id, name=name, price=price, description=description
+        )
 
         # Persist the product
         self.product_repo.save(product)
@@ -45,7 +60,13 @@ class ProductService:
             raise EntityNotFoundError(f"Product with ID {product_id} not found")
         return product
 
-    def update_product(self, product_id: int, name: Optional[str] = None, price: Optional[float] = None, description: Optional[str] = None) -> Product:
+    def update_product(
+        self,
+        product_id: int,
+        name: Optional[str] = None,
+        price: Optional[float] = None,
+        description: Optional[str] = None,
+    ) -> Product:
         """
         Update product with business orchestration.
         - Validates that product exists
@@ -76,12 +97,14 @@ class ProductService:
         - Cleans up related data (inventory)
         """
         # Validate product exists
-        product = self.get_product_details(product_id)
+        self.get_product_details(product_id)
 
         # Business rule: Check if product has inventory (could prevent deletion)
         current_quantity = self.inventory_repo.get_quantity(product_id)
         if current_quantity > 0:
-            raise ValidationError(f"Cannot delete product {product_id}: still has {current_quantity} items in inventory")
+            raise ValidationError(
+                f"Cannot delete product {product_id}: still has {current_quantity} items in inventory"
+            )
 
         # Clean up inventory
         # Note: In a real system, you might want to keep historical data
@@ -98,10 +121,7 @@ class ProductService:
         product = self.get_product_details(product_id)
         quantity = self.inventory_repo.get_quantity(product_id)
 
-        return {
-            "product": product,
-            "current_inventory": quantity
-        }
+        return {"product": product, "current_inventory": quantity}
 
     def list_products_with_inventory(self) -> list:
         """
@@ -110,9 +130,5 @@ class ProductService:
         products = []
         for product_id, product in self.product_repo.get_all().items():
             quantity = self.inventory_repo.get_quantity(product_id)
-            products.append({
-                "product": product,
-                "current_inventory": quantity
-            })
+            products.append({"product": product, "current_inventory": quantity})
         return products
-        

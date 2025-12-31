@@ -5,7 +5,10 @@ Unit tests for InventoryRepo.
 import pytest
 from app.repositories.sql.inventory_repo import InventoryRepo
 from app.models.inventory_domain import InventoryItem
-from app.exceptions.business_exceptions import InvalidQuantityError, InsufficientStockError
+from app.exceptions.business_exceptions import (
+    InvalidQuantityError,
+    InsufficientStockError,
+)
 
 
 class TestInventoryRepo:
@@ -43,7 +46,9 @@ class TestInventoryRepo:
 
     def test_add_quantity_negative_to_new_product(self):
         """Test adding negative quantity to new product raises InvalidQuantityError."""
-        with pytest.raises(InvalidQuantityError, match="Cannot start with negative inventory for 1"):
+        with pytest.raises(
+            InvalidQuantityError, match="Cannot start with negative inventory for 1"
+        ):
             self.repo.add_quantity(1, -5)
 
     def test_add_quantity_zero_to_new_product(self):
@@ -90,7 +95,9 @@ class TestInventoryRepo:
         """Test deleting an item with non-zero quantity raises InvalidQuantityError."""
         self.repo.add_quantity(1, 10)
 
-        with pytest.raises(InvalidQuantityError, match="Cannot delete item with non-zero quantity"):
+        with pytest.raises(
+            InvalidQuantityError, match="Cannot delete item with non-zero quantity"
+        ):
             self.repo.delete(1)
 
     def test_delete_nonexistent_item(self):
@@ -114,7 +121,10 @@ class TestInventoryRepo:
         """Test removing more quantity than available raises InsufficientStockError."""
         self.repo.add_quantity(1, 5)
 
-        with pytest.raises(InsufficientStockError, match="Insufficient stock. Available: 5, Requested: 10"):
+        with pytest.raises(
+            InsufficientStockError,
+            match="Insufficient stock. Available: 5, Requested: 10",
+        ):
             self.repo.remove_quantity(1, 10)
 
     def test_remove_quantity_zero(self):

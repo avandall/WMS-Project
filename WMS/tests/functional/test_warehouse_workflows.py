@@ -12,7 +12,7 @@ from app.repositories.sql.product_repo import ProductRepo
 from app.repositories.sql.warehouse_repo import WarehouseRepo
 from app.repositories.sql.inventory_repo import InventoryRepo
 from app.repositories.sql.document_repo import DocumentRepo
-from app.models.document_domain import DocumentType, DocumentProduct
+from app.models.document_domain import DocumentType
 from app.exceptions.business_exceptions import ValidationError, InvalidQuantityError
 
 
@@ -29,9 +29,18 @@ class TestWarehouseManagementWorkflow:
 
         # Create services
         self.product_service = ProductService(self.product_repo, self.inventory_repo)
-        self.inventory_service = InventoryService(self.inventory_repo, self.product_repo, self.warehouse_repo)
-        self.warehouse_service = WarehouseService(self.warehouse_repo, self.product_repo, self.inventory_repo)
-        self.document_service = DocumentService(self.document_repo, self.warehouse_repo, self.product_repo, self.inventory_repo)
+        self.inventory_service = InventoryService(
+            self.inventory_repo, self.product_repo, self.warehouse_repo
+        )
+        self.warehouse_service = WarehouseService(
+            self.warehouse_repo, self.product_repo, self.inventory_repo
+        )
+        self.document_service = DocumentService(
+            self.document_repo,
+            self.warehouse_repo,
+            self.product_repo,
+            self.inventory_repo,
+        )
 
     def test_product_lifecycle_workflow(self):
         """Test complete product lifecycle: create, update, use in transactions, delete."""
@@ -40,16 +49,14 @@ class TestWarehouseManagementWorkflow:
             product_id=1,
             name="Functional Test Product",
             price=100.0,
-            description="Product for functional testing"
+            description="Product for functional testing",
         )
         assert product.product_id == 1
         assert product.name == "Functional Test Product"
 
         # Update product
         updated_product = self.product_service.update_product(
-            product_id=1,
-            name="Updated Functional Product",
-            price=120.0
+            product_id=1, name="Updated Functional Product", price=120.0
         )
         assert updated_product.name == "Updated Functional Product"
         assert updated_product.price == 120.0
@@ -65,6 +72,7 @@ class TestWarehouseManagementWorkflow:
 
         # Verify product is gone
         from app.exceptions.business_exceptions import EntityNotFoundError
+
         with pytest.raises(EntityNotFoundError):
             self.product_service.get_product_details(1)
 
@@ -75,10 +83,8 @@ class TestWarehouseManagementWorkflow:
         warehouse_id = warehouse.warehouse_id
 
         # Create product
-        product = self.product_service.create_product(
-            product_id=2,
-            name="Inventory Test Product",
-            price=50.0
+        self.product_service.create_product(
+            product_id=2, name="Inventory Test Product", price=50.0
         )
 
         # Initially empty inventory
@@ -89,9 +95,11 @@ class TestWarehouseManagementWorkflow:
         import_doc2 = self.document_service.create_import_document(
             to_warehouse_id=warehouse_id,
             items=[{"product_id": 2, "quantity": 100, "unit_price": 50.0}],
-            created_by="functional_test_user"
+            created_by="functional_test_user",
         )
-        self.document_service.post_document(import_doc2.document_id, approved_by="manager")
+        self.document_service.post_document(
+            import_doc2.document_id, approved_by="manager"
+        )
 
         # Check inventory
         inventory = self.warehouse_service.get_warehouse_inventory(warehouse_id)
@@ -103,9 +111,11 @@ class TestWarehouseManagementWorkflow:
         import_doc3 = self.document_service.create_import_document(
             to_warehouse_id=warehouse_id,
             items=[{"product_id": 2, "quantity": 50, "unit_price": 50.0}],
-            created_by="functional_test_user"
+            created_by="functional_test_user",
         )
-        self.document_service.post_document(import_doc3.document_id, approved_by="manager")
+        self.document_service.post_document(
+            import_doc3.document_id, approved_by="manager"
+        )
 
         inventory = self.warehouse_service.get_warehouse_inventory(warehouse_id)
         assert inventory[0].quantity == 150
@@ -114,9 +124,11 @@ class TestWarehouseManagementWorkflow:
         export_doc = self.document_service.create_export_document(
             from_warehouse_id=warehouse_id,
             items=[{"product_id": 2, "quantity": 75, "unit_price": 50.0}],
-            created_by="functional_test_user"
+            created_by="functional_test_user",
         )
-        self.document_service.post_document(export_doc.document_id, approved_by="manager")
+        self.document_service.post_document(
+            export_doc.document_id, approved_by="manager"
+        )
 
         inventory = self.warehouse_service.get_warehouse_inventory(warehouse_id)
         assert inventory[0].quantity == 75
@@ -125,9 +137,11 @@ class TestWarehouseManagementWorkflow:
         export_doc2 = self.document_service.create_export_document(
             from_warehouse_id=warehouse_id,
             items=[{"product_id": 2, "quantity": 75, "unit_price": 50.0}],
-            created_by="functional_test_user"
+            created_by="functional_test_user",
         )
-        self.document_service.post_document(export_doc2.document_id, approved_by="manager")
+        self.document_service.post_document(
+            export_doc2.document_id, approved_by="manager"
+        )
 
         inventory = self.warehouse_service.get_warehouse_inventory(warehouse_id)
         assert len(inventory) == 0
@@ -135,24 +149,18 @@ class TestWarehouseManagementWorkflow:
     def test_import_document_workflow(self):
         """Test complete import document workflow."""
         # Create warehouse and product
-        warehouse = self.warehouse_service.create_warehouse("Import Test Warehouse")
-        warehouse_id = warehouse.warehouse_id
+        wh = self.warehouse_service.create_warehouse("Import Test Warehouse")
+        warehouse_id = wh.warehouse_id
 
-        product = self.product_service.create_product(
-            product_id=3,
-            name="Import Test Product",
-            price=75.0
+        self.product_service.create_product(
+            product_id=3, name="Import Test Product", price=75.0
         )
 
         # Create import document
-        items = [
-            {"product_id": 3, "quantity": 200, "unit_price": 75.0}
-        ]
+        items = [{"product_id": 3, "quantity": 200, "unit_price": 75.0}]
 
         document = self.document_service.create_import_document(
-            to_warehouse_id=warehouse_id,
-            items=items,
-            created_by="functional_test_user"
+            to_warehouse_id=warehouse_id, items=items, created_by="functional_test_user"
         )
 
         assert document.doc_type == DocumentType.IMPORT
@@ -170,28 +178,26 @@ class TestWarehouseManagementWorkflow:
         warehouse_id = warehouse.warehouse_id
 
         product = self.product_service.create_product(
-            product_id=4,
-            name="Export Test Product",
-            price=60.0
+            product_id=4, name="Export Test Product", price=60.0
         )
 
         # Import product to warehouse via document
         import_doc = self.document_service.create_import_document(
             to_warehouse_id=warehouse_id,
             items=[{"product_id": 4, "quantity": 100, "unit_price": 60.0}],
-            created_by="functional_test_user"
+            created_by="functional_test_user",
         )
-        self.document_service.post_document(import_doc.document_id, approved_by="manager")
+        self.document_service.post_document(
+            import_doc.document_id, approved_by="manager"
+        )
 
         # Create export document
-        items = [
-            {"product_id": 4, "quantity": 30, "unit_price": 60.0}
-        ]
+        items = [{"product_id": 4, "quantity": 30, "unit_price": 60.0}]
 
         document = self.document_service.create_export_document(
             from_warehouse_id=warehouse_id,
             items=items,
-            created_by="functional_test_user"
+            created_by="functional_test_user",
         )
 
         assert document.doc_type == DocumentType.EXPORT
@@ -203,35 +209,35 @@ class TestWarehouseManagementWorkflow:
         """Test complete transfer document workflow."""
         # Create two warehouses
         source_warehouse = self.warehouse_service.create_warehouse("Source Warehouse")
-        dest_warehouse = self.warehouse_service.create_warehouse("Destination Warehouse")
+        dest_warehouse = self.warehouse_service.create_warehouse(
+            "Destination Warehouse"
+        )
         source_id = source_warehouse.warehouse_id
         dest_id = dest_warehouse.warehouse_id
 
         # Create product and add to source warehouse
-        product = self.product_service.create_product(
-            product_id=5,
-            name="Transfer Test Product",
-            price=80.0
+        self.product_service.create_product(
+            product_id=5, name="Transfer Test Product", price=80.0
         )
 
         # Import stock into source warehouse
         import_doc = self.document_service.create_import_document(
             to_warehouse_id=source_id,
             items=[{"product_id": 5, "quantity": 150, "unit_price": 80.0}],
-            created_by="functional_test_user"
+            created_by="functional_test_user",
         )
-        self.document_service.post_document(import_doc.document_id, approved_by="manager")
+        self.document_service.post_document(
+            import_doc.document_id, approved_by="manager"
+        )
 
         # Create transfer document
-        items = [
-            {"product_id": 5, "quantity": 75, "unit_price": 80.0}
-        ]
+        items = [{"product_id": 5, "quantity": 75, "unit_price": 80.0}]
 
         document = self.document_service.create_transfer_document(
             from_warehouse_id=source_id,
             to_warehouse_id=dest_id,
             items=items,
-            created_by="functional_test_user"
+            created_by="functional_test_user",
         )
 
         assert document.doc_type == DocumentType.TRANSFER
@@ -247,18 +253,18 @@ class TestWarehouseManagementWorkflow:
         warehouse_id = warehouse.warehouse_id
 
         product = self.product_service.create_product(
-            product_id=6,
-            name="Stock Control Product",
-            price=90.0
+            product_id=6, name="Stock Control Product", price=90.0
         )
 
         # Import limited quantity
         import_doc = self.document_service.create_import_document(
             to_warehouse_id=warehouse_id,
             items=[{"product_id": 6, "quantity": 50, "unit_price": 90.0}],
-            created_by="functional_test_user"
+            created_by="functional_test_user",
         )
-        self.document_service.post_document(import_doc.document_id, approved_by="manager")
+        self.document_service.post_document(
+            import_doc.document_id, approved_by="manager"
+        )
 
         # Try to create export document with more than available
         items = [
@@ -267,9 +273,7 @@ class TestWarehouseManagementWorkflow:
 
         # This should succeed at document level (documents can be created for future stock)
         document = self.document_service.create_export_document(
-            from_warehouse_id=warehouse_id,
-            items=items,
-            created_by="test_user"
+            from_warehouse_id=warehouse_id, items=items, created_by="test_user"
         )
         assert document is not None
 
@@ -277,10 +281,12 @@ class TestWarehouseManagementWorkflow:
         export_doc2 = self.document_service.create_export_document(
             from_warehouse_id=warehouse_id,
             items=[{"product_id": 6, "quantity": 75, "unit_price": 90.0}],
-            created_by="test_user"
+            created_by="test_user",
         )
         with pytest.raises(Exception):
-            self.document_service.post_document(export_doc2.document_id, approved_by="manager")
+            self.document_service.post_document(
+                export_doc2.document_id, approved_by="manager"
+            )
 
     def test_multiple_warehouses_inventory_tracking(self):
         """Test inventory tracking across multiple warehouses."""
@@ -292,25 +298,27 @@ class TestWarehouseManagementWorkflow:
 
         # Create product
         product = self.product_service.create_product(
-            product_id=7,
-            name="Multi-Warehouse Product",
-            price=45.0
+            product_id=7, name="Multi-Warehouse Product", price=45.0
         )
 
         # Import to warehouses via documents
         import_doc1 = self.document_service.create_import_document(
             to_warehouse_id=w1_id,
             items=[{"product_id": 7, "quantity": 100, "unit_price": 45.0}],
-            created_by="functional_test_user"
+            created_by="functional_test_user",
         )
-        self.document_service.post_document(import_doc1.document_id, approved_by="manager")
+        self.document_service.post_document(
+            import_doc1.document_id, approved_by="manager"
+        )
 
         import_doc2 = self.document_service.create_import_document(
             to_warehouse_id=w2_id,
             items=[{"product_id": 7, "quantity": 200, "unit_price": 45.0}],
-            created_by="functional_test_user"
+            created_by="functional_test_user",
         )
-        self.document_service.post_document(import_doc2.document_id, approved_by="manager")
+        self.document_service.post_document(
+            import_doc2.document_id, approved_by="manager"
+        )
 
         # Check individual warehouse inventories
         w1_inventory = self.warehouse_service.get_warehouse_inventory(w1_id)
@@ -335,23 +343,23 @@ class TestWarehouseManagementWorkflow:
             self.product_service.create_product(
                 product_id=8,
                 name="",  # Empty name
-                price=10.0
+                price=10.0,
             )
 
         with pytest.raises(InvalidQuantityError):
             self.product_service.create_product(
                 product_id=9,
                 name="Valid Name",
-                price=-5.0  # Negative price
+                price=-5.0,  # Negative price
             )
 
         # Test quantity validations
         warehouse = self.warehouse_service.create_warehouse("Rules Test Warehouse")
-        product = self.product_service.create_product(10, "Rules Product", 25.0)
+        self.product_service.create_product(10, "Rules Product", 25.0)
 
         with pytest.raises(Exception):  # InvalidQuantityError
             self.document_service.create_import_document(
                 to_warehouse_id=warehouse.warehouse_id,
                 items=[{"product_id": 10, "quantity": -10, "unit_price": 25.0}],
-                created_by="functional_test_user"
+                created_by="functional_test_user",
             )

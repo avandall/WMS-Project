@@ -2,22 +2,26 @@
 Warehouse Report classes for PMKT Warehouse Management System.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 from datetime import datetime
 from dataclasses import dataclass
+
 
 @dataclass
 class WarehousePerformanceItem:
     """Represents a warehouse in performance report."""
+
     warehouse_id: int
     location: str
     item_count: int
     total_quantity: int
     total_value: Optional[float]
 
+
 @dataclass
 class WarehousePerformanceReport:
     """Warehouse performance report."""
+
     warehouses: List[WarehousePerformanceItem]
     generated_at: datetime
 

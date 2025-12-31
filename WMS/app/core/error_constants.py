@@ -3,7 +3,7 @@ Error constants for PMKT Warehouse Management System.
 Centralized error messages for consistent error handling across all layers.
 """
 
-from typing import Dict, Any
+from typing import Any
 
 
 # Error Message Constants
@@ -20,7 +20,9 @@ class ErrorMessages:
     INVALID_PRODUCT_NAME_EMPTY = "Product name cannot be empty"
     INVALID_PRODUCT_NAME_TOO_LONG = "Product name cannot exceed 100 characters"
     INVALID_WAREHOUSE_LOCATION_EMPTY = "Warehouse location cannot be empty"
-    INVALID_WAREHOUSE_LOCATION_TOO_LONG = "Warehouse location cannot exceed 200 characters"
+    INVALID_WAREHOUSE_LOCATION_TOO_LONG = (
+        "Warehouse location cannot exceed 200 characters"
+    )
     INVALID_CREATED_BY_EMPTY = "Created by cannot be empty"
 
     # Price/Amount Validation Messages
@@ -33,16 +35,26 @@ class ErrorMessages:
     INVALID_QUANTITY_POSITIVE = "Quantity must be a positive integer"
     INVALID_QUANTITY_NEGATIVE_ADD = "Cannot add negative quantity"
     INVALID_QUANTITY_NEGATIVE_REMOVE = "Cannot remove negative quantity"
-    INSUFFICIENT_STOCK = "Insufficient stock. Available: {available}, Requested: {requested}"
+    INSUFFICIENT_STOCK = (
+        "Insufficient stock. Available: {available}, Requested: {requested}"
+    )
 
     # Business Rule Messages
     INVALID_DOCUMENT_TYPE = "Invalid document type"
     IMPORT_MISSING_DESTINATION = "Import document must have a destination warehouse"
     EXPORT_MISSING_SOURCE = "Export document must have a source warehouse"
-    TRANSFER_MISSING_WAREHOUSES = "Transfer document must have both source and destination warehouses"
-    TRANSFER_SAME_WAREHOUSE = "Transfer document cannot have same source and destination warehouse"
-    PRODUCT_ALREADY_EXISTS_IN_DOCUMENT = "Product {product_id} already exists in document"
-    CANNOT_MODIFY_POSTED_DOCUMENT = "Cannot modify document {document_id} that is not in DRAFT status"
+    TRANSFER_MISSING_WAREHOUSES = (
+        "Transfer document must have both source and destination warehouses"
+    )
+    TRANSFER_SAME_WAREHOUSE = (
+        "Transfer document cannot have same source and destination warehouse"
+    )
+    PRODUCT_ALREADY_EXISTS_IN_DOCUMENT = (
+        "Product {product_id} already exists in document"
+    )
+    CANNOT_MODIFY_POSTED_DOCUMENT = (
+        "Cannot modify document {document_id} that is not in DRAFT status"
+    )
     CANNOT_POST_EMPTY_DOCUMENT = "Cannot post document without items"
     APPROVED_BY_EMPTY = "Approved by cannot be empty"
     CANNOT_CANCEL_POSTED_DOCUMENT = "Cannot cancel a posted document {document_id}"
@@ -52,7 +64,9 @@ class ErrorMessages:
     PRODUCT_NOT_FOUND = "Product {product_id} not found"
     WAREHOUSE_NOT_FOUND = "Warehouse {warehouse_id} not found"
     DOCUMENT_NOT_FOUND = "Document {document_id} not found"
-    PRODUCT_NOT_FOUND_IN_WAREHOUSE = "Product {product_id} not found in warehouse {warehouse_id}"
+    PRODUCT_NOT_FOUND_IN_WAREHOUSE = (
+        "Product {product_id} not found in warehouse {warehouse_id}"
+    )
 
     # Entity Already Exists Messages
     WAREHOUSE_ALREADY_EXISTS = "Warehouse {warehouse_id} already exists"
@@ -60,7 +74,9 @@ class ErrorMessages:
     DOCUMENT_ALREADY_EXISTS = "Document {document_id} already exists"
 
     # Repository/Storage Messages
-    CANNOT_START_NEGATIVE_INVENTORY = "Cannot start with negative inventory for {product_id}"
+    CANNOT_START_NEGATIVE_INVENTORY = (
+        "Cannot start with negative inventory for {product_id}"
+    )
     CANNOT_DELETE_NON_ZERO_QUANTITY = "Cannot delete item with non-zero quantity"
 
     # API/Interface Messages
@@ -148,8 +164,7 @@ class ErrorCategory:
 def format_insufficient_stock_message(available: int, requested: int) -> str:
     """Format insufficient stock error message."""
     return ErrorMessages.INSUFFICIENT_STOCK.format(
-        available=available,
-        requested=requested
+        available=available, requested=requested
     )
 
 
@@ -165,12 +180,12 @@ def format_duplicate_entity_message(entity_type: str, entity_id: Any) -> str:
 
 # Export all constants
 __all__ = [
-    'ErrorMessages',
-    'ErrorCodes',
-    'ErrorContext',
-    'ErrorSeverity',
-    'ErrorCategory',
-    'format_insufficient_stock_message',
-    'format_entity_not_found_message',
-    'format_duplicate_entity_message'
+    "ErrorMessages",
+    "ErrorCodes",
+    "ErrorContext",
+    "ErrorSeverity",
+    "ErrorCategory",
+    "format_insufficient_stock_message",
+    "format_entity_not_found_message",
+    "format_duplicate_entity_message",
 ]
