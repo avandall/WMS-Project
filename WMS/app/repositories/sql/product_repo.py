@@ -1,36 +1,72 @@
-from typing import Optional
+from typing import Dict, Optional
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 from app.models.product_domain import Product
 from ..interfaces.interfaces import IProductRepo
+from .models import InventoryModel, ProductModel
 
 
-# Repository for managing products
 class ProductRepo(IProductRepo):
-    def __init__(self):
-        self.products = {}
+    """PostgreSQL-backed repository for managing products."""
+
+    def __init__(self, session: Session):
+        self.session = session
 
     def save(self, product: Product) -> None:
-        self.products[product.product_id] = product
+        existing = self.session.get(ProductModel, product.product_id)
+        if existing:
+            existing.name = product.name
+            existing.description = product.description
+            existing.price = product.price
+        else:
+            model = ProductModel(
+                product_id=product.product_id,
+                name=product.name,
+                description=product.description,
+                price=product.price,
+            )
+            self.session.add(model)
+        self.session.commit()
 
     def get(self, product_id: int) -> Optional[Product]:
-        return self.products.get(product_id)
+        model = self.session.get(ProductModel, product_id)
+        return self._to_domain(model) if model else None
 
-    def get_all(self) -> list[Product]:
-        return list(self.products.values())
+    def get_all(self) -> Dict[int, Product]:
+        rows = self.session.execute(select(ProductModel)).scalars().all()
+        return {row.product_id: self._to_domain(row) for row in rows}
 
     def get_price(self, product_id: int) -> float:
-        product = self.products.get(product_id)
+        product = self.get(product_id)
         if product:
             return product.price
         raise KeyError("Product not found")
 
     def delete(self, product_id: int) -> None:
-        if product_id in self.products:
-            del self.products[product_id]
-        else:
+        model = self.session.get(ProductModel, product_id)
+        if not model:
             raise KeyError("Product not found")
+
+        # Remove total inventory row if it exists to maintain consistency
+        inventory_row = self.session.get(InventoryModel, product_id)
+        if inventory_row:
+            self.session.delete(inventory_row)
+
+        self.session.delete(model)
+        self.session.commit()
 
     def get_product_details(self, product_id: int) -> Product:
         product = self.get(product_id)
         if not product:
             raise KeyError("Product not found")
         return product
+
+    @staticmethod
+    def _to_domain(model: ProductModel) -> Product:
+        return Product(
+            product_id=model.product_id,
+            name=model.name,
+            description=model.description,
+            price=model.price,
+        )

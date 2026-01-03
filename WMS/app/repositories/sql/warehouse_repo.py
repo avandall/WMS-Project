@@ -1,48 +1,132 @@
 from typing import Dict, List, Optional
-from app.models.warehouse_domain import Warehouse
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.exceptions.business_exceptions import (
+    InsufficientStockError,
+    WarehouseNotFoundError,
+)
 from app.models.inventory_domain import InventoryItem
-from app.exceptions.business_exceptions import WarehouseNotFoundError
+from app.models.warehouse_domain import Warehouse
+from app.utils.infrastructure.id_generator import IDGenerator
 from ..interfaces.interfaces import IWarehouseRepo
+from .models import WarehouseInventoryModel, WarehouseModel
 
 
 class WarehouseRepo(IWarehouseRepo):
-    def __init__(self):
-        self.warehouses = {}
+    """PostgreSQL-backed repository for warehouses and their inventory."""
+
+    def __init__(self, session: Session):
+        self.session = session
+        self._sync_id_generator()
+
+    def _sync_id_generator(self) -> None:
+        max_id = self.session.execute(
+            select(func.max(WarehouseModel.warehouse_id))
+        ).scalar()
+        start_id = (max_id or 0) + 1
+        IDGenerator.reset_generator("warehouse", start_id)
 
     def create_warehouse(self, warehouse: Warehouse) -> None:
-        self.warehouses[warehouse.warehouse_id] = warehouse
+        model = WarehouseModel(
+            warehouse_id=warehouse.warehouse_id, location=warehouse.location
+        )
+        self.session.add(model)
+        self.session.commit()
 
     def save(self, warehouse: Warehouse) -> None:
-        self.warehouses[warehouse.warehouse_id] = warehouse
+        existing = self.session.get(WarehouseModel, warehouse.warehouse_id)
+        if existing:
+            existing.location = warehouse.location
+        else:
+            self.create_warehouse(warehouse)
+            return
+        self.session.commit()
 
     def get(self, warehouse_id: int) -> Optional[Warehouse]:
-        return self.warehouses.get(warehouse_id)
+        model = self.session.get(WarehouseModel, warehouse_id)
+        if not model:
+            return None
+        return self._to_domain(model)
 
     def get_all(self) -> Dict[int, Warehouse]:
-        return self.warehouses.copy()
+        rows = self.session.execute(select(WarehouseModel)).scalars().all()
+        return {row.warehouse_id: self._to_domain(row) for row in rows}
 
     def delete(self, warehouse_id: int) -> None:
-        if warehouse_id in self.warehouses:
-            del self.warehouses[warehouse_id]
+        model = self.session.get(WarehouseModel, warehouse_id)
+        if model:
+            self.session.delete(model)
+            self.session.commit()
 
     def get_warehouse_inventory(self, warehouse_id: int) -> List[InventoryItem]:
-        warehouse = self.get(warehouse_id)
-        return warehouse.inventory if warehouse else []
+        warehouse = self.session.get(WarehouseModel, warehouse_id)
+        if not warehouse:
+            return []
+        inventory_rows = self.session.execute(
+            select(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.warehouse_id == warehouse_id
+            )
+        ).scalars()
+        return [InventoryItem(row.product_id, row.quantity) for row in inventory_rows]
 
     def add_product_to_warehouse(
         self, warehouse_id: int, product_id: int, quantity: int
     ) -> None:
-        warehouse = self.get(warehouse_id)
+        warehouse = self.session.get(WarehouseModel, warehouse_id)
         if not warehouse:
             raise WarehouseNotFoundError(f"Warehouse {warehouse_id} not found")
-        warehouse.add_product(product_id, quantity)
-        self.save(warehouse)
+
+        row = self.session.execute(
+            select(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.warehouse_id == warehouse_id,
+                WarehouseInventoryModel.product_id == product_id,
+            )
+        ).scalar_one_or_none()
+
+        if row:
+            row.quantity += quantity
+        else:
+            row = WarehouseInventoryModel(
+                warehouse_id=warehouse_id, product_id=product_id, quantity=quantity
+            )
+            self.session.add(row)
+
+        self.session.commit()
 
     def remove_product_from_warehouse(
         self, warehouse_id: int, product_id: int, quantity: int
     ) -> None:
-        warehouse = self.get(warehouse_id)
+        warehouse = self.session.get(WarehouseModel, warehouse_id)
         if not warehouse:
             raise WarehouseNotFoundError(f"Warehouse {warehouse_id} not found")
-        warehouse.remove_product(product_id, quantity)
-        self.save(warehouse)
+
+        row = self.session.execute(
+            select(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.warehouse_id == warehouse_id,
+                WarehouseInventoryModel.product_id == product_id,
+            )
+        ).scalar_one_or_none()
+
+        if not row or row.quantity < quantity:
+            raise InsufficientStockError(
+                f"Warehouse {warehouse_id} does not have enough product {product_id}"
+            )
+
+        row.quantity -= quantity
+        if row.quantity == 0:
+            self.session.delete(row)
+
+        self.session.commit()
+
+    def _to_domain(self, model: WarehouseModel) -> Warehouse:
+        inventory = [
+            InventoryItem(row.product_id, row.quantity)
+            for row in model.inventory_items
+        ]
+        return Warehouse(
+            warehouse_id=model.warehouse_id,
+            location=model.location,
+            inventory=inventory,
+        )

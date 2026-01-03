@@ -16,7 +16,7 @@ class IProductRepo(ABC):
         pass
 
     @abstractmethod
-    def get_all(self) -> List[Product]:
+    def get_all(self) -> Dict[int, Product]:
         pass
 
     @abstractmethod

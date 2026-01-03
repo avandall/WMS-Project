@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     """
 
     # Database settings
-    database_url: str = "sqlite:///./warehouse.db"
+    database_url: str = "postgresql://postgres:postgres@localhost:5432/warehouse_db"
 
     # Application settings
     debug: bool = False

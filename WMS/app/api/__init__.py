@@ -5,6 +5,7 @@ FastAPI application for PMKT Warehouse Management System.
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from ..core.settings import settings
+from ..core.database import init_db
 from .routers.products import router as products_router
 from .routers.warehouses import router as warehouses_router
 from .routers.inventory import router as inventory_router
@@ -29,6 +30,9 @@ app = FastAPI(
     version=settings.version,
     debug=settings.debug,
 )
+
+# Ensure database tables exist at startup
+init_db()
 
 
 # Exception handlers
