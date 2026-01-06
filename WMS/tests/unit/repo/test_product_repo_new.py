@@ -10,9 +10,10 @@ from app.models.product_domain import Product
 class TestProductRepo:
     """Test cases for ProductRepo."""
 
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.repo = ProductRepo()
+    @pytest.fixture(autouse=True)
+    def setup(self, test_session):
+        """Set up test fixtures with SQL session."""
+        self.repo = ProductRepo(test_session)
 
     def test_save_and_get_product(self):
         """Test saving and retrieving a product."""

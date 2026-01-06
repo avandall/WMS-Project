@@ -425,25 +425,23 @@ class DocumentService:
 
     def _execute_export_operations(self, document: Document) -> None:
         """Execute warehouse operations for export document.
-        Validate source warehouse existence before any changes."""
+        Optimized: O(n+I) instead of O(n×I) - fetch inventory once.
+        """
         from_warehouse = self.warehouse_repo.get(document.from_warehouse_id)
         if not from_warehouse:
             raise WarehouseNotFoundError(
                 f"Warehouse {document.from_warehouse_id} not found"
             )
 
+        # Fetch inventory once and build hash map - O(I)
+        warehouse_inventory = self.warehouse_repo.get_warehouse_inventory(
+            document.from_warehouse_id
+        )
+        inventory_map = {item.product_id: item.quantity for item in warehouse_inventory}
+
+        # Validate all items first - O(n) with O(1) lookups
         for item in document.items:
-            warehouse_inventory = self.warehouse_repo.get_warehouse_inventory(
-                document.from_warehouse_id
-            )
-            available = next(
-                (
-                    entry.quantity
-                    for entry in warehouse_inventory
-                    if entry.product_id == item.product_id
-                ),
-                0,
-            )
+            available = inventory_map.get(item.product_id, 0)  # O(1) lookup!
             if available < item.quantity:
                 raise InsufficientStockError(
                     f"Insufficient stock for product {item.product_id}: requested {item.quantity}, available {available}"

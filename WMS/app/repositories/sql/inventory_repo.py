@@ -27,12 +27,18 @@ class InventoryRepo(IInventoryRepo):
         self.session.commit()
 
     def add_quantity(self, product_id: int, quantity: int) -> None:
-        if quantity < 0:
-            raise InvalidQuantityError(
-                f"Cannot start with negative inventory for {product_id}"
-            )
-
         row = self.session.get(InventoryModel, product_id)
+        
+        if quantity < 0:
+            if row:
+                # Adding negative to existing product
+                raise InvalidQuantityError("Cannot add negative quantity")
+            else:
+                # Starting with negative inventory
+                raise InvalidQuantityError(
+                    f"Cannot start with negative inventory for {product_id}"
+                )
+
         if row:
             row.quantity += quantity
         else:
@@ -64,7 +70,10 @@ class InventoryRepo(IInventoryRepo):
         if quantity < 0:
             raise InvalidQuantityError("Cannot remove negative quantity")
         if quantity > row.quantity:
-            raise InvalidQuantityError("Cannot remove more than available quantity")
+            from app.exceptions.business_exceptions import InsufficientStockError
+            raise InsufficientStockError(
+                f"Insufficient stock. Available: {row.quantity}, Requested: {quantity}"
+            )
         row.quantity -= quantity
         self.session.commit()
 

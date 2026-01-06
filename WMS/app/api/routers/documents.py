@@ -35,7 +35,7 @@ async def create_export_document(
 ):
     """Create an export document."""
     # Convert DocumentProductItem objects to dictionaries for the service
-    items_dict = [item.dict() for item in doc.items]
+    items_dict = [item.model_dump() for item in doc.items]
     document = service.create_export_document(
         from_warehouse_id=doc.warehouse_id,
         items=items_dict,
@@ -51,7 +51,7 @@ async def create_transfer_document(
 ):
     """Create a transfer document."""
     # Convert DocumentProductItem objects to dictionaries for the service
-    items_dict = [item.dict() for item in doc.items]
+    items_dict = [item.model_dump() for item in doc.items]
     document = service.create_transfer_document(
         from_warehouse_id=doc.from_warehouse_id,
         to_warehouse_id=doc.to_warehouse_id,

@@ -2,6 +2,7 @@
 Unit tests for WarehouseRepo.
 """
 
+import pytest
 from app.repositories.sql.warehouse_repo import WarehouseRepo
 from app.models.warehouse_domain import Warehouse
 from app.models.inventory_domain import InventoryItem
@@ -10,9 +11,10 @@ from app.models.inventory_domain import InventoryItem
 class TestWarehouseRepo:
     """Test cases for WarehouseRepo."""
 
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def setup(self, test_session):
         """Set up test fixtures."""
-        self.repo = WarehouseRepo()
+        self.repo = WarehouseRepo(test_session)
 
     def test_create_and_save_warehouse(self):
         """Test creating and saving a warehouse."""

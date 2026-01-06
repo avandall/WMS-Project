@@ -41,7 +41,26 @@ class WarehouseRepo(IWarehouseRepo):
             existing.location = warehouse.location
         else:
             self.create_warehouse(warehouse)
-            return
+            existing = self.session.get(WarehouseModel, warehouse.warehouse_id)
+        
+        # Save inventory items to warehouse_inventory table
+        # Delete existing inventory entries directly - O(1) operation
+        from sqlalchemy import delete
+        self.session.execute(
+            delete(WarehouseInventoryModel).where(
+                WarehouseInventoryModel.warehouse_id == warehouse.warehouse_id
+            )
+        )
+        
+        # Add new inventory items
+        for item in warehouse.inventory:
+            inv_model = WarehouseInventoryModel(
+                warehouse_id=warehouse.warehouse_id,
+                product_id=item.product_id,
+                quantity=item.quantity
+            )
+            self.session.add(inv_model)
+        
         self.session.commit()
 
     def get(self, warehouse_id: int) -> Optional[Warehouse]:
@@ -51,7 +70,13 @@ class WarehouseRepo(IWarehouseRepo):
         return self._to_domain(model)
 
     def get_all(self) -> Dict[int, Warehouse]:
-        rows = self.session.execute(select(WarehouseModel)).scalars().all()
+        from sqlalchemy.orm import joinedload
+        # Eager load inventory_items to prevent N+1 queries - O(1) instead of O(n+1)
+        rows = self.session.execute(
+            select(WarehouseModel).options(
+                joinedload(WarehouseModel.inventory_items)
+            )
+        ).unique().scalars().all()
         return {row.warehouse_id: self._to_domain(row) for row in rows}
 
     def delete(self, warehouse_id: int) -> None:

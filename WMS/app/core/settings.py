@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 
 
 class Settings(BaseSettings):
@@ -22,9 +23,10 @@ class Settings(BaseSettings):
     # Security settings (for future use)
     secret_key: str = "your-secret-key-here"
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = ConfigDict(
+        env_file=".env",
+        case_sensitive=False
+    )
 
 
 # Create a global settings instance

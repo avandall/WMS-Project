@@ -24,11 +24,53 @@ def lazy_load_app():
         raise
 
 
-@pytest.fixture(autouse=True, scope="function")
+# SQL test fixtures for unit/repo tests
+@pytest.fixture(scope="function")
+def test_engine():
+    """Create a fresh test database engine for each test."""
+    from sqlalchemy import create_engine
+    from app.core.database import Base
+    
+    # Use in-memory SQLite for fast tests
+    TEST_DATABASE_URL = "sqlite:///:memory:"
+    
+    engine = create_engine(
+        TEST_DATABASE_URL,
+        connect_args={"check_same_thread": False},  # Needed for SQLite
+        future=True,
+    )
+    
+    # Create all tables
+    Base.metadata.create_all(bind=engine)
+    
+    yield engine
+    
+    # Drop all tables after test
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+
+
+@pytest.fixture(scope="function")
+def test_session(test_engine):
+    """Create a fresh database session for each test."""
+    from sqlalchemy.orm import sessionmaker
+    
+    TestSessionLocal = sessionmaker(
+        bind=test_engine, autoflush=False, autocommit=False, future=True
+    )
+    session = TestSessionLocal()
+    
+    yield session
+    
+    session.close()
+
+
+@pytest.fixture(autouse=True, scope="module")
 def reset_db_for_integration_tests(request):
     """
     Auto-cleanup fixture for integration tests.
-    Drops and recreates all tables before each integration test.
+    Drops and recreates all tables once per test module.
+    Seeds database with initial warehouses for tests that expect them.
     """
     # Only apply to integration tests (not unit or SQL tests)
     if "integration" not in str(request.fspath) and "test_db_isolation" not in str(request.fspath):
@@ -38,7 +80,8 @@ def reset_db_for_integration_tests(request):
     # Import only when needed for integration tests
     from app.core.settings import settings
     from sqlalchemy import create_engine
-    from app.repositories.sql.models import Base
+    from sqlalchemy.orm import sessionmaker
+    from app.repositories.sql.models import Base, WarehouseModel, ProductModel
     
     # Create engine for integration test cleanup
     engine = create_engine(settings.database_url)
@@ -46,6 +89,34 @@ def reset_db_for_integration_tests(request):
     # Drop and recreate all tables before each test
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    
+    # Seed database with initial data for tests
+    SessionLocal = sessionmaker(bind=engine)
+    db = SessionLocal()
+    try:
+        # Create warehouses for tests that expect them
+        warehouses = [
+            WarehouseModel(warehouse_id=1, location="Test Warehouse 1"),
+            WarehouseModel(warehouse_id=2, location="Test Warehouse 2"),
+            WarehouseModel(warehouse_id=3, location="Test Warehouse 3"),
+        ]
+        for wh in warehouses:
+            db.add(wh)
+        
+        # Create products for tests that expect them
+        products = [
+            ProductModel(product_id=101, name="Laptop", price=1500.00, description="Test laptop"),
+            ProductModel(product_id=102, name="Mouse", price=99.99, description="Test mouse"),
+            ProductModel(product_id=103, name="Keyboard", price=150.00, description="Test keyboard"),
+        ]
+        for prod in products:
+            db.add(prod)
+        
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
     
     yield
     

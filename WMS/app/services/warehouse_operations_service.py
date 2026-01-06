@@ -139,16 +139,29 @@ class WarehouseOperationsService:
     def get_inventory_health_report(self) -> Dict[str, Any]:
         """
         Generate comprehensive inventory health report across all warehouses.
-        Complex analytics combining warehouse, inventory, and product data.
+        Optimized: O(W×I + W×P) instead of O(W×P×I) - batch load inventory.
         """
         warehouses = self.warehouse_repo.get_all()
         products = self.product_repo.get_all()
+        
+        # Build products dictionary for O(1) lookup
+        if isinstance(products, dict):
+            products_dict = products
+        else:
+            products_dict = {p.product_id: p for p in products}
+
+        # Batch load all warehouse inventories - O(W×I) instead of O(W×P×I)
+        warehouse_inventories = {}
+        for warehouse in warehouses.values() if isinstance(warehouses, dict) else warehouses:
+            inventory = self.warehouse_repo.get_warehouse_inventory(warehouse.warehouse_id)
+            warehouse_inventories[warehouse.warehouse_id] = {
+                item.product_id: item.quantity for item in inventory
+            }
 
         report = {"warehouses": [], "system_health_score": 0, "recommendations": []}
-
         total_health_score = 0
 
-        for warehouse in warehouses:
+        for warehouse in (warehouses.values() if isinstance(warehouses, dict) else warehouses):
             warehouse_data = {
                 "warehouse_id": warehouse.warehouse_id,
                 "location": warehouse.location,
@@ -156,11 +169,12 @@ class WarehouseOperationsService:
                 "total_value": 0,
                 "health_score": 0,
             }
+            
+            inventory = warehouse_inventories[warehouse.warehouse_id]
 
-            for product in products:
-                quantity = self.warehouse_repo.get_product_quantity(
-                    warehouse.warehouse_id, product.product_id
-                )
+            # Now iterate products with O(1) inventory lookup instead of O(I) query
+            for product_id, product in products_dict.items():
+                quantity = inventory.get(product_id, 0)  # O(1) lookup!
                 if quantity > 0:
                     value = quantity * product.price
                     warehouse_data["products"].append(
@@ -181,23 +195,31 @@ class WarehouseOperationsService:
             report["warehouses"].append(warehouse_data)
 
         report["system_health_score"] = (
-            total_health_score / len(warehouses) if warehouses else 0
+            total_health_score / len(report["warehouses"]) if report["warehouses"] else 0
         )
 
         return report
 
     def _calculate_total_inventory_value(self) -> float:
-        """Helper method to calculate total value of all inventory."""
-        warehouses = self.warehouse_repo.get_all()
+        """Helper method to calculate total value of all inventory.
+        Optimized: O(P+I) instead of O(W×P) - single pass through inventory.
+        """
+        # Get all inventory at once - O(1) query
+        all_inventory = self.inventory_repo.get_all()
+        
+        # Build products dictionary for O(1) lookup
         products = self.product_repo.get_all()
-        total_value = 0.0
-
-        for warehouse in warehouses:
-            for product in products:
-                quantity = self._get_warehouse_product_quantity(
-                    warehouse.warehouse_id, product.product_id
-                )
-                total_value += quantity * product.price
+        if isinstance(products, dict):
+            products_dict = products
+        else:
+            products_dict = {p.product_id: p for p in products}
+        
+        # Single pass calculation - O(n) where n = inventory items
+        total_value = sum(
+            item.quantity * products_dict[item.product_id].price
+            for item in all_inventory
+            if item.product_id in products_dict
+        )
 
         return total_value
 

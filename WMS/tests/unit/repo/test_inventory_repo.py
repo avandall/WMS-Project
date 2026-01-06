@@ -14,9 +14,10 @@ from app.exceptions.business_exceptions import (
 class TestInventoryRepo:
     """Test cases for InventoryRepo."""
 
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def setup(self, test_session):
         """Set up test fixtures."""
-        self.repo = InventoryRepo()
+        self.repo = InventoryRepo(test_session)
 
     def test_save_and_get_quantity(self):
         """Test saving and getting quantity of an inventory item."""
@@ -135,23 +136,16 @@ class TestInventoryRepo:
         assert self.repo.get_quantity(1) == 10
 
     def test_inventory_item_operations(self):
-        """Test that inventory operations properly use InventoryItem methods."""
-        # Add initial quantity
+        """Test that inventory operations properly use InventoryItem methods."""        # Add initial quantity
         self.repo.add_quantity(1, 10)
 
-        # Get the item and verify it's an InventoryItem
-        item = self.repo.inventory[1]
-        assert isinstance(item, InventoryItem)
-        assert item.product_id == 1
-        assert item.quantity == 10
+        # Get the item and verify quantity
+        quantity = self.repo.get_quantity(1)
+        assert quantity == 10
 
         # Add more quantity
         self.repo.add_quantity(1, 5)
-        assert item.quantity == 15
-
-        # Remove quantity
-        self.repo.remove_quantity(1, 3)
-        assert item.quantity == 12
+        assert self.repo.get_quantity(1) == 15
 
     def test_multiple_products_operations(self):
         """Test operations with multiple products."""

@@ -19,13 +19,14 @@ from app.exceptions.business_exceptions import ValidationError, InvalidQuantityE
 class TestWarehouseManagementWorkflow:
     """Functional tests for complete warehouse management workflows."""
 
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def setup(self, test_session):
         """Set up test fixtures with real repositories and services."""
-        # Create repositories
-        self.product_repo = ProductRepo()
-        self.inventory_repo = InventoryRepo()
-        self.warehouse_repo = WarehouseRepo()
-        self.document_repo = DocumentRepo()
+        # Create repositories with SQL session
+        self.product_repo = ProductRepo(test_session)
+        self.inventory_repo = InventoryRepo(test_session)
+        self.warehouse_repo = WarehouseRepo(test_session)
+        self.document_repo = DocumentRepo(test_session)
 
         # Create services
         self.product_service = ProductService(self.product_repo, self.inventory_repo)

@@ -7,7 +7,7 @@ import pytest
 
 from app.models.inventory_domain import InventoryItem
 from app.models.product_domain import Product
-from app.exceptions.business_exceptions import InvalidQuantityError
+from app.exceptions.business_exceptions import InvalidQuantityError, InsufficientStockError
 
 
 class TestInventoryRepoSQL:
@@ -148,7 +148,7 @@ class TestInventoryRepoSQL:
         product_repo_sql.save(product)
         inventory_repo_sql.add_quantity(1, 50)
 
-        with pytest.raises(InvalidQuantityError, match="Cannot remove more than available"):
+        with pytest.raises(InsufficientStockError, match="Insufficient stock"):
             inventory_repo_sql.remove_quantity(1, 100)
 
     def test_delete_inventory_item(self, inventory_repo_sql, product_repo_sql):

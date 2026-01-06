@@ -11,9 +11,10 @@ from app.exceptions.business_exceptions import DocumentNotFoundError
 class TestDocumentRepo:
     """Test cases for DocumentRepo."""
 
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.repo = DocumentRepo()
+    @pytest.fixture(autouse=True)
+    def setup(self, test_session):
+        """Set up test fixtures with SQL session."""
+        self.repo = DocumentRepo(test_session)
 
     def test_save_and_get_document(self):
         """Test saving and retrieving a document."""
