@@ -241,6 +241,42 @@ class WarehouseService:
                 return item.quantity
         return 0
 
+    def transfer_all_inventory(
+        self, from_warehouse_id: int, to_warehouse_id: int
+    ) -> List[InventoryItem]:
+        """
+        Transfer all inventory from one warehouse to another.
+        Used before deleting a warehouse to preserve inventory.
+        
+        Returns list of transferred items.
+        """
+        if from_warehouse_id == to_warehouse_id:
+            raise ValidationError("Cannot transfer to the same warehouse")
+
+        # Validate both warehouses exist
+        self.get_warehouse(from_warehouse_id)
+        self.get_warehouse(to_warehouse_id)
+
+        # Get all inventory from source warehouse
+        source_inventory = self.warehouse_repo.get_warehouse_inventory(from_warehouse_id)
+        
+        if not source_inventory:
+            return []
+
+        # Transfer each product
+        transferred_items = []
+        for item in source_inventory:
+            # Transfer using existing transfer logic
+            self.warehouse_repo.remove_product_from_warehouse(
+                from_warehouse_id, item.product_id, item.quantity
+            )
+            self.warehouse_repo.add_product_to_warehouse(
+                to_warehouse_id, item.product_id, item.quantity
+            )
+            transferred_items.append(item)
+
+        return transferred_items
+
     def delete_warehouse(self, warehouse_id: int) -> None:
         """
         Delete a warehouse with business validation.
@@ -255,9 +291,11 @@ class WarehouseService:
         inventory = self.warehouse_repo.get_warehouse_inventory(warehouse_id)
         if inventory and len(inventory) > 0:
             total_items = sum(item.quantity for item in inventory)
+            unique_products = len(inventory)
             raise ValidationError(
-                f"Cannot delete warehouse {warehouse_id}: warehouse still has {total_items} items in stock. "
-                f"Please remove all inventory before deleting."
+                f"Cannot delete warehouse {warehouse_id}: warehouse still has {total_items} items "
+                f"({unique_products} unique products) in stock. "
+                f"Use the transfer endpoint to move inventory to another warehouse first."
             )
 
         # Delete warehouse

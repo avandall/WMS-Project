@@ -85,6 +85,17 @@ class ProductMovement(BaseModel):
     quantity: int = Field(..., gt=0, description="Quantity to move")
 
 
+class TransferInventoryRequest(BaseModel):
+    to_warehouse_id: int = Field(..., gt=0, description="Destination warehouse ID")
+
+
+class WarehouseTransferResponse(BaseModel):
+    from_warehouse_id: int
+    to_warehouse_id: int
+    transferred_items: List[InventoryItemResponse]
+    message: str
+
+
 # Document models
 class DocumentProductItem(BaseModel):
     product_id: int = Field(..., gt=0)

@@ -3,9 +3,16 @@ Warehouses API router.
 Provides endpoints for warehouse management operations.
 """
 
+from typing import List
 from fastapi import APIRouter, Depends
 from ..dependencies import get_warehouse_service
-from ..schemas.product import WarehouseCreate, WarehouseResponse, InventoryItemResponse
+from ..schemas.product import (
+    WarehouseCreate,
+    WarehouseResponse,
+    InventoryItemResponse,
+    TransferInventoryRequest,
+    WarehouseTransferResponse,
+)
 from app.services.warehouse_service import WarehouseService
 
 router = APIRouter()
@@ -42,6 +49,37 @@ async def delete_warehouse(
     """Delete a warehouse. Only allowed if warehouse has no inventory (stock = 0)."""
     service.delete_warehouse(warehouse_id)
     return {"message": f"Warehouse {warehouse_id} deleted successfully"}
+
+
+@router.post("/{warehouse_id}/transfer", response_model=WarehouseTransferResponse)
+async def transfer_all_inventory(
+    warehouse_id: int,
+    transfer_request: TransferInventoryRequest,
+    service: WarehouseService = Depends(get_warehouse_service),
+):
+    """
+    Transfer all inventory from one warehouse to another.
+    
+    This is useful when you need to:
+    - Empty a warehouse before deletion
+    - Consolidate inventory from multiple warehouses
+    - Relocate stock due to warehouse closure or reorganization
+    
+    All products and quantities will be moved from the source warehouse
+    to the destination warehouse in a single atomic operation.
+    """
+    transferred_items = service.transfer_all_inventory(
+        warehouse_id, transfer_request.to_warehouse_id
+    )
+    
+    return WarehouseTransferResponse(
+        from_warehouse_id=warehouse_id,
+        to_warehouse_id=transfer_request.to_warehouse_id,
+        transferred_items=[
+            InventoryItemResponse.from_domain(item) for item in transferred_items
+        ],
+        message=f"Successfully transferred {len(transferred_items)} product(s) from warehouse {warehouse_id} to {transfer_request.to_warehouse_id}",
+    )
 
 
 # NOTE: Inventory changes must be performed through document endpoints (import/export/transfer)

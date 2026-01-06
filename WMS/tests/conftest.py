@@ -1,112 +1,74 @@
 """
-Pytest configuration and fixtures for PMKT tests.
-Sets up common fixtures and resets in-memory repositories between tests.
+Pytest configuration and fixtures for WMS tests.
+Sets up common fixtures for testing.
 """
 
 import pytest
 import httpx
-import asyncio
+from typing import Any
 
-from app.api import app
-from app.api import dependencies
-from app.repositories.sql.product_repo import ProductRepo
-from app.repositories.sql.warehouse_repo import WarehouseRepo
-from app.repositories.sql.document_repo import DocumentRepo
-from app.services.product_service import ProductService
-from app.services.inventory_service import InventoryService
-from app.models.product_domain import Product
-from app.models.warehouse_domain import Warehouse
-from app.models.document_domain import Document, DocumentProduct, DocumentType
+# Lazy load app to avoid DB connection during SQL tests
+APP_AVAILABLE = True
+app = None
 
-
-class SyncASGITransport(httpx.ASGITransport):
-    """Custom sync ASGI transport that bridges async/sync."""
-
-    def handle_request(self, request: httpx.Request) -> httpx.Response:
-        """Handle sync request by running async handler in event loop."""
-        # Create a new event loop for this request
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            # Get the async response
-            response = loop.run_until_complete(self.handle_async_request(request))
-            # Convert async stream to sync
-            if hasattr(response.stream, "__aiter__"):
-                # Drain the async stream into a sync byte stream
-                content = loop.run_until_complete(response.aread())
-                response = httpx.Response(
-                    status_code=response.status_code,
-                    headers=response.headers,
-                    content=content,
-                    request=request,
-                    extensions=response.extensions,
-                )
-            return response
-        finally:
-            loop.close()
+def lazy_load_app():
+    """Lazy load app imports to avoid DB connection during SQL tests."""
+    global app, APP_AVAILABLE
+    if app is not None:
+        return
+    try:
+        from app.api import app as _app
+        app = _app
+    except (ImportError, ModuleNotFoundError):
+        APP_AVAILABLE = False
+        raise
 
 
-@pytest.fixture(autouse=True)
-def reset_state():
-    """Reset singleton in-memory repos between tests to avoid cross-test bleed."""
-    # Re-initialize the singletons instead of clearing internal dicts to avoid attribute errors
-    dependencies._product_repo = dependencies.ProductRepo()
-    dependencies._inventory_repo = dependencies.InventoryRepo()
-    dependencies._warehouse_repo = dependencies.WarehouseRepo()
-    dependencies._document_repo = dependencies.DocumentRepo()
-
-    # Reset services so they pick up the fresh repositories
-    dependencies._product_service = None
-    dependencies._inventory_service = None
-    dependencies._warehouse_service = None
-    dependencies._document_service = None
-    dependencies._report_service = None
-    dependencies._warehouse_operations_service = None
+@pytest.fixture(autouse=True, scope="function")
+def reset_db_for_integration_tests(request):
+    """
+    Auto-cleanup fixture for integration tests.
+    Drops and recreates all tables before each integration test.
+    """
+    # Only apply to integration tests (not unit or SQL tests)
+    if "integration" not in str(request.fspath) and "test_db_isolation" not in str(request.fspath):
+        yield
+        return
+    
+    # Import only when needed for integration tests
+    from app.core.settings import settings
+    from sqlalchemy import create_engine
+    from app.repositories.sql.models import Base
+    
+    # Create engine for integration test cleanup
+    engine = create_engine(settings.database_url)
+    
+    # Drop and recreate all tables before each test
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    
     yield
+    
+    # Cleanup
+    engine.dispose()
 
 
 @pytest.fixture
-def client():
-    """FastAPI test client for integration tests using custom sync ASGI transport."""
-    transport = SyncASGITransport(app=app)
-    return httpx.Client(transport=transport, base_url="http://testserver")
-
-
-@pytest.fixture
-def product_repo():
-    """Fixture for product repository."""
-    return ProductRepo()
-
-
-@pytest.fixture
-def warehouse_repo():
-    """Fixture for warehouse repository."""
-    return WarehouseRepo()
-
-
-@pytest.fixture
-def document_repo():
-    """Fixture for document repository."""
-    return DocumentRepo()
-
-
-@pytest.fixture
-def product_service(product_repo):
-    """Fixture for product service."""
-    return ProductService(product_repo)
-
-
-@pytest.fixture
-def inventory_service():
-    """Fixture for inventory service."""
-    from app.repositories.sql.inventory_repo import InventoryRepo
-
-    return InventoryService(InventoryRepo())
+def client() -> Any:
+    """FastAPI test client for integration tests."""
+    from starlette.testclient import TestClient
+    
+    lazy_load_app()
+    if not APP_AVAILABLE or app is None:
+        pytest.skip("App dependencies not available")
+    
+    return TestClient(app)
 
 
 @pytest.fixture
 def sample_product():
     """Fixture for a sample product."""
+    from app.models.product_domain import Product
     return Product(
         product_id=1,
         name="Test Laptop",
@@ -119,7 +81,7 @@ def sample_product():
 def sample_warehouse():
     """Fixture for a sample warehouse."""
     from app.models.inventory_domain import InventoryItem
-
+    from app.models.warehouse_domain import Warehouse
     return Warehouse(
         warehouse_id=1,
         location="Main Warehouse",
@@ -133,6 +95,7 @@ def sample_warehouse():
 @pytest.fixture
 def sample_document():
     """Fixture for a sample inventory document."""
+    from app.models.document_domain import Document, DocumentProduct, DocumentType
     items = [
         DocumentProduct(product_id=1, quantity=10, unit_price=99.99),
         DocumentProduct(product_id=2, quantity=5, unit_price=49.99),
