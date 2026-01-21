@@ -1,0 +1,86 @@
+graph TB
+    subgraph "🌐 External Layer"
+        HTTP[HTTP Requests]
+        DB[(Database)]
+        Logs[Log Files]
+    end
+    
+    subgraph "🔌 API Layer - Interface Adapters"
+        FastAPI[FastAPI App]
+        Routers[API Routers]
+        Schemas[Pydantic Schemas]
+        Middleware[Middleware Stack]
+        Dependencies[Dependency Injection]
+    end
+    
+    subgraph "💼 Application Layer - Use Cases"
+        ProdSvc[Product Service]
+        WhSvc[Warehouse Service]
+        InvSvc[Inventory Service]
+        DocSvc[Document Service]
+        RepSvc[Report Service]
+    end
+    
+    subgraph "🎯 Domain Layer - Business Logic"
+        Product[Product Entity]
+        Warehouse[Warehouse Entity]
+        Inventory[Inventory Entity]
+        Document[Document Entity]
+        Validation[Domain Validation]
+        Rules[Business Rules]
+    end
+    
+    subgraph "💾 Infrastructure Layer - Data Access"
+        Interfaces[Repository Interfaces]
+        SQLRepos[SQL Repositories]
+        Models[SQLAlchemy Models]
+        Transaction[Transaction Manager]
+        ConnPool[Connection Pool]
+    end
+    
+    HTTP --> FastAPI
+    FastAPI --> Middleware
+    FastAPI --> Routers
+    Routers --> Schemas
+    Routers --> Dependencies
+    
+    Dependencies --> ProdSvc
+    Dependencies --> WhSvc
+    Dependencies --> InvSvc
+    Dependencies --> DocSvc
+    Dependencies --> RepSvc
+    
+    ProdSvc --> Product
+    WhSvc --> Warehouse
+    InvSvc --> Inventory
+    DocSvc --> Document
+    
+    Product --> Validation
+    Warehouse --> Validation
+    Inventory --> Validation
+    Document --> Validation
+    Document --> Rules
+    
+    ProdSvc --> Interfaces
+    WhSvc --> Interfaces
+    InvSvc --> Interfaces
+    DocSvc --> Interfaces
+    
+    Interfaces --> SQLRepos
+    SQLRepos --> Models
+    SQLRepos --> Transaction
+    Models --> ConnPool
+    ConnPool --> DB
+    
+    Middleware -.-> Logs
+    ProdSvc -.-> Logs
+    WhSvc -.-> Logs
+    InvSvc -.-> Logs
+    DocSvc -.-> Logs
+    
+    style FastAPI fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style Product fill:#2196F3,stroke:#1565C0,color:#fff
+    style Document fill:#2196F3,stroke:#1565C0,color:#fff
+    style DB fill:#FF9800,stroke:#E65100,color:#fff
+    style Transaction fill:#E91E63,stroke:#880E4F,color:#fff
+    style Rules fill:#9C27B0,stroke:#4A148C,color:#fff

@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WMS Repository Layer - Deep Dive</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #0f7e6c 0%, #2a9d8f 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header p { font-size: 1.2em; opacity: 0.9; }
+        .content { padding: 40px; }
+        .section {
+            margin-bottom: 50px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        .section h2 {
+            color: #0f7e6c;
+            font-size: 2em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #2a9d8f;
+        }
+        .diagram-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .code-example {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.8;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .code-example .comment { color: #6A9955; }
+        .code-example .keyword { color: #C586C0; }
+        .code-example .function { color: #DCDCAA; }
+        .code-example .string { color: #CE9178; }
+        .code-example .class { color: #4EC9B0; }
+        .code-example .number { color: #B5CEA8; }
+        .explanation {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+            line-height: 1.8;
+        }
+        .explanation h3 {
+            color: #1976D2;
+            margin-bottom: 15px;
+        }
+        .file-path {
+            background: #263238;
+            color: #80CBC4;
+            padding: 10px 15px;
+            border-radius: 5px 5px 0 0;
+            font-family: monospace;
+            font-size: 13px;
+            margin-bottom: -10px;
+        }
+        .pattern-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .pattern-box h4 {
+            color: #F57C00;
+            margin-bottom: 10px;
+        }
+        .key-concept {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+        }
+        .key-concept h3 {
+            margin-bottom: 10px;
+            font-size: 1.5em;
+        }
+        ul.checklist {
+            list-style: none;
+            padding-left: 0;
+        }
+        ul.checklist li {
+            padding: 8px 0 8px 30px;
+            position: relative;
+        }
+        ul.checklist li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #4CAF50;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        .collapsible {
+            cursor: pointer;
+            padding: 15px;
+            background: #11998e;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-size: 1.1em;
+            font-weight: bold;
+            width: 100%;
+            text-align: left;
+            transition: background 0.3s;
+        }
+        .collapsible:hover {
+            background: #0d7a72;
+        }
+        .collapsible:after {
+            content: '▼';
+            float: right;
+            transition: transform 0.3s;
+        }
+        .collapsible.active:after {
+            transform: rotate(180deg);
+        }
+        .collapsible-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .diagram-container:hover {
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            transition: box-shadow 0.3s;
+        }
+        .copy-btn {
+            position: relative;
+            float: right;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: -5px;
+        }
+        .copy-btn:hover {
+            background: #45a049;
+        }
+        .copy-btn:active {
+            background: #3d8b40;
+        }
+        code {
+            background: #2d2d2d;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', monospace;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .modal-content {
+            background-color: #1e1e1e;
+            margin: 3% auto;
+            padding: 0;
+            border-radius: 15px;
+            width: 85%;
+            max-width: 1200px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            animation: slideDown 0.3s;
+        }
+        @keyframes slideDown {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .modal-header {
+            background: linear-gradient(135deg, #0f7e6c 0%, #2a9d8f 100%);
+            color: white;
+            padding: 25px 30px;
+            border-radius: 15px 15px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.8em;
+        }
+        .close {
+            color: white;
+            font-size: 35px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+        .close:hover { color: #ff6b6b; }
+        .modal-body {
+            padding: 30px;
+            color: #d4d4d4;
+        }
+        .modal-body pre {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            border-left: 4px solid #2a9d8f;
+        }
+        .modal-body h3 {
+            color: #4ec9b0;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+        .clickable-node {
+            cursor: pointer;
+            transition: filter 0.2s;
+        }
+        .clickable-node:hover {
+            filter: brightness(1.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📦 Repository Layer Deep Dive</h1>
+            <p>Data Access Pattern - Interfaces, Implementation, ORM Mapping</p>
+        </div>
+        
+        <div class="content">
+            <!-- REPOSITORY PATTERN OVERVIEW -->
+            <div class="section">
+                <h2>🎯 1. Repository Pattern Architecture</h2>
+                
+                <div class="key-concept">
+                    <h3>🎯 Purpose</h3>
+                    <p>Repository Pattern decouples business logic from data access. It provides a collection-like interface for domain objects while hiding database complexity.</p>
+                </div>
+                
+                <div class="diagram-container">
+                    <div class="mermaid">
+                    graph TB
+                        Service[Service Layer] --> IRepo1[IProductRepo Interface]
+                        Service --> IRepo2[IDocumentRepo Interface]
+                        Service --> IRepo3[IWarehouseRepo Interface]
+                        
+                        IRepo1 -.implements.-> SQLRepo1[ProductRepo SQL]
+                        IRepo1 -.implements.-> MongoRepo1[ProductRepo Mongo]
+                        
+                        IRepo2 -.implements.-> SQLRepo2[DocumentRepo SQL]
+                        IRepo2 -.implements.-> MongoRepo2[DocumentRepo Mongo]
+                        
+                        IRepo3 -.implements.-> SQLRepo3[WarehouseRepo SQL]
+                        IRepo3 -.implements.-> MongoRepo3[WarehouseRepo Mongo]
+                        
+                        SQLRepo1 --> TxBase[TransactionalRepository]
+                        SQLRepo2 --> TxBase
+                        SQLRepo3 --> TxBase
+                        
+                        TxBase --> Session[SQLAlchemy Session]
+                        Session --> PG[(PostgreSQL)]
+                        
+                        MongoRepo1 --> MongoClient[MongoDB Client]
+                        MongoRepo2 --> MongoClient
+                        MongoRepo3 --> MongoClient
+                        MongoClient --> Mongo[(MongoDB)]
+                        
+                        style Service fill:#FF9800,stroke:#E65100,stroke-width:3px,color:#fff
+                        style IRepo1 fill:#2196F3,stroke:#1976D2,stroke-width:2px,color:#fff
+                        style IRepo2 fill:#2196F3,stroke:#1976D2,stroke-width:2px,color:#fff
+                        style IRepo3 fill:#2196F3,stroke:#1976D2,stroke-width:2px,color:#fff
+                        style TxBase fill:#4CAF50,stroke:#2E7D32,stroke-width:2px,color:#fff
+                    </div>
+                </div>
+
+                <div class="explanation">
+                    <h3>💡 Why Interfaces?</h3>
+                    <p><strong>1. Testability:</strong> Inject mock repositories in unit tests instead of hitting real database.</p>
+                    <p><strong>2. Flexibility:</strong> Swap PostgreSQL for MongoDB without changing service layer code.</p>
+                    <p><strong>3. Clarity:</strong> Interface documents what operations are available.</p>
+                    <p><strong>4. Dependency Inversion:</strong> High-level service depends on abstraction (interface), not concrete implementation.</p>
+                </div>
+            </div>
+
+            <!-- INTERFACE DEFINITION -->
+            <div class="section">
+                <h2>📝 2. Interface Definition</h2>
+                
+                <div class="file-path">📁 app/repositories/interfaces/interfaces.py</div>
+                <div class="code-example"><span class="keyword">from</span> abc <span class="keyword">import</span> <span class="class">ABC</span>, abstractmethod
+<span class="keyword">from</span> typing <span class="keyword">import</span> <span class="class">Optional</span>, <span class="class">List</span>, <span class="class">Dict</span>
+
+<span class="keyword">class</span> <span class="class">IProductRepo</span>(<span class="class">ABC</span>):
+    <span class="string">"""Abstract interface for product data access"""</span>
+    
+    <span class="keyword">@abstractmethod</span>
+    <span class="keyword">def</span> <span class="function">save</span>(<span class="keyword">self</span>, product: <span class="class">Product</span>) -> <span class="class">None</span>:
+        <span class="string">"""Create or update product"""</span>
+        <span class="keyword">pass</span>
+    
+    <span class="keyword">@abstractmethod</span>
+    <span class="keyword">def</span> <span class="function">get</span>(<span class="keyword">self</span>, product_id: <span class="class">int</span>) -> <span class="class">Optional</span>[<span class="class">Product</span>]:
+        <span class="string">"""Get product by ID, None if not found"""</span>
+        <span class="keyword">pass</span>
+    
+    <span class="keyword">@abstractmethod</span>
+    <span class="keyword">def</span> <span class="function">get_all</span>(<span class="keyword">self</span>) -> <span class="class">Dict</span>[<span class="class">int</span>, <span class="class">Product</span>]:
+        <span class="string">"""Get all products as dict {id: product}"""</span>
+        <span class="keyword">pass</span>
+    
+    <span class="keyword">@abstractmethod</span>
+    <span class="keyword">def</span> <span class="function">get_price</span>(<span class="keyword">self</span>, product_id: <span class="class">int</span>) -> <span class="class">float</span>:
+        <span class="string">"""Get product price without loading full object"""</span>
+        <span class="keyword">pass</span>
+    
+    <span class="keyword">@abstractmethod</span>
+    <span class="keyword">def</span> <span class="function">delete</span>(<span class="keyword">self</span>, product_id: <span class="class">int</span>) -> <span class="class">None</span>:
+        <span class="string">"""Delete product and cascade to inventory"""</span>
+        <span class="keyword">pass</span>
+
+<span class="keyword">class</span> <span class="class">IDocumentRepo</span>(<span class="class">ABC</span>):
+    <span class="string">"""Abstract interface for document data access"""</span>
+    
+    <span class="keyword">@abstractmethod</span>
+    <span class="keyword">def</span> <span class="function">save</span>(<span class="keyword">self</span>, document: <span class="class">Document</span>) -> <span class="class">None</span>:
+        <span class="keyword">pass</span>
+    
+    <span class="keyword">@abstractmethod</span>
+    <span class="keyword">def</span> <span class="function">get</span>(<span class="keyword">self</span>, document_id: <span class="class">int</span>) -> <span class="class">Optional</span>[<span class="class">Document</span>]:
+        <span class="keyword">pass</span>
+    
+    <span class="keyword">@abstractmethod</span>
+    <span class="keyword">def</span> <span class="function">get_all</span>(<span class="keyword">self</span>) -> <span class="class">List</span>[<span class="class">Document</span>]:
+        <span class="keyword">pass</span>
+    
+    <span class="keyword">@abstractmethod</span>
+    <span class="keyword">def</span> <span class="function">update_status</span>(<span class="keyword">self</span>, document_id: <span class="class">int</span>, status: <span class="class">DocumentStatus</span>) -> <span class="class">None</span>:
+        <span class="keyword">pass</span></div>
+
+                <div class="pattern-box">
+                    <h4>🏗️ Key Principles</h4>
+                    <ul class="checklist">
+                        <li><strong>Return Domain Objects:</strong> Never return ORM models (ProductModel) - always return domain entities (Product)</li>
+                        <li><strong>Accept Domain Objects:</strong> Methods take domain entities as input, not dictionaries or ORM models</li>
+                        <li><strong>No Business Logic:</strong> Repositories only do CRUD - no validation or orchestration</li>
+                        <li><strong>No Framework Dependencies:</strong> Interface should work with any database or ORM</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- IMPLEMENTATION -->
+            <div class="section">
+                <h2>⚙️ 3. SQL Implementation</h2>
+                
+                <div class="diagram-container">
+                    <div class="mermaid">
+                    sequenceDiagram
+                        participant Service
+                        participant Repo as ProductRepo
+                        participant Session as SQLAlchemy Session
+                        participant ORM as ProductModel (ORM)
+                        participant DB as PostgreSQL
+                        
+                        Service->>Repo: save(product: Product)
+                        Note over Repo: Domain Object (Product)
+                        
+                        Repo->>Session: session.get(ProductModel, id)
+                        Session->>DB: SELECT * FROM products WHERE id=?
+                        DB-->>Session: ProductModel or None
+                        Session-->>Repo: model
+                        
+                        alt Model Exists (Update)
+                            Repo->>ORM: Update fields from domain
+                            Note over Repo,ORM: model.name = product.name<br/>model.price = product.price
+                        else Model Not Found (Insert)
+                            Repo->>ORM: Create new ProductModel
+                            Repo->>Session: session.add(model)
+                        end
+                        
+                        Repo->>Repo: _commit_if_auto()
+                        Repo->>Session: commit() if auto
+                        Session->>DB: COMMIT
+                        DB-->>Session: Success ✓
+                        Session-->>Repo: Done
+                        Repo-->>Service: None (success)
+                    </div>
+                </div>
+
+                <div class="file-path">📁 app/repositories/sql/product_repo.py</div>
+                <div class="code-example"><span class="keyword">from</span> sqlalchemy.orm <span class="keyword">import</span> <span class="class">Session</span>
+<span class="keyword">from</span> app.core.transaction <span class="keyword">import</span> <span class="class">TransactionalRepository</span>
+<span class="keyword">from</span> app.repositories.interfaces.interfaces <span class="keyword">import</span> <span class="class">IProductRepo</span>
+<span class="keyword">from</span> app.models.product_domain <span class="keyword">import</span> <span class="class">Product</span>
+<span class="keyword">from</span> .models <span class="keyword">import</span> <span class="class">ProductModel</span>, <span class="class">InventoryModel</span>
+
+<span class="keyword">class</span> <span class="class">ProductRepo</span>(<span class="class">TransactionalRepository</span>, <span class="class">IProductRepo</span>):
+    <span class="string">"""PostgreSQL implementation of product repository"""</span>
+    
+    <span class="keyword">def</span> <span class="function">__init__</span>(<span class="keyword">self</span>, session: <span class="class">Session</span>):
+        <span class="keyword">super</span>().<span class="function">__init__</span>(session)
+    
+    <span class="keyword">def</span> <span class="function">save</span>(<span class="keyword">self</span>, product: <span class="class">Product</span>) -> <span class="class">None</span>:
+        <span class="string">"""Upsert pattern: insert if new, update if exists"""</span>
+        <span class="comment"># Load existing model from database</span>
+        model = <span class="keyword">self</span>.session.<span class="function">get</span>(<span class="class">ProductModel</span>, product.product_id)
+        
+        <span class="keyword">if not</span> model:
+            <span class="comment"># INSERT: Create new ORM model</span>
+            model = <span class="class">ProductModel</span>(
+                product_id=product.product_id,
+                name=product.name,
+                category=product.category,
+                unit=product.unit,
+                weight=product.weight,
+                price=product.price,
+                description=product.description,
+            )
+            <span class="keyword">self</span>.session.<span class="function">add</span>(model)
+        <span class="keyword">else</span>:
+            <span class="comment"># UPDATE: Sync domain → ORM</span>
+            model.name = product.name
+            model.category = product.category
+            model.unit = product.unit
+            model.weight = product.weight
+            model.price = product.price
+            model.description = product.description
+        
+        <span class="comment"># Commit if auto-commit enabled</span>
+        <span class="keyword">self</span>.<span class="function">_commit_if_auto</span>()
+    
+    <span class="keyword">def</span> <span class="function">get</span>(<span class="keyword">self</span>, product_id: <span class="class">int</span>) -> <span class="class">Optional</span>[<span class="class">Product</span>]:
+        <span class="string">"""Get product by ID, return domain object"""</span>
+        model = <span class="keyword">self</span>.session.<span class="function">get</span>(<span class="class">ProductModel</span>, product_id)
+        <span class="keyword">return self</span>.<span class="function">_to_domain</span>(model) <span class="keyword">if</span> model <span class="keyword">else</span> <span class="class">None</span>
+    
+    <span class="keyword">def</span> <span class="function">delete</span>(<span class="keyword">self</span>, product_id: <span class="class">int</span>) -> <span class="class">None</span>:
+        <span class="string">"""Delete product and cascade to inventory"""</span>
+        model = <span class="keyword">self</span>.session.<span class="function">get</span>(<span class="class">ProductModel</span>, product_id)
+        <span class="keyword">if not</span> model:
+            <span class="keyword">raise</span> <span class="class">ProductNotFoundError</span>(<span class="string">f"Product {product_id} not found"</span>)
+        
+        <span class="comment"># Delete inventory items first (FK constraint)</span>
+        <span class="keyword">self</span>.session.<span class="function">query</span>(<span class="class">InventoryModel</span>).\
+            <span class="function">filter</span>(<span class="class">InventoryModel</span>.product_id == product_id).\
+            <span class="function">delete</span>()
+        
+        <span class="comment"># Delete product</span>
+        <span class="keyword">self</span>.session.<span class="function">delete</span>(model)
+        <span class="keyword">self</span>.<span class="function">_commit_if_auto</span>()
+    
+    <span class="keyword">@staticmethod</span>
+    <span class="keyword">def</span> <span class="function">_to_domain</span>(model: <span class="class">ProductModel</span>) -> <span class="class">Product</span>:
+        <span class="string">"""Convert ORM model to domain entity"""</span>
+        <span class="keyword">return</span> <span class="class">Product</span>(
+            product_id=model.product_id,
+            name=model.name,
+            category=model.category,
+            unit=model.unit,
+            weight=model.weight,
+            price=model.price,
+            description=model.description,
+        )</div>
+
+                <div class="explanation">
+                    <h3>💡 ORM vs Domain Separation</h3>
+                    <p><strong>ORM Model (ProductModel):</strong> Represents database table structure. Has FK constraints, indexes, SQLAlchemy mappings.</p>
+                    <p><strong>Domain Entity (Product):</strong> Represents business concept. Pure Python dataclass with validation, business rules.</p>
+                    <p><strong>Why separate?</strong> Business logic shouldn't depend on database structure. You can change DB schema without touching services.</p>
+                </div>
+
+                <div class="pattern-box">
+                    <h4>🏗️ Upsert Pattern Explained</h4>
+                    <div class="code-example"><span class="comment"># Step 1: Try to load existing record</span>
+model = session.<span class="function">get</span>(<span class="class">ProductModel</span>, product.product_id)
+
+<span class="keyword">if not</span> model:
+    <span class="comment"># Step 2a: Not found → INSERT new record</span>
+    model = <span class="class">ProductModel</span>(product_id=<span class="number">123</span>, name=<span class="string">"Laptop"</span>)
+    session.<span class="function">add</span>(model)  <span class="comment"># Queue for INSERT</span>
+<span class="keyword">else</span>:
+    <span class="comment"># Step 2b: Found → UPDATE existing record</span>
+    model.name = <span class="string">"Updated Laptop"</span>  <span class="comment"># Queue for UPDATE</span>
+
+<span class="comment"># Step 3: Commit (executes INSERT or UPDATE)</span>
+session.<span class="function">commit</span>()
+
+<span class="comment"># Why this pattern?
+# - Single method handles both create and update
+# - No need for separate create() and update() methods
+# - Idempotent: calling save() twice with same ID updates instead of failing</span></div>
+                </div>
+            </div>
+
+            <!-- DOCUMENT REPO WITH RELATIONSHIPS -->
+            <div class="section">
+                <h2>📄 4. Complex Repository: DocumentRepo</h2>
+                
+                <div class="diagram-container">
+                    <div class="mermaid">
+                    graph LR
+                        Document[Document Domain] --> Items[DocumentProduct List]
+                        
+                        DocumentRepo[DocumentRepo] --> DocModel[(DocumentModel)]
+                        DocumentRepo --> ItemModel[(DocumentItemModel)]
+                        
+                        DocModel -->|1:N| ItemModel
+                        
+                        DocModel --> |FK| WarehouseModel[(Warehouse)]
+                        ItemModel --> |FK| ProductModel[(Product)]
+                        
+                        style Document fill:#FF9800,stroke:#E65100,stroke-width:3px,color:#fff
+                        style DocumentRepo fill:#2196F3,stroke:#1976D2,stroke-width:2px,color:#fff
+                        style DocModel fill:#4CAF50,stroke:#2E7D32,stroke-width:2px,color:#fff
+                    </div>
+                </div>
+
+                <div class="file-path">📁 app/repositories/sql/document_repo.py</div>
+                <div class="code-example"><span class="keyword">class</span> <span class="class">DocumentRepo</span>(<span class="class">TransactionalRepository</span>, <span class="class">IDocumentRepo</span>):
+    <span class="string">"""Repository handling document with child items"""</span>
+    
+    <span class="keyword">def</span> <span class="function">save</span>(<span class="keyword">self</span>, document: <span class="class">Document</span>) -> <span class="class">None</span>:
+        <span class="comment"># Load document model</span>
+        model = <span class="keyword">self</span>.session.<span class="function">get</span>(<span class="class">DocumentModel</span>, document.document_id)
+        
+        <span class="keyword">if not</span> model:
+            <span class="comment"># INSERT: Create new document</span>
+            model = <span class="class">DocumentModel</span>(
+                document_id=document.document_id,
+                doc_type=document.doc_type.value,  <span class="comment"># Enum → string</span>
+                status=document.status.value,
+                from_warehouse_id=document.from_warehouse_id,
+                to_warehouse_id=document.to_warehouse_id,
+                created_by=document.created_by,
+                note=document.note,
+            )
+            <span class="keyword">self</span>.session.<span class="function">add</span>(model)
+        <span class="keyword">else</span>:
+            <span class="comment"># UPDATE: Sync document fields</span>
+            model.status = document.status.value
+            model.note = document.note
+            
+            <span class="comment"># Clear existing items (will be re-added)</span>
+            model.items.<span class="function">clear</span>()  <span class="comment"># SQLAlchemy relationship</span>
+        
+        <span class="comment"># Replace items with current state</span>
+        <span class="keyword">for</span> item <span class="keyword">in</span> document.items:
+            model.items.<span class="function">append</span>(
+                <span class="class">DocumentItemModel</span>(
+                    product_id=item.product_id,
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                )
+            )
+        
+        <span class="keyword">self</span>.<span class="function">_commit_if_auto</span>()
+    
+    <span class="keyword">@staticmethod</span>
+    <span class="keyword">def</span> <span class="function">_to_domain</span>(model: <span class="class">DocumentModel</span>) -> <span class="class">Document</span>:
+        <span class="string">"""Convert ORM → Domain with child items"""</span>
+        <span class="keyword">return</span> <span class="class">Document</span>(
+            document_id=model.document_id,
+            doc_type=<span class="class">DocumentType</span>(model.doc_type),  <span class="comment"># string → Enum</span>
+            status=<span class="class">DocumentStatus</span>(model.status),
+            from_warehouse_id=model.from_warehouse_id,
+            to_warehouse_id=model.to_warehouse_id,
+            created_by=model.created_by,
+            items=[
+                <span class="class">DocumentProduct</span>(
+                    product_id=item.product_id,
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                )
+                <span class="keyword">for</span> item <span class="keyword">in</span> model.items  <span class="comment"># SQLAlchemy lazy-loads items</span>
+            ],
+            date=model.created_at,
+        )</div>
+
+                <div class="explanation">
+                    <h3>💡 Handling Relationships</h3>
+                    <p><strong>Problem:</strong> Document has many items. How to save both?</p>
+                    <p><strong>Solution:</strong> Clear existing items and re-add current state. SQLAlchemy handles FK constraints and cascade deletes.</p>
+                    <p><strong>Alternative:</strong> Smart diff (detect added/removed items) - more complex but efficient for large lists.</p>
+                </div>
+
+                <div class="pattern-box">
+                    <h4>🏗️ ID Generation Sync</h4>
+                    <div class="code-example"><span class="keyword">def</span> <span class="function">__init__</span>(<span class="keyword">self</span>, session: <span class="class">Session</span>):
+    <span class="keyword">super</span>().<span class="function">__init__</span>(session)
+    <span class="keyword">self</span>.<span class="function">_sync_id_generator</span>()  <span class="comment"># Sync on init</span>
+
+<span class="keyword">def</span> <span class="function">_sync_id_generator</span>(<span class="keyword">self</span>) -> <span class="class">None</span>:
+    <span class="string">"""Ensure ID generator starts from max existing ID"""</span>
+    <span class="comment"># Query: SELECT MAX(document_id) FROM documents</span>
+    max_id = <span class="keyword">self</span>.session.<span class="function">execute</span>(
+        <span class="function">select</span>(<span class="function">func.max</span>(<span class="class">DocumentModel</span>.document_id))
+    ).<span class="function">scalar</span>()
+    
+    <span class="comment"># Start from max+1 (or 1 if no documents exist)</span>
+    start_id = (max_id <span class="keyword">or</span> <span class="number">0</span>) + <span class="number">1</span>
+    <span class="class">IDGenerator</span>.<span class="function">reset_generator</span>(<span class="string">"document"</span>, start_id)
+    
+<span class="comment"># Why? Prevents ID collision after database restore or migration
+# Without this, generator might reuse IDs from existing database</span></div>
+                </div>
+            </div>
+
+            <!-- TESTING -->
+            <div class="section">
+                <h2>✅ 5. Testing Repositories</h2>
+                
+                <div class="file-path">📁 tests/test_product_repo.py</div>
+                <div class="code-example"><span class="keyword">import</span> pytest
+<span class="keyword">from</span> sqlalchemy <span class="keyword">import</span> create_engine
+<span class="keyword">from</span> sqlalchemy.orm <span class="keyword">import</span> sessionmaker
+
+<span class="comment"># Test with in-memory SQLite (fast!)</span>
+<span class="keyword">@pytest</span>.<span class="function">fixture</span>
+<span class="keyword">def</span> <span class="function">test_session</span>():
+    engine = <span class="function">create_engine</span>(<span class="string">"sqlite:///:memory:"</span>)
+    <span class="class">Base</span>.metadata.<span class="function">create_all</span>(engine)
+    <span class="class">TestingSessionLocal</span> = <span class="function">sessionmaker</span>(bind=engine)
+    session = <span class="function">TestingSessionLocal</span>()
+    <span class="keyword">yield</span> session
+    session.<span class="function">close</span>()
+
+<span class="keyword">def</span> <span class="function">test_product_save_creates_new</span>(test_session):
+    <span class="comment"># Arrange</span>
+    repo = <span class="class">ProductRepo</span>(test_session)
+    product = <span class="class">Product</span>(product_id=<span class="number">1</span>, name=<span class="string">"Laptop"</span>, price=<span class="number">999.99</span>)
+    
+    <span class="comment"># Act</span>
+    repo.<span class="function">save</span>(product)
+    
+    <span class="comment"># Assert</span>
+    loaded = repo.<span class="function">get</span>(<span class="number">1</span>)
+    <span class="keyword">assert</span> loaded.name == <span class="string">"Laptop"</span>
+    <span class="keyword">assert</span> loaded.price == <span class="number">999.99</span>
+
+<span class="keyword">def</span> <span class="function">test_product_save_updates_existing</span>(test_session):
+    <span class="comment"># Arrange: Create initial product</span>
+    repo = <span class="class">ProductRepo</span>(test_session)
+    product = <span class="class">Product</span>(product_id=<span class="number">1</span>, name=<span class="string">"Old Name"</span>, price=<span class="number">100</span>)
+    repo.<span class="function">save</span>(product)
+    
+    <span class="comment"># Act: Update same product</span>
+    updated = <span class="class">Product</span>(product_id=<span class="number">1</span>, name=<span class="string">"New Name"</span>, price=<span class="number">200</span>)
+    repo.<span class="function">save</span>(updated)
+    
+    <span class="comment"># Assert: Verify update</span>
+    loaded = repo.<span class="function">get</span>(<span class="number">1</span>)
+    <span class="keyword">assert</span> loaded.name == <span class="string">"New Name"</span>
+    <span class="keyword">assert</span> loaded.price == <span class="number">200</span>
+
+<span class="keyword">def</span> <span class="function">test_product_delete_cascades_inventory</span>(test_session):
+    <span class="comment"># Arrange: Create product with inventory</span>
+    repo = <span class="class">ProductRepo</span>(test_session)
+    inv_repo = <span class="class">InventoryRepo</span>(test_session)
+    
+    product = <span class="class">Product</span>(product_id=<span class="number">1</span>, name=<span class="string">"Laptop"</span>)
+    repo.<span class="function">save</span>(product)
+    
+    inventory = <span class="class">InventoryItem</span>(product_id=<span class="number">1</span>, quantity=<span class="number">50</span>)
+    inv_repo.<span class="function">save</span>(inventory)
+    
+    <span class="comment"># Act: Delete product</span>
+    repo.<span class="function">delete</span>(<span class="number">1</span>)
+    
+    <span class="comment"># Assert: Inventory also deleted</span>
+    <span class="keyword">assert</span> repo.<span class="function">get</span>(<span class="number">1</span>) <span class="keyword">is</span> <span class="class">None</span>
+    <span class="keyword">assert</span> inv_repo.<span class="function">get_quantity</span>(<span class="number">1</span>) == <span class="number">0</span></div>
+
+                <div class="explanation">
+                    <h3>💡 Testing Strategy</h3>
+                    <ul class="checklist">
+                        <li><strong>Use in-memory SQLite</strong> for fast tests (no Docker needed)</li>
+                        <li><strong>Test CRUD operations</strong> separately (create, read, update, delete)</li>
+                        <li><strong>Test edge cases</strong> (not found, duplicate ID, FK violations)</li>
+                        <li><strong>Test transactions</strong> (rollback on error)</li>
+                        <li><strong>Mock external dependencies</strong> (ID generators, datetime)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="key-concept" style="margin-top: 50px;">
+                <h3>📚 How to Apply Repository Pattern in Your Projects</h3>
+                <ul class="checklist">
+                    <li><strong>Start with interfaces</strong> - define contract before implementation</li>
+                    <li><strong>Keep repositories thin</strong> - only data access, no business logic</li>
+                    <li><strong>Separate domain from ORM</strong> - never expose database models to services</li>
+                    <li><strong>Use dependency injection</strong> - pass session in constructor</li>
+                    <li><strong>Test with real database</strong> (in-memory SQLite for speed)</li>
+                    <li><strong>Consider caching</strong> for frequently accessed data (Redis, memcached)</li>
+                    <li><strong>Monitor query performance</strong> - add indexes for slow queries</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for clickable diagrams -->
+    <div id="codeModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Code Details</h2>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Content loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true, 
+            theme: 'default',
+            flowchart: { useMaxWidth: true },
+            sequence: { useMaxWidth: true }
+        });
+        
+        // Code snippets for clickable repository nodes
+        const codeDetails = {
+            'IRepo': {
+                title: '📝 Repository Interface',
+                content: `
+                    <h3>📁 File: app/repositories/interfaces/interfaces.py</h3>
+                    <pre>class IProductRepo(ABC):
+    @abstractmethod
+    def save(self, product: Product) -> None:
+        """Create or update product"""
+        pass
+    
+    @abstractmethod
+    def get(self, product_id: int) -> Optional[Product]:
+        """Get product by ID, None if not found"""
+        pass
+    
+    @abstractmethod
+    def get_all(self) -> Dict[int, Product]:
+        """Get all products as dict {id: product}"""
+        pass</pre>
+                    <h3>💡 Why Interfaces?</h3>
+                    <p><strong>1. Testability:</strong> Inject mock repositories in unit tests</p>
+                    <p><strong>2. Flexibility:</strong> Swap PostgreSQL for MongoDB without changing service code</p>
+                    <p><strong>3. Dependency Inversion:</strong> Services depend on abstractions, not concrete implementations</p>
+                    <h3>🎯 Multiple Implementations</h3>
+                    <pre>class ProductRepoSQL(IProductRepo):  # PostgreSQL
+    def save(self, product): ...
+
+class ProductRepoMongo(IProductRepo):  # MongoDB  
+    def save(self, product): ...
+    
+# Service doesn't care which implementation!
+service = ProductService(repo=ProductRepoSQL())</pre>
+                `
+            },
+            'SQLRepo': {
+                title: '⚙️ SQL Repository Implementation',
+                content: `
+                    <h3>📁 File: app/repositories/sql/product_repo.py</h3>
+                    <pre>class ProductRepo(TransactionalRepository, IProductRepo):
+    def __init__(self, session: Session):
+        super().__init__(session)
+    
+    def save(self, product: Product) -> None:
+        model = self.session.get(ProductModel, product.product_id)
+        
+        if not model:
+            # INSERT: Create new ORM model
+            model = ProductModel(
+                product_id=product.product_id,
+                name=product.name,
+                price=product.price
+            )
+            self.session.add(model)
+        else:
+            # UPDATE: Sync domain → ORM
+            model.name = product.name
+            model.price = product.price
+        
+        self._commit_if_auto()  # Commit if enabled</pre>
+                    <h3>💡 Upsert Pattern</h3>
+                    <p><strong>Try to load existing:</strong> session.get(ProductModel, id)</p>
+                    <p><strong>Not found?</strong> Create new model and session.add()</p>
+                    <p><strong>Found?</strong> Update fields on existing model</p>
+                    <p><strong>Why?</strong> Single method handles both create and update - simpler API!</p>
+                `
+            },
+            'Session': {
+                title: '🔄 SQLAlchemy Session',
+                content: `
+                    <h3>💡 What is a Session?</h3>
+                    <p><strong>Identity Map:</strong> Tracks all loaded objects by ID</p>
+                    <p><strong>Unit of Work:</strong> Queues changes until commit()</p>
+                    <p><strong>Transaction:</strong> Manages BEGIN/COMMIT/ROLLBACK</p>
+                    <h3>🎯 Session Lifecycle</h3>
+                    <pre>session = SessionLocal()  # Create session
+product = session.get(ProductModel, 1)  # Load from DB
+product.name = "New Name"  # Change tracked
+session.add(new_product)  # Queue INSERT
+session.commit()  # Execute all SQL
+session.close()  # Return connection to pool</pre>
+                    <h3>⚠️ Common Mistakes</h3>
+                    <p><strong>Forgetting to close:</strong> Connection leak!</p>
+                    <p><strong>No error handling:</strong> Transactions left open</p>
+                    <p><strong>Solution:</strong> Use get_session() generator with finally block</p>
+                `
+            },
+            'ORM': {
+                title: '🗄️ ORM Model vs Domain Entity',
+                content: `
+                    <h3>📁 ORM Model: app/repositories/sql/models.py</h3>
+                    <pre>class ProductModel(Base):
+    __tablename__ = "products"
+    
+    product_id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    price = Column(Numeric(10, 2))
+    
+    # SQLAlchemy stuff
+    inventory = relationship("InventoryModel", back_populates="product")</pre>
+                    <h3>📁 Domain Entity: app/models/product_domain.py</h3>
+                    <pre>@dataclass
+class Product:
+    product_id: int
+    name: str
+    price: float
+    
+    def calculate_discount(self, percent):
+        return self.price * (1 - percent/100)</pre>
+                    <h3>💡 Why Separate?</h3>
+                    <p><strong>ORM = Database structure</strong> (FK, indexes, migrations)</p>
+                    <p><strong>Domain = Business logic</strong> (validation, calculations)</p>
+                    <p><strong>Benefit:</strong> Change DB schema without touching business logic!</p>
+                `
+            },
+            'Repo': {
+                title: '🔄 _to_domain() Conversion',
+                content: `
+                    <h3>📁 File: app/repositories/sql/product_repo.py</h3>
+                    <pre>@staticmethod
+def _to_domain(model: ProductModel) -> Product:
+    """Convert ORM model to domain entity"""
+    return Product(
+        product_id=model.product_id,
+        name=model.name,
+        category=model.category,
+        unit=model.unit,
+        weight=model.weight,
+        price=model.price,
+        description=model.description,
+    )</pre>
+                    <h3>💡 Why This Method?</h3>
+                    <p><strong>Isolation:</strong> Service layer never sees ORM models</p>
+                    <p><strong>Type safety:</strong> Returns clean domain objects</p>
+                    <p><strong>Enum conversion:</strong> database string → Python enum</p>
+                    <h3>🎯 Usage</h3>
+                    <pre>def get(self, product_id: int) -> Optional[Product]:
+    model = self.session.get(ProductModel, product_id)
+    return self._to_domain(model) if model else None
+    # Service receives Product, not ProductModel!</pre>
+                `
+            },
+            'TxBase': {
+                title: '🔐 TransactionalRepository Base Class',
+                content: `
+                    <h3>📁 File: app/core/transaction.py</h3>
+                    <pre>class TransactionalRepository:
+    def __init__(self, session: Session):
+        self.session = session
+        self._auto_commit = True
+    
+    def set_auto_commit(self, enabled: bool):
+        self._auto_commit = enabled
+    
+    def _commit_if_auto(self):
+        if self._auto_commit:
+            self.session.commit()</pre>
+                    <h3>💡 Why Base Class?</h3>
+                    <p><strong>DRY:</strong> All repositories inherit transaction control</p>
+                    <p><strong>Consistency:</strong> Same pattern everywhere</p>
+                    <p><strong>Flexibility:</strong> Turn off auto-commit for multi-step operations</p>
+                    <h3>🎯 Usage in Services</h3>
+                    <pre># Disable auto-commit for transaction
+repo.set_auto_commit(False)
+repo.save(entity1)  # Not committed yet
+repo.save(entity2)  # Not committed yet
+session.commit()    # Commit both together
+repo.set_auto_commit(True)  # Restore</pre>
+                `
+            }
+        };
+        
+        // Make diagram nodes clickable
+        setTimeout(() => {
+            const nodeMap = {
+                'IRepo1': ['IRepo', 'IProductRepo'],
+                'IRepo2': ['IRepo', 'IDocumentRepo'],
+                'IRepo3': ['IRepo', 'IWarehouseRepo'],
+                'SQLRepo1': ['SQLRepo', 'ProductRepo SQL'],
+                'SQLRepo2': ['SQLRepo', 'DocumentRepo SQL'],
+                'SQLRepo3': ['SQLRepo', 'WarehouseRepo SQL'],
+                'TxBase': ['TxBase', 'TransactionalRepository'],
+                'Session': ['Session', 'SQLAlchemy Session'],
+                'Service': ['Service', 'Service Layer'],
+                'Repo': ['Repo', 'Repository'],
+                'ORM': ['ORM', 'ProductModel']
+            };
+            
+            Object.entries(nodeMap).forEach(([key, [detailKey, label]]) => {
+                const nodes = Array.from(document.querySelectorAll('.node')).filter(node => {
+                    const text = node.textContent.trim();
+                    return text.includes(label);
+                });
+                
+                nodes.forEach(node => {
+                    node.style.cursor = 'pointer';
+                    node.classList.add('clickable-node');
+                    node.title = 'Click to see code details';
+                    node.onclick = () => showCode(detailKey);
+                });
+            });
+        }, 1000);
+        
+        function showCode(key) {
+            const detail = codeDetails[key];
+            if (!detail) return;
+            
+            document.getElementById('modalTitle').textContent = detail.title;
+            document.getElementById('modalBody').innerHTML = detail.content;
+            document.getElementById('codeModal').style.display = 'block';
+        }
+        
+        function closeModal() {
+            document.getElementById('codeModal').style.display = 'none';
+        }
+        
+        window.onclick = function(event) {
+            const modal = document.getElementById('codeModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        };
+        
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        });
+        
+        // Add copy buttons to all code examples
+        document.addEventListener('DOMContentLoaded', function() {
+            const codeBlocks = document.querySelectorAll('.code-example');
+            codeBlocks.forEach(block => {
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'copy-btn';
+                copyBtn.textContent = '📋 Copy';
+                copyBtn.onclick = function() {
+                    const code = block.textContent;
+                    navigator.clipboard.writeText(code).then(() => {
+                        copyBtn.textContent = '✅ Copied!';
+                        setTimeout(() => {
+                            copyBtn.textContent = '📋 Copy';
+                        }, 2000);
+                    });
+                };
+                block.parentElement.insertBefore(copyBtn, block);
+            });
+        });
+    </script>
+</body>
+</html>

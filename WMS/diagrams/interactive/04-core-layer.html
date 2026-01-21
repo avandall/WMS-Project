@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WMS Core Layer - Deep Dive</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #5e35b1 0%, #673ab7 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header p { font-size: 1.2em; opacity: 0.9; }
+        .content { padding: 40px; }
+        .section {
+            margin-bottom: 50px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        .section h2 {
+            color: #5e35b1;
+            font-size: 2em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #673ab7;
+        }
+        .diagram-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .code-example {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.8;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .code-example .comment { color: #6A9955; }
+        .code-example .keyword { color: #C586C0; }
+        .code-example .function { color: #DCDCAA; }
+        .code-example .string { color: #CE9178; }
+        .code-example .class { color: #4EC9B0; }
+        .code-example .number { color: #B5CEA8; }
+        .explanation {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+            line-height: 1.8;
+        }
+        .explanation h3 {
+            color: #1976D2;
+            margin-bottom: 15px;
+        }
+        .file-path {
+            background: #263238;
+            color: #80CBC4;
+            padding: 10px 15px;
+            border-radius: 5px 5px 0 0;
+            font-family: monospace;
+            font-size: 13px;
+            margin-bottom: -10px;
+        }
+        .pattern-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .pattern-box h4 {
+            color: #F57C00;
+            margin-bottom: 10px;
+        }
+        .key-concept {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+        }
+        .key-concept h3 {
+            margin-bottom: 10px;
+            font-size: 1.5em;
+        }
+        ul.checklist {
+            list-style: none;
+            padding-left: 0;
+        }
+        ul.checklist li {
+            padding: 8px 0 8px 30px;
+            position: relative;
+        }
+        ul.checklist li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #4CAF50;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        .collapsible {
+            cursor: pointer;
+            padding: 15px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-size: 1.1em;
+            font-weight: bold;
+            width: 100%;
+            text-align: left;
+            transition: background 0.3s;
+        }
+        .collapsible:hover {
+            background: #5568d3;
+        }
+        .collapsible:after {
+            content: '▼';
+            float: right;
+            transition: transform 0.3s;
+        }
+        .collapsible.active:after {
+            transform: rotate(180deg);
+        }
+        .collapsible-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .diagram-container:hover {
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            transition: box-shadow 0.3s;
+        }
+        .copy-btn {
+            position: relative;
+            float: right;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: -5px;
+        }
+        .copy-btn:hover {
+            background: #45a049;
+        }
+        .copy-btn:active {
+            background: #3d8b40;
+        }
+        code {
+            background: #2d2d2d;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', monospace;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .modal-content {
+            background-color: #1e1e1e;
+            margin: 3% auto;
+            padding: 0;
+            border-radius: 15px;
+            width: 85%;
+            max-width: 1200px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            animation: slideDown 0.3s;
+        }
+        @keyframes slideDown {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .modal-header {
+            background: linear-gradient(135deg, #5e35b1 0%, #673ab7 100%);
+            color: white;
+            padding: 25px 30px;
+            border-radius: 15px 15px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.8em;
+        }
+        .close {
+            color: white;
+            font-size: 35px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+        .close:hover { color: #ff6b6b; }
+        .modal-body {
+            padding: 30px;
+            color: #d4d4d4;
+        }
+        .modal-body pre {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            border-left: 4px solid #673ab7;
+        }
+        .modal-body h3 {
+            color: #bb86fc;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+        .clickable-node {
+            cursor: pointer;
+            transition: filter 0.2s;
+        }
+        .clickable-node:hover {
+            filter: brightness(1.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏗️ Core Layer Deep Dive</h1>
+            <p>Infrastructure Foundation - Database, Logging, Transactions, Settings</p>
+        </div>
+        
+        <div class="content">
+            <!-- DATABASE MODULE -->
+            <div class="section">
+                <h2>📊 1. Database Module (database.py)</h2>
+                
+                <div class="key-concept">
+                    <h3>🎯 Purpose</h3>
+                    <p>Central database configuration that provides connection pooling, session management, and health checks. This is the foundation of all data access.</p>
+                </div>
+                
+                <div class="diagram-container">
+                    <div class="mermaid">
+                    graph TB
+                        Settings[Settings] --> Engine[SQLAlchemy Engine]
+                        Engine --> Pool[QueuePool<br/>20+10 connections]
+                        Pool --> PG[(PostgreSQL)]
+                        
+                        Engine --> SessionFactory[SessionLocal Factory]
+                        SessionFactory --> Session1[Session 1]
+                        SessionFactory --> Session2[Session 2]
+                        SessionFactory --> Session3[Session N...]
+                        
+                        Session1 --> Repo1[Repository 1]
+                        Session2 --> Repo2[Repository 2]
+                        Session3 --> Repo3[Repository N...]
+                        
+                        Engine --> Events[Event Listeners]
+                        Events --> LogConnect[Log: Connect]
+                        Events --> LogClose[Log: Close]
+                        
+                        Health[Health Check] --> Engine
+                        Init[init_db] --> Engine
+                        
+                        style Engine fill:#FF9800,stroke:#E65100,stroke-width:3px,color:#fff
+                        style Pool fill:#4CAF50,stroke:#2E7D32,stroke-width:2px,color:#fff
+                        style PG fill:#336791,stroke:#1A4D6D,stroke-width:2px,color:#fff
+                    </div>
+                </div>
+                
+                <div class="file-path">📁 app/core/database.py</div>
+                <div class="code-example"><span class="comment"># Key Component 1: Engine with Connection Pool</span>
+engine = <span class="function">create_engine</span>(
+    settings.database_url,
+    future=<span class="class">True</span>,                    <span class="comment"># Use SQLAlchemy 2.0 style</span>
+    echo=settings.debug,                <span class="comment"># Log SQL queries in debug</span>
+    pool_pre_ping=<span class="class">True</span>,             <span class="comment"># Test connections before use</span>
+    pool_size=<span class="number">20</span>,                    <span class="comment"># 20 persistent connections</span>
+    max_overflow=<span class="number">10</span>,                <span class="comment"># +10 temporary (total 30)</span>
+    pool_timeout=<span class="number">30</span>,                <span class="comment"># Wait 30s for connection</span>
+    pool_recycle=<span class="number">3600</span>,              <span class="comment"># Recycle after 1 hour</span>
+    poolclass=<span class="class">QueuePool</span>,            <span class="comment"># Production-grade pooling</span>
+    connect_args={
+        <span class="string">"connect_timeout"</span>: <span class="number">10</span>,      <span class="comment"># PostgreSQL timeout</span>
+        <span class="string">"options"</span>: <span class="string">"-c statement_timeout=30000"</span>  <span class="comment"># Kill slow queries</span>
+    }
+)
+
+<span class="comment"># Key Component 2: Event Listeners for Observability</span>
+<span class="keyword">@event</span>.<span class="function">listens_for</span>(engine, <span class="string">"connect"</span>)
+<span class="keyword">def</span> <span class="function">receive_connect</span>(dbapi_conn, connection_record):
+    logger.<span class="function">debug</span>(<span class="string">"Database connection established"</span>)
+
+<span class="keyword">@event</span>.<span class="function">listens_for</span>(engine, <span class="string">"close"</span>)
+<span class="keyword">def</span> <span class="function">receive_close</span>(dbapi_conn, connection_record):
+    logger.<span class="function">debug</span>(<span class="string">"Database connection closed"</span>)
+
+<span class="comment"># Key Component 3: Session Factory</span>
+<span class="class">SessionLocal</span> = <span class="function">sessionmaker</span>(
+    bind=engine,
+    autoflush=<span class="class">False</span>,    <span class="comment"># Manual control over flush</span>
+    autocommit=<span class="class">False</span>,   <span class="comment"># Manual transaction control</span>
+    future=<span class="class">True</span>         <span class="comment"># SQLAlchemy 2.0 style</span>
+)
+
+<span class="comment"># Key Component 4: Session Generator (Dependency Injection)</span>
+<span class="keyword">def</span> <span class="function">get_session</span>():
+    <span class="string">"""Yield session with automatic cleanup"""</span>
+    db = <span class="function">SessionLocal</span>()
+    <span class="keyword">try</span>:
+        <span class="keyword">yield</span> db
+    <span class="keyword">except</span> <span class="class">Exception</span> <span class="keyword">as</span> e:
+        logger.<span class="function">error</span>(<span class="string">f"Session error: {e}"</span>)
+        db.<span class="function">rollback</span>()
+        <span class="keyword">raise</span>
+    <span class="keyword">finally</span>:
+        db.<span class="function">close</span>()  <span class="comment"># Returns connection to pool</span></div>
+
+                <div class="explanation">
+                    <h3>💡 Why This Design?</h3>
+                    <p><strong>1. Connection Pooling:</strong> Creating database connections is EXPENSIVE (100-500ms). By reusing connections from a pool, requests are 100x faster. The pool maintains 20 persistent connections + 10 overflow = 30 max concurrent connections.</p>
+                    
+                    <p><strong>2. Health Checks (pool_pre_ping):</strong> Before using a connection, SQLAlchemy tests it with a simple query. If the connection is dead (server restarted, network timeout), it's automatically discarded and a new one created.</p>
+                    
+                    <p><strong>3. Connection Recycling:</strong> After 3600 seconds (1 hour), connections are recycled to prevent stale connections and memory leaks in long-running applications.</p>
+                    
+                    <p><strong>4. Query Timeout:</strong> The <code>statement_timeout=30000</code> kills any query running longer than 30 seconds, preventing runaway queries from blocking the system.</p>
+                    
+                    <p><strong>5. Session Management:</strong> The <code>get_session()</code> generator ensures sessions are ALWAYS closed, even if an exception occurs. The <code>finally</code> block guarantees cleanup.</p>
+                </div>
+
+                <div class="pattern-box">
+                    <h4>🏗️ Pattern: Dependency Injection</h4>
+                    <p><strong>How it's used in FastAPI:</strong></p>
+                    <div class="code-example"><span class="keyword">@router</span>.<span class="function">get</span>(<span class="string">"/products"</span>)
+<span class="keyword">async def</span> <span class="function">get_products</span>(
+    db: <span class="class">Session</span> = <span class="function">Depends</span>(get_session)  <span class="comment"># FastAPI injects session</span>
+):
+    product_repo = <span class="class">ProductRepo</span>(db)
+    <span class="keyword">return</span> product_repo.<span class="function">get_all</span>()
+    <span class="comment"># FastAPI automatically closes session after response</span></div>
+                    <p>FastAPI calls <code>get_session()</code>, gets a session, passes it to your route, and ensures <code>finally</code> block runs for cleanup.</p>
+                </div>
+
+                <div class="key-concept">
+                    <h3>📚 How to Apply This in Your Projects</h3>
+                    <ul class="checklist">
+                        <li><strong>Always use connection pooling</strong> in production (SQLAlchemy, Django, any ORM)</li>
+                        <li><strong>Set query timeouts</strong> to prevent slow queries from blocking workers</li>
+                        <li><strong>Use dependency injection</strong> for sessions - never create global sessions</li>
+                        <li><strong>Add health checks</strong> for monitoring (k8s liveness/readiness probes)</li>
+                        <li><strong>Log connection events</strong> to detect connection leaks</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- TRANSACTION MODULE -->
+            <div class="section">
+                <h2>🔄 2. Transaction Module (transaction.py)</h2>
+                
+                <div class="key-concept">
+                    <h3>🎯 Purpose</h3>
+                    <p>Provides ACID transaction management for multi-step operations. Ensures all-or-nothing execution across multiple repositories.</p>
+                </div>
+
+                <div class="diagram-container">
+                    <div class="mermaid">
+                    sequenceDiagram
+                        participant Service
+                        participant TxScope as transaction_scope
+                        participant Session
+                        participant Repo1 as Repository 1
+                        participant Repo2 as Repository 2
+                        participant DB as PostgreSQL
+                        
+                        Service->>TxScope: with transaction_scope(session)
+                        TxScope->>Session: BEGIN (implicit)
+                        TxScope->>Service: yield session
+                        
+                        Service->>Repo1: repo1.save(entity1)
+                        Repo1->>Session: session.add(model1)
+                        Note over Session: Change queued (not committed)
+                        
+                        Service->>Repo2: repo2.update(entity2)
+                        Repo2->>Session: session.add(model2)
+                        Note over Session: Change queued (not committed)
+                        
+                        alt All Operations Success
+                            TxScope->>Session: commit()
+                            Session->>DB: COMMIT
+                            DB-->>Session: Success ✓
+                            TxScope-->>Service: Exit (success)
+                        else Any Operation Fails
+                            TxScope->>Session: rollback()
+                            Session->>DB: ROLLBACK
+                            DB-->>Session: Rolled back ✓
+                            TxScope-->>Service: Raise exception
+                        end
+                    </div>
+                </div>
+
+                <div class="file-path">📁 app/core/transaction.py</div>
+                <div class="code-example"><span class="comment"># Pattern 1: Context Manager for Transactions</span>
+<span class="keyword">@contextmanager</span>
+<span class="keyword">def</span> <span class="function">transaction_scope</span>(session: <span class="class">Session</span>) -> Generator[<span class="class">Session</span>, <span class="class">None</span>, <span class="class">None</span>]:
+    <span class="string">"""
+    Automatic transaction management with rollback on error.
+    
+    Usage:
+        with transaction_scope(session) as tx:
+            repo1.save(entity1)  # Queued
+            repo2.save(entity2)  # Queued
+            # Both commit or both rollback
+    """</span>
+    <span class="keyword">try</span>:
+        logger.<span class="function">debug</span>(<span class="string">"Transaction started"</span>)
+        <span class="keyword">yield</span> session
+        session.<span class="function">commit</span>()  <span class="comment"># Commits ALL changes</span>
+        logger.<span class="function">debug</span>(<span class="string">"Transaction committed"</span>)
+    <span class="keyword">except</span> <span class="class">Exception</span> <span class="keyword">as</span> e:
+        logger.<span class="function">error</span>(<span class="string">f"Transaction failed: {e}"</span>)
+        session.<span class="function">rollback</span>()  <span class="comment"># Discards ALL changes</span>
+        <span class="keyword">raise</span>
+    <span class="keyword">finally</span>:
+        session.<span class="function">close</span>()
+
+<span class="comment"># Pattern 2: TransactionalRepository Base Class</span>
+<span class="keyword">class</span> <span class="class">TransactionalRepository</span>:
+    <span class="string">"""Base class for repositories that support manual transaction control"""</span>
+    
+    <span class="keyword">def</span> <span class="function">__init__</span>(<span class="keyword">self</span>, session: <span class="class">Session</span>):
+        <span class="keyword">self</span>.session = session
+        <span class="keyword">self</span>._auto_commit = <span class="class">True</span>  <span class="comment"># Default: auto-commit</span>
+    
+    <span class="keyword">def</span> <span class="function">set_auto_commit</span>(<span class="keyword">self</span>, enabled: <span class="class">bool</span>) -> <span class="class">None</span>:
+        <span class="string">"""Disable auto-commit for multi-step transactions"""</span>
+        <span class="keyword">self</span>._auto_commit = enabled
+        logger.<span class="function">debug</span>(<span class="string">f"Auto-commit: {enabled}"</span>)
+    
+    <span class="keyword">def</span> <span class="function">_commit_if_auto</span>(<span class="keyword">self</span>) -> <span class="class">None</span>:
+        <span class="string">"""Commit only if auto-commit is enabled"""</span>
+        <span class="keyword">if self</span>._auto_commit:
+            <span class="keyword">self</span>.session.<span class="function">commit</span>()
+            logger.<span class="function">debug</span>(<span class="string">"Auto-committed"</span>)</div>
+
+                <div class="explanation">
+                    <h3>💡 Why Two Patterns?</h3>
+                    <p><strong>Pattern 1: transaction_scope (Context Manager)</strong><br>
+                    Use when you have a clear transaction boundary in service layer code. The context manager automatically commits on success and rolls back on any exception.</p>
+                    
+                    <p><strong>Pattern 2: TransactionalRepository (Auto-commit Control)</strong><br>
+                    Use when you need fine-grained control. Turn off auto-commit for multiple operations, then manually commit once at the end.</p>
+                </div>
+
+                <div class="pattern-box">
+                    <h4>🏗️ Usage Example: Document Posting Service</h4>
+                    <div class="code-example"><span class="keyword">async def</span> <span class="function">post_document</span>(<span class="keyword">self</span>, document_id: <span class="class">int</span>) -> <span class="class">Document</span>:
+    <span class="keyword">try</span>:
+        <span class="comment"># Step 1: Disable auto-commit for all repositories</span>
+        <span class="keyword">self</span>.document_repo.<span class="function">set_auto_commit</span>(<span class="class">False</span>)
+        <span class="keyword">self</span>.warehouse_repo.<span class="function">set_auto_commit</span>(<span class="class">False</span>)
+        <span class="keyword">self</span>.inventory_repo.<span class="function">set_auto_commit</span>(<span class="class">False</span>)
+        
+        <span class="comment"># Step 2: Execute multiple operations (no commits yet)</span>
+        document = <span class="keyword">self</span>.<span class="function">_get_document</span>(document_id)
+        <span class="keyword">self</span>.<span class="function">_process_document_items</span>(document)  <span class="comment"># Multiple DB writes</span>
+        document.status = <span class="class">DocumentStatus</span>.POSTED
+        <span class="keyword">self</span>.document_repo.<span class="function">update</span>(document)
+        
+        <span class="comment"># Step 3: Commit ALL changes at once (ACID)</span>
+        <span class="keyword">self</span>.session.<span class="function">commit</span>()
+        logger.<span class="function">info</span>(<span class="string">f"✅ Document {document_id} posted"</span>)
+        <span class="keyword">return</span> document
+        
+    <span class="keyword">except</span> <span class="class">Exception</span> <span class="keyword">as</span> e:
+        <span class="comment"># Step 4: ANY error rolls back ALL changes</span>
+        <span class="keyword">self</span>.session.<span class="function">rollback</span>()
+        logger.<span class="function">error</span>(<span class="string">f"❌ Document post failed: {e}"</span>)
+        <span class="keyword">raise</span>
+        
+    <span class="keyword">finally</span>:
+        <span class="comment"># Step 5: Always restore auto-commit</span>
+        <span class="keyword">self</span>.<span class="function">_set_repos_auto_commit</span>(<span class="class">True</span>)</div>
+                </div>
+
+                <div class="key-concept">
+                    <h3>📚 How to Apply This in Your Projects</h3>
+                    <ul class="checklist">
+                        <li><strong>Use transactions for multi-step operations</strong> (order placement, payment processing)</li>
+                        <li><strong>Always have try/except/finally</strong> - never leave transactions open</li>
+                        <li><strong>Log transaction boundaries</strong> for debugging production issues</li>
+                        <li><strong>Keep transactions short</strong> - long transactions lock database rows</li>
+                        <li><strong>Never nest transactions</strong> unless using SAVEPOINT (advanced)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- LOGGING MODULE -->
+            <div class="section">
+                <h2>📝 3. Logging Module (logging.py)</h2>
+                
+                <div class="key-concept">
+                    <h3>🎯 Purpose</h3>
+                    <p>Structured logging with request correlation. Every log entry includes request ID for tracing requests across the system.</p>
+                </div>
+
+                <div class="diagram-container">
+                    <div class="mermaid">
+                    graph LR
+                        Request[HTTP Request] --> Middleware[Request ID Middleware]
+                        Middleware --> CtxVar[ContextVar: request_id]
+                        
+                        Service1[Service Layer] --> Logger1[logger.info]
+                        Service2[Repository] --> Logger2[logger.debug]
+                        Service3[Exception Handler] --> Logger3[logger.error]
+                        
+                        Logger1 --> Formatter[ContextualFormatter]
+                        Logger2 --> Formatter
+                        Logger3 --> Formatter
+                        
+                        Formatter --> CtxVar
+                        Formatter --> Output[Log Output]
+                        
+                        Output --> Console[Console/stdout]
+                        Output --> File[Log File]
+                        Output --> Cloud[Cloud Logging]
+                        
+                        style CtxVar fill:#E91E63,stroke:#880E4F,stroke-width:3px,color:#fff
+                        style Formatter fill:#FF9800,stroke:#E65100,stroke-width:2px,color:#fff
+                    </div>
+                </div>
+
+                <div class="file-path">📁 app/core/logging.py</div>
+                <div class="code-example"><span class="comment"># Key Component 1: Context Variable for Request Tracking</span>
+<span class="keyword">from</span> contextvars <span class="keyword">import</span> <span class="class">ContextVar</span>
+
+<span class="comment"># Thread-safe storage for request ID</span>
+request_id_ctx: <span class="class">ContextVar</span>[Optional[<span class="class">str</span>]] = <span class="class">ContextVar</span>(<span class="string">'request_id'</span>, default=<span class="class">None</span>)
+
+<span class="comment"># Key Component 2: Custom Formatter with Request ID</span>
+<span class="keyword">class</span> <span class="class">ContextualFormatter</span>(logging.<span class="class">Formatter</span>):
+    <span class="string">"""Adds request_id to every log record"""</span>
+    
+    <span class="keyword">def</span> <span class="function">format</span>(<span class="keyword">self</span>, record):
+        <span class="comment"># Get request ID from context variable</span>
+        request_id = request_id_ctx.<span class="function">get</span>()
+        record.request_id = request_id <span class="keyword">if</span> request_id <span class="keyword">else</span> <span class="string">'N/A'</span>
+        <span class="keyword">return super</span>().<span class="function">format</span>(record)
+
+<span class="comment"># Key Component 3: Setup Function</span>
+<span class="keyword">def</span> <span class="function">setup_logging</span>(level: <span class="class">str</span> = <span class="string">"INFO"</span>) -> <span class="class">None</span>:
+    <span class="comment"># Format includes request_id</span>
+    log_format = (
+        <span class="string">"%(asctime)s | %(levelname)-8s | [%(request_id)s] | "</span>
+        <span class="string">"%(name)s:%(funcName)s:%(lineno)d | %(message)s"</span>
+    )
+    
+    formatter = <span class="class">ContextualFormatter</span>(
+        log_format,
+        datefmt=<span class="string">"%Y-%m-%d %H:%M:%S"</span>
+    )
+    
+    <span class="comment"># Console handler with formatter</span>
+    console_handler = logging.<span class="class">StreamHandler</span>(sys.stdout)
+    console_handler.<span class="function">setFormatter</span>(formatter)
+    
+    <span class="comment"># Configure root logger</span>
+    root_logger = logging.<span class="function">getLogger</span>()
+    root_logger.<span class="function">setLevel</span>(<span class="function">getattr</span>(logging, level.<span class="function">upper</span>()))
+    root_logger.<span class="function">addHandler</span>(console_handler)
+
+<span class="comment"># Key Component 4: Helper Functions</span>
+<span class="keyword">def</span> <span class="function">set_request_id</span>(request_id: <span class="class">str</span>) -> <span class="class">None</span>:
+    <span class="string">"""Store request ID in context for this request"""</span>
+    request_id_ctx.<span class="function">set</span>(request_id)
+
+<span class="keyword">def</span> <span class="function">get_logger</span>(name: <span class="class">str</span>) -> logging.<span class="class">Logger</span>:
+    <span class="string">"""Get logger for module"""</span>
+    <span class="keyword">return</span> logging.<span class="function">getLogger</span>(name)</div>
+
+                <div class="explanation">
+                    <h3>💡 Example Log Output</h3>
+                    <div class="code-example"><span class="comment"># Without Request ID (useless for debugging):</span>
+<span class="number">2026-01-21 10:30:15</span> | INFO     | Creating product
+<span class="number">2026-01-21 10:30:16</span> | ERROR    | Product not found
+<span class="number">2026-01-21 10:30:17</span> | INFO     | Creating product
+
+<span class="comment"># With Request ID (can trace entire request):</span>
+<span class="number">2026-01-21 10:30:15</span> | INFO  | [<span class="string">550e-8400-e29b</span>] | Creating product
+<span class="number">2026-01-21 10:30:16</span> | ERROR | [<span class="string">7a93-1c2d-4f5e</span>] | Product not found  <span class="comment">← Different request!</span>
+<span class="number">2026-01-21 10:30:17</span> | INFO  | [<span class="string">550e-8400-e29b</span>] | Product created   <span class="comment">← Same request as first log</span></div>
+                    <p>With request IDs, you can filter logs by a specific request and see the entire flow from API entry to database query to response.</p>
+                </div>
+
+                <div class="pattern-box">
+                    <h4>🏗️ Usage in Middleware</h4>
+                    <div class="code-example"><span class="comment"># FastAPI Middleware that sets request ID</span>
+<span class="keyword">@app</span>.<span class="function">middleware</span>(<span class="string">"http"</span>)
+<span class="keyword">async def</span> <span class="function">add_request_id</span>(request: <span class="class">Request</span>, call_next):
+    <span class="comment"># Generate or extract request ID</span>
+    request_id = request.headers.<span class="function">get</span>(<span class="string">"X-Request-ID"</span>, <span class="function">str</span>(uuid.<span class="function">uuid4</span>()))
+    
+    <span class="comment"># Store in context variable (available to all loggers)</span>
+    <span class="function">set_request_id</span>(request_id)
+    
+    <span class="comment"># Process request (all logs will include this request_id)</span>
+    response = <span class="keyword">await</span> <span class="function">call_next</span>(request)
+    
+    <span class="comment"># Add to response headers (client can track it too)</span>
+    response.headers[<span class="string">"X-Request-ID"</span>] = request_id
+    <span class="keyword">return</span> response</div>
+                </div>
+
+                <div class="key-concept">
+                    <h3>📚 How to Apply This in Your Projects</h3>
+                    <ul class="checklist">
+                        <li><strong>Always use request/correlation IDs</strong> in distributed systems</li>
+                        <li><strong>Include context in logs</strong> (user_id, session_id, transaction_id)</li>
+                        <li><strong>Use structured logging</strong> (JSON format) for log aggregation (ELK, Splunk)</li>
+                        <li><strong>Different log levels</strong>: DEBUG (development), INFO (production), ERROR (alerts)</li>
+                        <li><strong>Never log sensitive data</strong> (passwords, credit cards, PII)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- SETTINGS MODULE -->
+            <div class="section">
+                <h2>⚙️ 4. Settings Module (settings.py)</h2>
+                
+                <div class="key-concept">
+                    <h3>🎯 Purpose</h3>
+                    <p>Centralized configuration management using Pydantic. All settings come from environment variables, making the app 12-factor compliant.</p>
+                </div>
+
+                <div class="file-path">📁 app/core/settings.py</div>
+                <div class="code-example"><span class="keyword">from</span> pydantic_settings <span class="keyword">import</span> <span class="class">BaseSettings</span>
+<span class="keyword">from</span> pydantic <span class="keyword">import</span> <span class="class">Field</span>
+
+<span class="keyword">class</span> <span class="class">Settings</span>(<span class="class">BaseSettings</span>):
+    <span class="string">"""Application settings loaded from environment variables"""</span>
+    
+    <span class="comment"># Database Configuration</span>
+    database_url: <span class="class">str</span> = <span class="class">Field</span>(
+        default=<span class="string">"postgresql://user:pass@localhost/wms"</span>,
+        description=<span class="string">"PostgreSQL connection string"</span>
+    )
+    db_pool_size: <span class="class">int</span> = <span class="class">Field</span>(default=<span class="number">20</span>, description=<span class="string">"Connection pool size"</span>)
+    db_max_overflow: <span class="class">int</span> = <span class="class">Field</span>(default=<span class="number">10</span>, description=<span class="string">"Max overflow connections"</span>)
+    db_pool_timeout: <span class="class">int</span> = <span class="class">Field</span>(default=<span class="number">30</span>, description=<span class="string">"Pool checkout timeout"</span>)
+    db_pool_recycle: <span class="class">int</span> = <span class="class">Field</span>(default=<span class="number">3600</span>, description=<span class="string">"Connection recycle time"</span>)
+    
+    <span class="comment"># CORS Configuration</span>
+    cors_origins: List[<span class="class">str</span>] = <span class="class">Field</span>(
+        default=[<span class="string">"http://localhost:3000"</span>],
+        description=<span class="string">"Allowed CORS origins"</span>
+    )
+    cors_allow_credentials: <span class="class">bool</span> = <span class="class">Field</span>(default=<span class="class">True</span>)
+    
+    <span class="comment"># Rate Limiting</span>
+    rate_limit_per_minute: <span class="class">int</span> = <span class="class">Field</span>(default=<span class="number">60</span>, description=<span class="string">"Requests per minute"</span>)
+    
+    <span class="comment"># Security</span>
+    secret_key: <span class="class">str</span> = <span class="class">Field</span>(default=<span class="string">"change-me-in-production"</span>)
+    
+    <span class="comment"># Application</span>
+    debug: <span class="class">bool</span> = <span class="class">Field</span>(default=<span class="class">False</span>, description=<span class="string">"Debug mode"</span>)
+    
+    <span class="keyword">class</span> <span class="class">Config</span>:
+        env_prefix = <span class="string">"WMS_"</span>  <span class="comment"># All env vars start with WMS_</span>
+        case_sensitive = <span class="class">False</span>
+
+<span class="comment"># Singleton instance</span>
+settings = <span class="class">Settings</span>()</div>
+
+                <div class="explanation">
+                    <h3>💡 Environment Variables</h3>
+                    <div class="code-example"><span class="comment"># .env file (never commit to git!)</span>
+WMS_DATABASE_URL=postgresql://admin:secret@db:5432/wms_prod
+WMS_DB_POOL_SIZE=<span class="number">50</span>
+WMS_SECRET_KEY=super-secret-key-here
+WMS_DEBUG=<span class="class">False</span>
+WMS_CORS_ORIGINS=["https://app.company.com", "https://admin.company.com"]
+WMS_RATE_LIMIT_PER_MINUTE=<span class="number">100</span></div>
+                    <p>Pydantic automatically reads these environment variables, validates types, and provides defaults.</p>
+                </div>
+
+                <div class="key-concept">
+                    <h3>📚 How to Apply This in Your Projects</h3>
+                    <ul class="checklist">
+                        <li><strong>Never hardcode secrets</strong> - always use environment variables</li>
+                        <li><strong>Use Pydantic for validation</strong> - catches config errors at startup</li>
+                        <li><strong>Different configs per environment</strong> (dev, staging, production)</li>
+                        <li><strong>Document all settings</strong> with Field descriptions</li>
+                        <li><strong>Validate on startup</strong> - fail fast if config is wrong</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="key-concept" style="margin-top: 50px;">
+                <h3>🎓 Summary: How I Generated These Diagrams</h3>
+                <p><strong>Tools Used:</strong></p>
+                <ul class="checklist">
+                    <li><strong>Mermaid.js</strong> - JavaScript library for diagram rendering</li>
+                    <li><strong>HTML/CSS</strong> - Custom styling and layout</li>
+                    <li><strong>JavaScript</strong> - Click handlers for interactivity</li>
+                    <li><strong>Syntax highlighting</strong> - Custom CSS classes for code</li>
+                </ul>
+                <p style="margin-top: 20px;"><strong>Process:</strong> I read your actual source code, identified the key patterns, and manually created these HTML files with embedded Mermaid diagrams and code snippets. Each code example is from your real project!</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for clickable diagrams -->
+    <div id="codeModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Code Details</h2>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Content loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true, 
+            theme: 'default',
+            flowchart: { useMaxWidth: true }
+        });
+        
+        // Code snippets for clickable nodes
+        const codeDetails = {
+            'Engine': {
+                title: '🔧 SQLAlchemy Engine Configuration',
+                content: `
+                    <h3>📁 File: app/core/database.py</h3>
+                    <pre>engine = create_engine(
+    settings.database_url,
+    future=True,                    # SQLAlchemy 2.0 style
+    echo=settings.debug,            # Log SQL queries
+    pool_pre_ping=True,             # Test connections before use
+    pool_size=20,                   # 20 persistent connections
+    max_overflow=10,                # +10 temporary (total 30)
+    pool_timeout=30,                # Wait 30s for connection
+    pool_recycle=3600,              # Recycle after 1 hour
+    poolclass=QueuePool,            # Production-grade pooling
+    connect_args={
+        "connect_timeout": 10,      # PostgreSQL timeout
+        "options": "-c statement_timeout=30000"  # Kill slow queries
+    }
+)</pre>
+                    <h3>💡 Why This Configuration?</h3>
+                    <p><strong>pool_size=20:</strong> 20 persistent connections ready to serve requests instantly. Creating new connections takes 100-500ms, but reusing pooled connections takes <1ms.</p>
+                    <p><strong>max_overflow=10:</strong> If all 20 connections are busy, create up to 10 more temporarily (total 30 max). These are destroyed after use.</p>
+                    <p><strong>pool_pre_ping=True:</strong> Before giving you a connection, SQLAlchemy tests it with SELECT 1. If dead, it's replaced automatically.</p>
+                    <p><strong>pool_recycle=3600:</strong> After 1 hour, connections are recycled to prevent stale connections and PostgreSQL timeouts.</p>
+                    <p><strong>statement_timeout=30000:</strong> Any query running >30 seconds is killed by PostgreSQL, preventing runaway queries from blocking workers.</p>
+                `
+            },
+            'Pool': {
+                title: '🏊 QueuePool Connection Pool',
+                content: `
+                    <h3>How QueuePool Works</h3>
+                    <pre>Request 1 → Get connection from pool (1ms)
+Request 2 → Get connection from pool (1ms)
+Request 3 → Get connection from pool (1ms)
+...
+Request 21 → All busy, create overflow connection (100ms)
+Request 31 → All 30 in use, WAIT in queue (pool_timeout=30s)</pre>
+                    <h3>💡 Benefits</h3>
+                    <p><strong>Performance:</strong> 100x faster than creating new connections</p>
+                    <p><strong>Controlled concurrency:</strong> Max 30 DB connections (prevents overwhelming PostgreSQL)</p>
+                    <p><strong>Automatic cleanup:</strong> Connections returned to pool after use</p>
+                    <h3>⚠️ Common Issues</h3>
+                    <p><strong>Pool exhaustion:</strong> If all 30 connections are in use and pool_timeout expires, raises TimeoutError</p>
+                    <p><strong>Solution:</strong> Increase pool_size or optimize slow queries</p>
+                `
+            },
+            'Session': {
+                title: '🔄 Session Management',
+                content: `
+                    <h3>📁 File: app/core/database.py</h3>
+                    <pre>def get_session():
+    """Yield session with automatic cleanup"""
+    db = SessionLocal()
+    try:
+        yield db
+    except Exception as e:
+        logger.error(f"Session error: {e}")
+        db.rollback()
+        raise
+    finally:
+        db.close()  # Returns connection to pool</pre>
+                    <h3>💡 Pattern: Generator with Cleanup</h3>
+                    <p><strong>yield db:</strong> Gives session to caller (API route)</p>
+                    <p><strong>try/except:</strong> Catches errors and rolls back changes</p>
+                    <p><strong>finally:</strong> ALWAYS runs (even on exception) - ensures connection returns to pool</p>
+                    <h3>🎯 Used in FastAPI</h3>
+                    <pre>@router.get("/products")
+async def get_products(
+    db: Session = Depends(get_session)  # FastAPI injects session
+):
+    return product_repo.get_all()
+    # FastAPI calls finally block automatically</pre>
+                `
+            },
+            'TxScope': {
+                title: '🔐 Transaction Context Manager',
+                content: `
+                    <h3>📁 File: app/core/transaction.py</h3>
+                    <pre>@contextmanager
+def transaction_scope(session: Session):
+    try:
+        yield session
+        session.commit()  # Commits ALL changes
+    except Exception as e:
+        session.rollback()  # Discards ALL changes
+        raise
+    finally:
+        session.close()</pre>
+                    <h3>💡 Usage Example</h3>
+                    <pre>with transaction_scope(session) as tx:
+    repo1.save(entity1)  # Queued
+    repo2.save(entity2)  # Queued
+    repo3.save(entity3)  # Queued
+    # If all succeed: COMMIT
+    # If any fails: ROLLBACK all 3</pre>
+                    <h3>🎯 Why Context Manager?</h3>
+                    <p><strong>Automatic cleanup:</strong> Finally block always runs</p>
+                    <p><strong>All-or-nothing:</strong> Either all operations commit or all rollback</p>
+                    <p><strong>No memory leaks:</strong> Session always closed</p>
+                `
+            },
+            'CtxVar': {
+                title: '🔖 Request ID Context Variable',
+                content: `
+                    <h3>📁 File: app/core/logging.py</h3>
+                    <pre>from contextvars import ContextVar
+
+request_id_ctx: ContextVar[Optional[str]] = ContextVar('request_id', default=None)
+
+def set_request_id(request_id: str):
+    request_id_ctx.set(request_id)
+
+def get_request_id() -> Optional[str]:
+    return request_id_ctx.get()</pre>
+                    <h3>💡 Why ContextVar?</h3>
+                    <p><strong>Thread-safe:</strong> Each async task has its own copy</p>
+                    <p><strong>Automatic isolation:</strong> Request 1 can't see Request 2's ID</p>
+                    <p><strong>Works with async:</strong> Unlike threading.local</p>
+                    <h3>🎯 Usage in Middleware</h3>
+                    <pre>@app.middleware("http")
+async def add_request_id(request, call_next):
+    request_id = str(uuid.uuid4())
+    set_request_id(request_id)  # Store in context
+    
+    response = await call_next(request)
+    # All logs in this request now include request_id
+    
+    response.headers["X-Request-ID"] = request_id
+    return response</pre>
+                `
+            },
+            'Formatter': {
+                title: '🎨 Contextual Log Formatter',
+                content: `
+                    <h3>📁 File: app/core/logging.py</h3>
+                    <pre>class ContextualFormatter(logging.Formatter):
+    def format(self, record):
+        request_id = request_id_ctx.get()
+        record.request_id = request_id if request_id else 'N/A'
+        return super().format(record)</pre>
+                    <h3>💡 Log Format</h3>
+                    <pre>log_format = (
+    "%(asctime)s | %(levelname)-8s | [%(request_id)s] | "
+    "%(name)s:%(funcName)s:%(lineno)d | %(message)s"
+)</pre>
+                    <h3>🎯 Example Output</h3>
+                    <pre>2026-01-21 10:30:15 | INFO     | [550e-8400] | Creating product
+2026-01-21 10:30:16 | DEBUG    | [550e-8400] | Product saved to DB
+2026-01-21 10:30:17 | INFO     | [550e-8400] | Product created successfully</pre>
+                    <p>All logs from the same request share the same [550e-8400] ID - you can trace the entire request flow!</p>
+                `
+            }
+        };
+        
+        // Make diagram nodes clickable
+        setTimeout(() => {
+            const nodeMap = {
+                'Engine': ['Engine', 'SQLAlchemy Engine'],
+                'Pool': ['Pool', 'QueuePool'],
+                'Session1': ['Session', 'Session 1'],
+                'Session2': ['Session', 'Session 2'],
+                'Session3': ['Session', 'Session N...'],
+                'TxScope': ['TxScope', 'transaction_scope'],
+                'CtxVar': ['CtxVar', 'ContextVar'],
+                'Formatter': ['Formatter', 'ContextualFormatter']
+            };
+            
+            Object.entries(nodeMap).forEach(([key, [detailKey, label]]) => {
+                const nodes = Array.from(document.querySelectorAll('.node')).filter(node => {
+                    const text = node.textContent.trim();
+                    return text.includes(label);
+                });
+                
+                nodes.forEach(node => {
+                    node.style.cursor = 'pointer';
+                    node.classList.add('clickable-node');
+                    node.title = 'Click to see code details';
+                    node.onclick = () => showCode(detailKey);
+                });
+            });
+        }, 1000);
+        
+        function showCode(key) {
+            const detail = codeDetails[key];
+            if (!detail) return;
+            
+            document.getElementById('modalTitle').textContent = detail.title;
+            document.getElementById('modalBody').innerHTML = detail.content;
+            document.getElementById('codeModal').style.display = 'block';
+        }
+        
+        function closeModal() {
+            document.getElementById('codeModal').style.display = 'none';
+        }
+        
+        // Close modal on outside click
+        window.onclick = function(event) {
+            const modal = document.getElementById('codeModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        };
+        
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        });
+        
+        // Add copy buttons to all code examples
+        document.addEventListener('DOMContentLoaded', function() {
+            const codeBlocks = document.querySelectorAll('.code-example');
+            codeBlocks.forEach(block => {
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'copy-btn';
+                copyBtn.textContent = '📋 Copy';
+                copyBtn.onclick = function() {
+                    const code = block.textContent;
+                    navigator.clipboard.writeText(code).then(() => {
+                        copyBtn.textContent = '✅ Copied!';
+                        setTimeout(() => {
+                            copyBtn.textContent = '📋 Copy';
+                        }, 2000);
+                    });
+                };
+                block.parentElement.insertBefore(copyBtn, block);
+            });
+        });
+    </script>
+</body>
+</html>

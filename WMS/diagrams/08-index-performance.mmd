@@ -1,0 +1,37 @@
+graph TD
+    subgraph "Query: Get Draft Documents"
+        Query1[SELECT * FROM documents<br/>WHERE status = 'DRAFT']
+    end
+    
+    subgraph "Without Index"
+        FullScan[Full Table Scan]
+        Read1M[Read 1,000,000 rows]
+        Filter[Filter in memory]
+        Return1K[Return 1,000 rows]
+        Time500[⏱️ 500ms]
+        
+        Query1 --> FullScan
+        FullScan --> Read1M
+        Read1M --> Filter
+        Filter --> Return1K
+        Return1K --> Time500
+    end
+    
+    subgraph "With Index: ix_documents_status"
+        IndexLookup[Index Lookup]
+        Read1K[Read 1,000 rows directly]
+        ReturnFast[Return 1,000 rows]
+        Time5[⏱️ 5ms]
+        
+        Query1 --> IndexLookup
+        IndexLookup --> Read1K
+        Read1K --> ReturnFast
+        ReturnFast --> Time5
+    end
+    
+    Time500 -.->|100x slower| Comparison
+    Time5 -.->|100x faster| Comparison[Performance Comparison]
+    
+    style Time500 fill:#F44336,stroke:#B71C1C,color:#fff
+    style Time5 fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style Comparison fill:#2196F3,stroke:#1565C0,color:#fff

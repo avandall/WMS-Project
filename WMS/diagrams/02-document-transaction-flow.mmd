@@ -1,0 +1,56 @@
+sequenceDiagram
+    participant Client
+    participant API
+    participant DocService
+    participant Session
+    participant WhRepo
+    participant InvRepo
+    participant DB
+    
+    Client->>API: POST /documents/{id}/post
+    API->>DocService: post_document(id, user)
+    
+    Note over DocService: Validate document exists
+    DocService->>DocService: _get_document_for_processing()
+    
+    Note over DocService,DB: START TRANSACTION
+    DocService->>WhRepo: set_auto_commit(False)
+    DocService->>InvRepo: set_auto_commit(False)
+    
+    alt Import Document
+        DocService->>WhRepo: add_product_to_warehouse()
+        WhRepo-->>DocService: OK (no commit)
+        DocService->>InvRepo: add_quantity()
+        InvRepo-->>DocService: OK (no commit)
+    else Export Document
+        DocService->>WhRepo: remove_product_from_warehouse()
+        WhRepo-->>DocService: OK (no commit)
+        DocService->>InvRepo: remove_quantity()
+        InvRepo-->>DocService: OK (no commit)
+    else Transfer Document
+        DocService->>WhRepo: remove_product (source)
+        WhRepo-->>DocService: OK (no commit)
+        DocService->>WhRepo: add_product (dest)
+        WhRepo-->>DocService: OK (no commit)
+    end
+    
+    DocService->>DocService: update document status
+    
+    alt All Operations Successful
+        DocService->>Session: commit()
+        Session->>DB: COMMIT TRANSACTION
+        DB-->>Session: Success
+        Note over DocService,DB: ✅ All changes committed atomically
+        DocService-->>API: Document Posted
+        API-->>Client: 200 OK
+    else Any Operation Failed
+        DocService->>Session: rollback()
+        Session->>DB: ROLLBACK TRANSACTION
+        DB-->>Session: Rolled back
+        Note over DocService,DB: ❌ All changes reverted
+        DocService-->>API: Error
+        API-->>Client: 400/500 Error
+    end
+    
+    DocService->>WhRepo: set_auto_commit(True)
+    DocService->>InvRepo: set_auto_commit(True)

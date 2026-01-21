@@ -1,0 +1,53 @@
+graph LR
+    subgraph "WMS Project"
+        App[app/]
+        
+        App --> API[api/]
+        App --> Core[core/]
+        App --> Models[models/]
+        App --> Services[services/]
+        App --> Repos[repositories/]
+        App --> Utils[utils/]
+        App --> Exceptions[exceptions/]
+        
+        API --> Routers[routers/]
+        API --> Schemas[schemas/]
+        API --> Deps[dependencies.py]
+        API --> Sec[security.py]
+        
+        Routers --> ProdRoute[products.py]
+        Routers --> WhRoute[warehouses.py]
+        Routers --> InvRoute[inventory.py]
+        Routers --> DocRoute[documents.py]
+        Routers --> RepRoute[reports.py]
+        
+        Core --> DB[database.py<br/>Connection Pool]
+        Core --> Settings[settings.py<br/>Configuration]
+        Core --> Logging[logging.py<br/>Structured Logs]
+        Core --> Tx[transaction.py<br/>ACID Manager]
+        
+        Models --> ProductM[product_domain.py]
+        Models --> WarehouseM[warehouse_domain.py]
+        Models --> InventoryM[inventory_domain.py]
+        Models --> DocumentM[document_domain.py]
+        
+        Services --> ProductS[product_service.py]
+        Services --> WarehouseS[warehouse_service.py]
+        Services --> InventoryS[inventory_service.py]
+        Services --> DocumentS[document_service.py]
+        Services --> ReportS[report_service.py]
+        
+        Repos --> Interfaces[interfaces/]
+        Repos --> SQL[sql/]
+        
+        SQL --> ProductR[product_repo.py]
+        SQL --> WarehouseR[warehouse_repo.py]
+        SQL --> InventoryR[inventory_repo.py]
+        SQL --> DocumentR[document_repo.py]
+        SQL --> ModelsSQL[models.py<br/>SQLAlchemy]
+    end
+    
+    style DB fill:#FF9800,stroke:#E65100,color:#fff
+    style Logging fill:#9C27B0,stroke:#4A148C,color:#fff
+    style Tx fill:#E91E63,stroke:#880E4F,color:#fff
+    style ModelsSQL fill:#FF9800,stroke:#E65100,color:#fff

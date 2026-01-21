@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WMS - Interactive API Flow</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1E88E5 0%, #1565C0 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #1565C0 0%, #2196F3 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header p { font-size: 1.2em; opacity: 0.9; }
+        .content { padding: 40px; }
+        .diagram-container {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        .instructions {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 5px;
+        }
+        .instructions h3 { color: #1976D2; margin-bottom: 10px; }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .modal-content {
+            background: white;
+            margin: 3% auto;
+            padding: 0;
+            width: 90%;
+            max-width: 1200px;
+            border-radius: 10px;
+            box-shadow: 0 10px 50px rgba(0,0,0,0.5);
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: slideDown 0.3s;
+        }
+        @keyframes slideDown {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .modal-header {
+            background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
+            color: white;
+            padding: 25px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h2 { font-size: 1.8em; }
+        .close {
+            font-size: 35px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .close:hover { transform: scale(1.2); }
+        .modal-body { padding: 30px; }
+        .code-section { margin-bottom: 30px; }
+        .code-section h3 {
+            color: #1565C0;
+            margin-bottom: 15px;
+            font-size: 1.4em;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #2196F3;
+        }
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+        .code-block .comment { color: #6A9955; }
+        .code-block .keyword { color: #C586C0; }
+        .code-block .function { color: #DCDCAA; }
+        .code-block .string { color: #CE9178; }
+        .code-block .class { color: #4EC9B0; }
+        .explanation {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        .file-path {
+            background: #263238;
+            color: #80CBC4;
+            padding: 8px 15px;
+            border-radius: 5px 5px 0 0;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        .clickable-hint {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔌 API Request Flow</h1>
+            <p>From HTTP Request to Response - Click any component!</p>
+        </div>
+        
+        <div class="content">
+            <div class="instructions">
+                <h3>💡 How to Use:</h3>
+                <p><strong>Click any box</strong> to see the actual API code, middleware implementation, and security checks.</p>
+            </div>
+            
+            <div class="diagram-container">
+                <div class="mermaid">
+                flowchart TD
+                    Client([HTTP Request]):::clickable
+                    RateLimit{Rate Limiter<br/>60 req/min}:::clickable
+                    ReqID[Generate Request ID]:::clickable
+                    CORS{CORS Check}:::clickable
+                    Router[FastAPI Router]:::clickable
+                    Validate[Input Validation]:::clickable
+                    Auth[Authentication]:::clickable
+                    Session[Get DB Session]:::clickable
+                    Service[Service Layer]:::clickable
+                    Response([HTTP Response]):::clickable
+                    Error429([429 Too Many]):::error
+                    Error403([403 Forbidden]):::error
+                    Error400([400 Bad Request]):::error
+                    Error401([401 Unauthorized]):::error
+                    
+                    Client --> RateLimit
+                    RateLimit -->|Pass| ReqID
+                    RateLimit -->|Fail| Error429
+                    ReqID --> CORS
+                    CORS -->|Pass| Router
+                    CORS -->|Fail| Error403
+                    Router --> Validate
+                    Validate -->|Valid| Auth
+                    Validate -->|Invalid| Error400
+                    Auth -->|Authorized| Session
+                    Auth -->|Unauthorized| Error401
+                    Session --> Service
+                    Service --> Response
+                    
+                    classDef clickable fill:#2196F3,stroke:#1565C0,stroke-width:3px,color:#fff,cursor:pointer
+                    classDef error fill:#F44336,stroke:#B71C1C,stroke-width:2px,color:#fff
+                </div>
+                <p class="clickable-hint">👆 Click any blue box to explore the code</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="codeModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Code Details</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+
+        const codeData = {
+            'HTTP Request': {
+                title: 'HTTP Request Entry',
+                sections: [{
+                    heading: 'Example HTTP Request',
+                    file: 'Client → Server',
+                    code: `<span class="comment">// Example: Create a new product</span>
+<span class="keyword">POST</span> /api/products <span class="class">HTTP/1.1</span>
+Host: localhost:<span class="class">8000</span>
+Content-Type: application/json
+X-Request-ID: <span class="class">550e8400-e29b-41d4-a716-446655440000</span>
+
+{
+  <span class="string">"name"</span>: <span class="string">"Laptop Dell XPS 15"</span>,
+  <span class="string">"description"</span>: <span class="string">"High-performance laptop"</span>,
+  <span class="string">"price"</span>: <span class="class">1500.00</span>
+}`,
+                    explanation: '<strong>Entry Point:</strong> Every API interaction starts with an HTTP request. FastAPI receives and routes this to the appropriate handler.'
+                }]
+            },
+            'Rate Limiter<br/>60 req/min': {
+                title: 'Rate Limiting Middleware',
+                sections: [{
+                    heading: 'Rate Limiter Implementation',
+                    file: 'app/api/security.py',
+                    code: `<span class="keyword">class</span> <span class="class">RateLimiter</span>:
+    <span class="keyword">def</span> <span class="function">__init__</span>(<span class="keyword">self</span>, max_requests: <span class="class">int</span> = <span class="class">60</span>):
+        <span class="keyword">self</span>.max_requests = max_requests
+        <span class="keyword">self</span>.window = <span class="class">60</span>  <span class="comment"># 1 minute</span>
+        <span class="keyword">self</span>.requests: Dict[<span class="class">str</span>, List[<span class="class">float</span>]] = {}
+    
+    <span class="keyword">async def</span> <span class="function">check_rate_limit</span>(<span class="keyword">self</span>, client_ip: <span class="class">str</span>) -> <span class="class">bool</span>:
+        <span class="comment">"""Check if client has exceeded rate limit"""</span>
+        now = time.<span class="function">time</span>()
+        
+        <span class="comment"># Get request history for this IP</span>
+        <span class="keyword">if</span> client_ip <span class="keyword">not in self</span>.requests:
+            <span class="keyword">self</span>.requests[client_ip] = []
+        
+        <span class="comment"># Remove requests older than 1 minute</span>
+        <span class="keyword">self</span>.requests[client_ip] = [
+            req_time <span class="keyword">for</span> req_time <span class="keyword">in self</span>.requests[client_ip]
+            <span class="keyword">if</span> now - req_time < <span class="keyword">self</span>.window
+        ]
+        
+        <span class="comment"># Check if limit exceeded</span>
+        <span class="keyword">if</span> <span class="function">len</span>(<span class="keyword">self</span>.requests[client_ip]) >= <span class="keyword">self</span>.max_requests:
+            <span class="keyword">return False</span>  <span class="comment"># Rate limit exceeded!</span>
+        
+        <span class="comment"># Add current request</span>
+        <span class="keyword">self</span>.requests[client_ip].<span class="function">append</span>(now)
+        <span class="keyword">return True</span>`,
+                    explanation: '<strong>DoS Protection:</strong> Limits each IP to 60 requests per minute. Prevents malicious users from overwhelming the server.'
+                }, {
+                    heading: 'Rate Limit Middleware',
+                    file: 'app/api/__init__.py',
+                    code: `<span class="keyword">@app</span>.<span class="function">middleware</span>(<span class="string">"http"</span>)
+<span class="keyword">async def</span> <span class="function">rate_limit_middleware</span>(request: <span class="class">Request</span>, call_next):
+    client_ip = request.client.host
+    
+    <span class="keyword">if not await</span> rate_limiter.<span class="function">check_rate_limit</span>(client_ip):
+        <span class="keyword">return</span> <span class="class">JSONResponse</span>(
+            status_code=<span class="class">429</span>,
+            content={
+                <span class="string">"error"</span>: <span class="string">"Rate limit exceeded"</span>,
+                <span class="string">"message"</span>: <span class="string">"Too many requests. Try again later."</span>,
+                <span class="string">"retry_after"</span>: <span class="class">60</span>
+            }
+        )
+    
+    <span class="keyword">return await</span> <span class="function">call_next</span>(request)`,
+                    explanation: '<strong>First Line of Defense:</strong> Executed BEFORE any route handler. Rejects excessive requests with HTTP 429.'
+                }]
+            },
+            'Generate Request ID': {
+                title: 'Request ID Middleware',
+                sections: [{
+                    heading: 'Generate Unique Request ID',
+                    file: 'app/api/__init__.py',
+                    code: `<span class="keyword">@app</span>.<span class="function">middleware</span>(<span class="string">"http"</span>)
+<span class="keyword">async def</span> <span class="function">add_request_id</span>(request: <span class="class">Request</span>, call_next):
+    <span class="comment"># Get or generate request ID</span>
+    request_id = request.headers.<span class="function">get</span>(<span class="string">"X-Request-ID"</span>)
+    <span class="keyword">if not</span> request_id:
+        request_id = <span class="function">str</span>(uuid.<span class="function">uuid4</span>())
+    
+    <span class="comment"># Store in request state</span>
+    request.state.request_id = request_id
+    
+    <span class="comment"># Add to logging context</span>
+    <span class="keyword">with</span> logger.<span class="function">contextualize</span>(request_id=request_id):
+        response = <span class="keyword">await</span> <span class="function">call_next</span>(request)
+    
+    <span class="comment"># Add to response headers</span>
+    response.headers[<span class="string">"X-Request-ID"</span>] = request_id
+    <span class="keyword">return</span> response`,
+                    explanation: '<strong>Request Tracing:</strong> Every request gets a unique ID for tracking across logs. Essential for debugging production issues.'
+                }]
+            },
+            'CORS Check': {
+                title: 'CORS (Cross-Origin Resource Sharing)',
+                sections: [{
+                    heading: 'CORS Middleware Configuration',
+                    file: 'app/api/__init__.py',
+                    code: `<span class="keyword">from</span> fastapi.middleware.cors <span class="keyword">import</span> <span class="class">CORSMiddleware</span>
+
+app.<span class="function">add_middleware</span>(
+    <span class="class">CORSMiddleware</span>,
+    allow_origins=settings.cors_origins,  <span class="comment"># ["http://localhost:3000"]</span>
+    allow_credentials=<span class="class">True</span>,
+    allow_methods=[<span class="string">"*"</span>],  <span class="comment"># GET, POST, PUT, DELETE, etc.</span>
+    allow_headers=[<span class="string">"*"</span>],  <span class="comment"># All headers allowed</span>
+)`,
+                    explanation: '<strong>Browser Security:</strong> Allows web apps from different domains to call your API. Without CORS, browsers block cross-origin requests.'
+                }, {
+                    heading: 'Settings Configuration',
+                    file: 'app/core/settings.py',
+                    code: `<span class="keyword">class</span> <span class="class">Settings</span>(<span class="class">BaseSettings</span>):
+    <span class="comment"># CORS configuration</span>
+    cors_origins: List[<span class="class">str</span>] = Field(
+        default=[<span class="string">"http://localhost:3000"</span>, <span class="string">"http://localhost:8080"</span>],
+        description=<span class="string">"Allowed CORS origins"</span>
+    )
+    cors_allow_credentials: <span class="class">bool</span> = Field(
+        default=<span class="class">True</span>,
+        description=<span class="string">"Allow cookies in CORS requests"</span>
+    )
+    
+    <span class="keyword">class</span> <span class="class">Config</span>:
+        env_prefix = <span class="string">"WMS_"</span>`,
+                    explanation: '<strong>Configuration:</strong> Define allowed origins in environment variables. Production should use specific domains, not "*".'
+                }]
+            },
+            'FastAPI Router': {
+                title: 'FastAPI Router & Endpoint',
+                sections: [{
+                    heading: 'Router Definition',
+                    file: 'app/api/routers/products.py',
+                    code: `<span class="keyword">from</span> fastapi <span class="keyword">import</span> <span class="class">APIRouter</span>, <span class="class">Depends</span>
+
+router = <span class="class">APIRouter</span>(
+    prefix=<span class="string">"/products"</span>,
+    tags=[<span class="string">"products"</span>],
+    responses={<span class="class">404</span>: {<span class="string">"description"</span>: <span class="string">"Not found"</span>}}
+)
+
+<span class="keyword">@router</span>.<span class="function">post</span>(<span class="string">"/"</span>, status_code=<span class="class">201</span>)
+<span class="keyword">async def</span> <span class="function">create_product</span>(
+    product: <span class="class">ProductCreate</span>,
+    service: <span class="class">ProductService</span> = <span class="function">Depends</span>(get_product_service)
+) -> <span class="class">ProductResponse</span>:
+    <span class="comment">"""Create a new product"""</span>
+    new_product = <span class="keyword">await</span> service.<span class="function">create_product</span>(product)
+    <span class="keyword">return</span> new_product`,
+                    explanation: '<strong>Routing:</strong> FastAPI matches HTTP method + path to the correct handler function. Type hints enable automatic validation and documentation.'
+                }, {
+                    heading: 'Router Registration',
+                    file: 'app/api/__init__.py',
+                    code: `<span class="keyword">from</span> app.api.routers <span class="keyword">import</span> products, warehouses, documents
+
+<span class="comment"># Register all routers</span>
+app.<span class="function">include_router</span>(products.router, prefix=<span class="string">"/api"</span>)
+app.<span class="function">include_router</span>(warehouses.router, prefix=<span class="string">"/api"</span>)
+app.<span class="function">include_router</span>(documents.router, prefix=<span class="string">"/api"</span>)
+app.<span class="function">include_router</span>(inventory.router, prefix=<span class="string">"/api"</span>)
+app.<span class="function">include_router</span>(reports.router, prefix=<span class="string">"/api"</span>)`,
+                    explanation: '<strong>Modularity:</strong> Each resource (products, warehouses) has its own router file. All are combined into the main FastAPI app.'
+                }]
+            },
+            'Input Validation': {
+                title: 'Input Validation with Pydantic',
+                sections: [{
+                    heading: 'Pydantic Schema',
+                    file: 'app/api/schemas/product_schemas.py',
+                    code: `<span class="keyword">from</span> pydantic <span class="keyword">import</span> <span class="class">BaseModel</span>, <span class="class">Field</span>, validator
+
+<span class="keyword">class</span> <span class="class">ProductCreate</span>(<span class="class">BaseModel</span>):
+    name: <span class="class">str</span> = Field(..., min_length=<span class="class">1</span>, max_length=<span class="class">255</span>)
+    description: <span class="class">str</span> = Field(..., max_length=<span class="class">1000</span>)
+    price: <span class="class">float</span> = Field(..., gt=<span class="class">0</span>)  <span class="comment"># Greater than 0</span>
+    
+    <span class="keyword">@validator</span>(<span class="string">'price'</span>)
+    <span class="keyword">def</span> <span class="function">validate_price</span>(<span class="keyword">cls</span>, v):
+        <span class="keyword">if</span> v <= <span class="class">0</span>:
+            <span class="keyword">raise</span> <span class="class">ValueError</span>(<span class="string">'Price must be positive'</span>)
+        <span class="keyword">return</span> <span class="function">round</span>(v, <span class="class">2</span>)  <span class="comment"># Round to 2 decimals</span>`,
+                    explanation: '<strong>Automatic Validation:</strong> Pydantic validates all input BEFORE the route handler runs. Invalid data → immediate 422 error response.'
+                }, {
+                    heading: 'Validation Functions',
+                    file: 'app/api/security.py',
+                    code: `<span class="keyword">def</span> <span class="function">validate_id_parameter</span>(id_value: <span class="class">int</span>, param_name: <span class="class">str</span>):
+    <span class="comment">"""Validate that ID is positive"""</span>
+    <span class="keyword">if</span> id_value <= <span class="class">0</span>:
+        <span class="keyword">raise</span> <span class="class">HTTPException</span>(
+            status_code=<span class="class">400</span>,
+            detail=<span class="string">f"{param_name} must be positive"</span>
+        )
+
+<span class="keyword">def</span> <span class="function">validate_pagination_params</span>(page: <span class="class">int</span>, page_size: <span class="class">int</span>):
+    <span class="comment">"""Validate pagination parameters"""</span>
+    <span class="keyword">if</span> page < <span class="class">1</span>:
+        <span class="keyword">raise</span> <span class="class">HTTPException</span>(status_code=<span class="class">400</span>, detail=<span class="string">"Page must be >= 1"</span>)
+    
+    <span class="keyword">if</span> page_size < <span class="class">1</span> <span class="keyword">or</span> page_size > <span class="class">100</span>:
+        <span class="keyword">raise</span> <span class="class">HTTPException</span>(
+            status_code=<span class="class">400</span>, 
+            detail=<span class="string">"Page size must be between 1 and 100"</span>
+        )`,
+                    explanation: '<strong>Security:</strong> Validate IDs and pagination to prevent negative IDs, SQL injection attempts, or memory exhaustion from huge page sizes.'
+                }]
+            },
+            'Authentication': {
+                title: 'Authentication & Authorization',
+                sections: [{
+                    heading: 'Dependency Injection',
+                    file: 'app/api/dependencies.py',
+                    code: `<span class="keyword">from</span> fastapi <span class="keyword">import</span> <span class="class">Depends</span>, <span class="class">HTTPException</span>, status
+<span class="keyword">from</span> fastapi.security <span class="keyword">import</span> <span class="class">HTTPBearer</span>
+
+security = <span class="class">HTTPBearer</span>()
+
+<span class="keyword">async def</span> <span class="function">get_current_user</span>(
+    credentials: <span class="class">HTTPAuthorizationCredentials</span> = <span class="function">Depends</span>(security)
+) -> <span class="class">str</span>:
+    <span class="comment">"""Extract and validate JWT token"""</span>
+    token = credentials.credentials
+    
+    <span class="keyword">try</span>:
+        <span class="comment"># Decode JWT (simplified)</span>
+        payload = jwt.<span class="function">decode</span>(token, SECRET_KEY, algorithms=[<span class="string">"HS256"</span>])
+        username: <span class="class">str</span> = payload.<span class="function">get</span>(<span class="string">"sub"</span>)
+        
+        <span class="keyword">if</span> username <span class="keyword">is None</span>:
+            <span class="keyword">raise</span> <span class="class">HTTPException</span>(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=<span class="string">"Invalid authentication credentials"</span>
+            )
+        
+        <span class="keyword">return</span> username
+        
+    <span class="keyword">except</span> jwt.<span class="class">JWTError</span>:
+        <span class="keyword">raise</span> <span class="class">HTTPException</span>(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=<span class="string">"Could not validate credentials"</span>
+        )`,
+                    explanation: '<strong>JWT Authentication:</strong> Bearer token is extracted from Authorization header, decoded, and validated. If invalid → 401 Unauthorized.'
+                }]
+            },
+            'Get DB Session': {
+                title: 'Database Session Management',
+                sections: [{
+                    heading: 'Session Dependency',
+                    file: 'app/api/dependencies.py',
+                    code: `<span class="keyword">from</span> app.core.database <span class="keyword">import</span> SessionLocal
+
+<span class="keyword">def</span> <span class="function">get_db</span>():
+    <span class="comment">"""Database session dependency"""</span>
+    db = <span class="function">SessionLocal</span>()
+    <span class="keyword">try</span>:
+        <span class="keyword">yield</span> db
+    <span class="keyword">finally</span>:
+        db.<span class="function">close</span>()  <span class="comment"># Always close session</span>`,
+                    explanation: '<strong>Resource Management:</strong> Yield creates a session, passes it to the endpoint, then guarantees cleanup (even if error occurs).'
+                }, {
+                    heading: 'Connection Pool',
+                    file: 'app/core/database.py',
+                    code: `<span class="keyword">from</span> sqlalchemy <span class="keyword">import</span> create_engine
+<span class="keyword">from</span> sqlalchemy.pool <span class="keyword">import</span> <span class="class">QueuePool</span>
+
+engine = <span class="function">create_engine</span>(
+    settings.database_url,
+    poolclass=<span class="class">QueuePool</span>,
+    pool_size=<span class="class">20</span>,           <span class="comment"># 20 persistent connections</span>
+    max_overflow=<span class="class">10</span>,        <span class="comment"># + 10 temporary connections</span>
+    pool_timeout=<span class="class">30</span>,        <span class="comment"># Wait 30s for connection</span>
+    pool_recycle=<span class="class">3600</span>,      <span class="comment"># Recycle after 1 hour</span>
+    pool_pre_ping=<span class="class">True</span>,     <span class="comment"># Test connection health</span>
+    connect_args={
+        <span class="string">"options"</span>: <span class="string">"-c statement_timeout=30000"</span>  <span class="comment"># 30s query timeout</span>
+    }
+)
+
+<span class="class">SessionLocal</span> = <span class="function">sessionmaker</span>(bind=engine)`,
+                    explanation: '<strong>Performance:</strong> Connection pooling reuses database connections instead of creating new ones. 100x faster than creating connections per request!'
+                }]
+            },
+            'Service Layer': {
+                title: 'Service Layer Business Logic',
+                sections: [{
+                    heading: 'Service Dependency',
+                    file: 'app/api/dependencies.py',
+                    code: `<span class="keyword">def</span> <span class="function">get_product_service</span>(
+    db: <span class="class">Session</span> = <span class="function">Depends</span>(get_db)
+) -> <span class="class">ProductService</span>:
+    <span class="comment">"""Create product service with repositories"""</span>
+    product_repo = <span class="class">ProductRepository</span>(db)
+    <span class="keyword">return</span> <span class="class">ProductService</span>(product_repo)`,
+                    explanation: '<strong>Dependency Injection:</strong> FastAPI automatically creates service instances with all dependencies (database session, repositories).'
+                }, {
+                    heading: 'Service Implementation',
+                    file: 'app/services/product_service.py',
+                    code: `<span class="keyword">class</span> <span class="class">ProductService</span>:
+    <span class="keyword">def</span> <span class="function">__init__</span>(<span class="keyword">self</span>, product_repo: <span class="class">IProductRepository</span>):
+        <span class="keyword">self</span>.product_repo = product_repo
+    
+    <span class="keyword">async def</span> <span class="function">create_product</span>(<span class="keyword">self</span>, data: <span class="class">ProductCreate</span>) -> <span class="class">Product</span>:
+        <span class="comment"># Convert Pydantic model to domain entity</span>
+        product = <span class="class">Product</span>(
+            name=data.name,
+            description=data.description,
+            price=data.price
+        )
+        
+        <span class="comment"># Save via repository</span>
+        saved_product = <span class="keyword">await self</span>.product_repo.<span class="function">save</span>(product)
+        
+        logger.<span class="function">info</span>(<span class="string">f"Created product: {saved_product.product_id}"</span>)
+        <span class="keyword">return</span> saved_product`,
+                    explanation: '<strong>Business Logic:</strong> Service layer orchestrates operations, coordinates repositories, and enforces business rules. Keeps routes thin and testable.'
+                }]
+            },
+            'HTTP Response': {
+                title: 'HTTP Response',
+                sections: [{
+                    heading: 'Success Response',
+                    file: 'API Response',
+                    code: `<span class="class">HTTP/1.1 201</span> Created
+Content-Type: application/json
+X-Request-ID: <span class="class">550e8400-e29b-41d4-a716-446655440000</span>
+
+{
+  <span class="string">"product_id"</span>: <span class="class">123</span>,
+  <span class="string">"name"</span>: <span class="string">"Laptop Dell XPS 15"</span>,
+  <span class="string">"description"</span>: <span class="string">"High-performance laptop"</span>,
+  <span class="string">"price"</span>: <span class="class">1500.00</span>,
+  <span class="string">"created_at"</span>: <span class="string">"2026-01-21T10:30:00Z"</span>
+}`,
+                    explanation: '<strong>Success:</strong> Status 201 Created with the new resource. X-Request-ID header allows client to track the request in logs.'
+                }]
+            }
+        };
+
+        // Modal handling
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('codeModal');
+            const span = document.getElementsByClassName('close')[0];
+            
+            span.onclick = () => modal.style.display = 'none';
+            window.onclick = (event) => {
+                if (event.target == modal) modal.style.display = 'none';
+            };
+            
+            setTimeout(() => {
+                document.querySelectorAll('.node').forEach(node => {
+                    node.style.cursor = 'pointer';
+                    node.addEventListener('click', function() {
+                        const text = this.querySelector('span').textContent.trim();
+                        showCode(text);
+                    });
+                });
+            }, 1000);
+        });
+
+        function showCode(nodeText) {
+            const data = codeData[nodeText];
+            if (!data) return;
+            
+            document.getElementById('modalTitle').textContent = data.title;
+            
+            let html = '';
+            data.sections.forEach(section => {
+                html += `
+                    <div class="code-section">
+                        <h3>${section.heading}</h3>
+                        <div class="file-path">📁 ${section.file}</div>
+                        <div class="code-block">${section.code}</div>
+                        <div class="explanation">${section.explanation}</div>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('modalBody').innerHTML = html;
+            document.getElementById('codeModal').style.display = 'block';
+        }
+    </script>
+</body>
+</html>

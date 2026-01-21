@@ -1,0 +1,51 @@
+erDiagram
+    PRODUCTS ||--o{ WAREHOUSE_INVENTORY : contains
+    PRODUCTS ||--o| INVENTORY : tracks
+    PRODUCTS ||--o{ DOCUMENT_ITEMS : includes
+    WAREHOUSES ||--o{ WAREHOUSE_INVENTORY : stores
+    WAREHOUSES ||--o{ DOCUMENTS : "from_warehouse"
+    WAREHOUSES ||--o{ DOCUMENTS : "to_warehouse"
+    DOCUMENTS ||--|{ DOCUMENT_ITEMS : contains
+    
+    PRODUCTS {
+        int product_id PK "Primary Key"
+        string name "Indexed"
+        string description
+        float price "CHECK >= 0"
+    }
+    
+    WAREHOUSES {
+        int warehouse_id PK "Primary Key"
+        string location "Unique, Indexed"
+    }
+    
+    INVENTORY {
+        int product_id PK "FK to products"
+        int quantity "CHECK >= 0"
+    }
+    
+    WAREHOUSE_INVENTORY {
+        int id PK "Primary Key"
+        int warehouse_id FK "Indexed"
+        int product_id FK "Indexed"
+        int quantity "CHECK >= 0"
+    }
+    
+    DOCUMENTS {
+        int document_id PK "Primary Key"
+        string doc_type "Indexed"
+        string status "Indexed"
+        int from_warehouse_id FK "Indexed"
+        int to_warehouse_id FK "Indexed"
+        string created_by "Indexed"
+        datetime created_at "Indexed"
+        datetime posted_at "Indexed"
+    }
+    
+    DOCUMENT_ITEMS {
+        int id PK "Primary Key"
+        int document_id FK
+        int product_id FK
+        int quantity
+        float unit_price
+    }

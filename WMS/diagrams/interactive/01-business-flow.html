@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WMS - Interactive Business Flow</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #2E7D32 0%, #4CAF50 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header p { font-size: 1.2em; opacity: 0.9; }
+        .content {
+            padding: 40px;
+        }
+        .diagram-container {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        .instructions {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 5px;
+        }
+        .instructions h3 { color: #1976D2; margin-bottom: 10px; }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .modal-content {
+            background: white;
+            margin: 3% auto;
+            padding: 0;
+            width: 90%;
+            max-width: 1200px;
+            border-radius: 10px;
+            box-shadow: 0 10px 50px rgba(0,0,0,0.5);
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: slideDown 0.3s;
+        }
+        @keyframes slideDown {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .modal-header {
+            background: linear-gradient(135deg, #E91E63 0%, #FF4081 100%);
+            color: white;
+            padding: 25px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h2 { font-size: 1.8em; }
+        .close {
+            font-size: 35px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .close:hover { transform: scale(1.2); }
+        .modal-body {
+            padding: 30px;
+        }
+        .code-section {
+            margin-bottom: 30px;
+        }
+        .code-section h3 {
+            color: #2E7D32;
+            margin-bottom: 15px;
+            font-size: 1.4em;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #4CAF50;
+        }
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+        .code-block .comment { color: #6A9955; }
+        .code-block .keyword { color: #C586C0; }
+        .code-block .function { color: #DCDCAA; }
+        .code-block .string { color: #CE9178; }
+        .code-block .class { color: #4EC9B0; }
+        .explanation {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        .file-path {
+            background: #263238;
+            color: #80CBC4;
+            padding: 8px 15px;
+            border-radius: 5px 5px 0 0;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        #mermaidDiagram { cursor: pointer; }
+        .clickable-hint {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔄 Core Business Flow</h1>
+            <p>Document Posting Transaction - Click any box to see the code!</p>
+        </div>
+        
+        <div class="content">
+            <div class="instructions">
+                <h3>💡 How to Use:</h3>
+                <p><strong>Click any box</strong> in the diagram below to see the actual code implementation, file location, and explanation of what happens at that step.</p>
+            </div>
+            
+            <div class="diagram-container">
+                <div class="mermaid" id="mermaidDiagram">
+                graph TD
+                    Start([POST /documents/1/post]):::clickable
+                    ValidateDoc[Validate Document Exists]:::clickable
+                    StartTx[START TRANSACTION]:::clickable
+                    DisableCommit[Disable Auto-Commit]:::clickable
+                    CheckType{Document Type?}:::clickable
+                    Import[Process Import<br/>Add to Warehouse]:::clickable
+                    Export[Process Export<br/>Remove from Warehouse]:::clickable
+                    Transfer[Process Transfer<br/>Move Between Warehouses]:::clickable
+                    UpdateStatus[Update Status to POSTED]:::clickable
+                    Commit[COMMIT Transaction]:::clickable
+                    Rollback[ROLLBACK on Error]:::clickable
+                    Response([Return Success/Error]):::clickable
+                    
+                    Start --> ValidateDoc
+                    ValidateDoc --> StartTx
+                    StartTx --> DisableCommit
+                    DisableCommit --> CheckType
+                    CheckType -->|IMPORT| Import
+                    CheckType -->|EXPORT| Export
+                    CheckType -->|TRANSFER| Transfer
+                    Import --> UpdateStatus
+                    Export --> UpdateStatus
+                    Transfer --> UpdateStatus
+                    UpdateStatus --> Commit
+                    Commit --> Response
+                    CheckType -.->|Error| Rollback
+                    Import -.->|Error| Rollback
+                    Export -.->|Error| Rollback
+                    Transfer -.->|Error| Rollback
+                    Rollback --> Response
+                    
+                    classDef clickable fill:#4CAF50,stroke:#2E7D32,stroke-width:3px,color:#fff,cursor:pointer
+                    classDef error fill:#F44336,stroke:#B71C1C,stroke-width:2px,color:#fff
+                    class Rollback error
+                </div>
+                <p class="clickable-hint">👆 Click any green box to explore the code</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="codeModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Code Details</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true, 
+            theme: 'default',
+            flowchart: { 
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+
+        const codeData = {
+            'POST /documents/1/post': {
+                title: 'API Endpoint - Document Posting',
+                sections: [
+                    {
+                        heading: 'Router Definition',
+                        file: 'app/api/routers/documents.py',
+                        code: `<span class="keyword">@router</span>.<span class="function">post</span>(<span class="string">"/{document_id}/post"</span>)
+<span class="keyword">async def</span> <span class="function">post_document</span>(
+    document_id: <span class="class">int</span>,
+    current_user: <span class="class">str</span> = <span class="function">Depends</span>(get_current_user),
+    service: <span class="class">DocumentService</span> = <span class="function">Depends</span>(get_document_service)
+):
+    <span class="comment"># Validate ID parameter</span>
+    <span class="function">validate_id_parameter</span>(document_id, <span class="string">"document_id"</span>)
+    
+    <span class="comment"># Execute business logic with ACID transaction</span>
+    document = <span class="keyword">await</span> service.<span class="function">post_document</span>(document_id, current_user)
+    <span class="keyword">return</span> document`,
+                        explanation: '<strong>Entry Point:</strong> This is where the API receives the HTTP POST request. It validates the document ID, gets the current user, and delegates to the service layer.'
+                    }
+                ]
+            },
+            'Validate Document Exists': {
+                title: 'Document Validation',
+                sections: [
+                    {
+                        heading: 'Get Document for Processing',
+                        file: 'app/services/document_service.py',
+                        code: `<span class="keyword">def</span> <span class="function">_get_document_for_processing</span>(<span class="keyword">self</span>, document_id: <span class="class">int</span>) -> <span class="class">Document</span>:
+    <span class="comment"># Fetch document from repository</span>
+    document = <span class="keyword">self</span>.document_repo.<span class="function">get</span>(document_id)
+    
+    <span class="keyword">if not</span> document:
+        <span class="keyword">raise</span> <span class="class">DocumentNotFoundException</span>(
+            <span class="string">f"Document with ID {document_id} not found"</span>
+        )
+    
+    <span class="comment"># Only DRAFT documents can be posted</span>
+    <span class="keyword">if</span> document.status != <span class="class">DocumentStatus</span>.DRAFT:
+        <span class="keyword">raise</span> <span class="class">InvalidDocumentStateException</span>(
+            <span class="string">f"Document must be in DRAFT status, current: {document.status}"</span>
+        )
+    
+    <span class="keyword">return</span> document`,
+                        explanation: '<strong>Business Rule:</strong> Before processing, we verify the document exists and is in DRAFT status. Only draft documents can be posted to prevent double-posting.'
+                    }
+                ]
+            },
+            'START TRANSACTION': {
+                title: 'Transaction Initialization',
+                sections: [
+                    {
+                        heading: 'Begin ACID Transaction',
+                        file: 'app/services/document_service.py',
+                        code: `<span class="keyword">async def</span> <span class="function">post_document</span>(<span class="keyword">self</span>, document_id: <span class="class">int</span>, user: <span class="class">str</span>) -> <span class="class">Document</span>:
+    logger.<span class="function">info</span>(<span class="string">f"Starting document post: {document_id}"</span>)
+    
+    <span class="keyword">try</span>:
+        <span class="comment"># Validate document</span>
+        document = <span class="keyword">self</span>.<span class="function">_get_document_for_processing</span>(document_id)
+        
+        <span class="comment"># Get database session (transaction starts here)</span>
+        session = <span class="keyword">self</span>.document_repo.session
+        
+        <span class="comment"># Disable auto-commit for all repositories</span>
+        <span class="keyword">self</span>.<span class="function">_set_repos_auto_commit</span>(<span class="class">False</span>)`,
+                        explanation: '<strong>ACID Guarantee:</strong> The transaction starts when we get the database session. All subsequent operations will be atomic - either ALL succeed or ALL fail.'
+                    }
+                ]
+            },
+            'Disable Auto-Commit': {
+                title: 'Transaction Control Setup',
+                sections: [
+                    {
+                        heading: 'Disable Auto-Commit Mode',
+                        file: 'app/services/document_service.py',
+                        code: `<span class="keyword">def</span> <span class="function">_set_repos_auto_commit</span>(<span class="keyword">self</span>, value: <span class="class">bool</span>):
+    <span class="comment">"""Control transaction behavior across all repositories"""</span>
+    <span class="keyword">self</span>.document_repo.<span class="function">set_auto_commit</span>(value)
+    <span class="keyword">self</span>.warehouse_repo.<span class="function">set_auto_commit</span>(value)
+    <span class="keyword">self</span>.inventory_repo.<span class="function">set_auto_commit</span>(value)
+    <span class="keyword">self</span>.product_repo.<span class="function">set_auto_commit</span>(value)
+    
+    logger.<span class="function">debug</span>(<span class="string">f"Set auto_commit={value} for all repositories"</span>)`,
+                        explanation: '<strong>Why?</strong> By disabling auto-commit, all database changes are queued in memory. Nothing is saved to the database until we explicitly call COMMIT. This ensures atomicity.'
+                    },
+                    {
+                        heading: 'Repository Base Class',
+                        file: 'app/core/transaction.py',
+                        code: `<span class="keyword">def</span> <span class="function">set_auto_commit</span>(<span class="keyword">self</span>, value: <span class="class">bool</span>):
+    <span class="comment">"""Enable/disable automatic commit after operations"""</span>
+    <span class="keyword">self</span>._auto_commit = value
+    
+<span class="keyword">def</span> <span class="function">_commit_if_auto</span>(<span class="keyword">self</span>):
+    <span class="comment">"""Commit only if auto-commit is enabled"""</span>
+    <span class="keyword">if self</span>._auto_commit:
+        <span class="keyword">self</span>.session.<span class="function">commit</span>()`,
+                        explanation: '<strong>Transaction Pattern:</strong> Each repository inherits from TransactionalRepository, which controls whether changes are immediately committed or batched.'
+                    }
+                ]
+            },
+            'Document Type?': {
+                title: 'Document Type Routing',
+                sections: [
+                    {
+                        heading: 'Route by Document Type',
+                        file: 'app/services/document_service.py',
+                        code: `<span class="comment"># Route to appropriate handler based on document type</span>
+<span class="keyword">if</span> document.doc_type == <span class="class">DocumentType</span>.IMPORT:
+    logger.<span class="function">info</span>(<span class="string">f"Processing IMPORT document {document_id}"</span>)
+    <span class="keyword">await self</span>.<span class="function">_process_import_document</span>(document)
+    
+<span class="keyword">elif</span> document.doc_type == <span class="class">DocumentType</span>.EXPORT:
+    logger.<span class="function">info</span>(<span class="string">f"Processing EXPORT document {document_id}"</span>)
+    <span class="keyword">await self</span>.<span class="function">_process_export_document</span>(document)
+    
+<span class="keyword">elif</span> document.doc_type == <span class="class">DocumentType</span>.TRANSFER:
+    logger.<span class="function">info</span>(<span class="string">f"Processing TRANSFER document {document_id}"</span>)
+    <span class="keyword">await self</span>.<span class="function">_process_transfer_document</span>(document)`,
+                        explanation: '<strong>Polymorphic Handler:</strong> Each document type (IMPORT/EXPORT/TRANSFER) has different business logic. We route to the appropriate handler while maintaining the same transaction.'
+                    }
+                ]
+            },
+            'Process Import<br/>Add to Warehouse': {
+                title: 'Import Document Processing',
+                sections: [
+                    {
+                        heading: 'Import Business Logic',
+                        file: 'app/services/document_service.py',
+                        code: `<span class="keyword">async def</span> <span class="function">_process_import_document</span>(<span class="keyword">self</span>, document: <span class="class">Document</span>):
+    <span class="comment"># Type assertion after validation</span>
+    <span class="keyword">assert</span> document.to_warehouse_id <span class="keyword">is not None</span>
+    
+    <span class="comment"># Process each item in the document</span>
+    <span class="keyword">for</span> item <span class="keyword">in</span> document.items:
+        <span class="comment"># 1. Add product to warehouse inventory</span>
+        <span class="keyword">await self</span>.warehouse_repo.<span class="function">add_product_to_warehouse</span>(
+            warehouse_id=document.to_warehouse_id,
+            product_id=item.product_id,
+            quantity=item.quantity
+        )
+        
+        <span class="comment"># 2. Update global inventory</span>
+        <span class="keyword">await self</span>.inventory_repo.<span class="function">add_quantity</span>(
+            product_id=item.product_id,
+            quantity=item.quantity
+        )
+    
+    logger.<span class="function">info</span>(<span class="string">f"Import document {document.document_id} processed"</span>)`,
+                        explanation: '<strong>Import Flow:</strong> For each item, we add it to the warehouse AND update global inventory. Both operations happen in the same transaction - no commit yet!'
+                    },
+                    {
+                        heading: 'Add to Warehouse',
+                        file: 'app/repositories/sql/warehouse_repository.py',
+                        code: `<span class="keyword">async def</span> <span class="function">add_product_to_warehouse</span>(
+    <span class="keyword">self</span>, 
+    warehouse_id: <span class="class">int</span>, 
+    product_id: <span class="class">int</span>, 
+    quantity: <span class="class">int</span>
+):
+    <span class="comment"># Check if product already exists in this warehouse</span>
+    existing = <span class="keyword">self</span>.session.<span class="function">query</span>(<span class="class">WarehouseInventoryModel</span>)\\
+        .<span class="function">filter_by</span>(warehouse_id=warehouse_id, product_id=product_id)\\
+        .<span class="function">first</span>()
+    
+    <span class="keyword">if</span> existing:
+        <span class="comment"># Update existing quantity</span>
+        existing.quantity += quantity
+    <span class="keyword">else</span>:
+        <span class="comment"># Create new warehouse inventory record</span>
+        new_record = <span class="class">WarehouseInventoryModel</span>(
+            warehouse_id=warehouse_id,
+            product_id=product_id,
+            quantity=quantity
+        )
+        <span class="keyword">self</span>.session.<span class="function">add</span>(new_record)
+    
+    <span class="comment"># NO COMMIT HERE - controlled by service layer</span>
+    <span class="keyword">self</span>.<span class="function">_commit_if_auto</span>()`,
+                        explanation: '<strong>Database Operation:</strong> We either create a new record or update existing quantity. Since auto_commit=False, this just queues the SQL in memory.'
+                    }
+                ]
+            },
+            'Process Export<br/>Remove from Warehouse': {
+                title: 'Export Document Processing',
+                sections: [
+                    {
+                        heading: 'Export Business Logic',
+                        file: 'app/services/document_service.py',
+                        code: `<span class="keyword">async def</span> <span class="function">_process_export_document</span>(<span class="keyword">self</span>, document: <span class="class">Document</span>):
+    <span class="keyword">assert</span> document.from_warehouse_id <span class="keyword">is not None</span>
+    
+    <span class="keyword">for</span> item <span class="keyword">in</span> document.items:
+        <span class="comment"># 1. Remove from warehouse inventory</span>
+        <span class="keyword">await self</span>.warehouse_repo.<span class="function">remove_product_from_warehouse</span>(
+            warehouse_id=document.from_warehouse_id,
+            product_id=item.product_id,
+            quantity=item.quantity
+        )
+        
+        <span class="comment"># 2. Reduce global inventory</span>
+        <span class="keyword">await self</span>.inventory_repo.<span class="function">remove_quantity</span>(
+            product_id=item.product_id,
+            quantity=item.quantity
+        )`,
+                        explanation: '<strong>Export Flow:</strong> Remove from warehouse and reduce global inventory. If insufficient quantity exists, an exception is raised and the entire transaction rolls back.'
+                    },
+                    {
+                        heading: 'Remove from Warehouse (with validation)',
+                        file: 'app/repositories/sql/warehouse_repository.py',
+                        code: `<span class="keyword">async def</span> <span class="function">remove_product_from_warehouse</span>(
+    <span class="keyword">self</span>, 
+    warehouse_id: <span class="class">int</span>, 
+    product_id: <span class="class">int</span>, 
+    quantity: <span class="class">int</span>
+):
+    record = <span class="keyword">self</span>.session.<span class="function">query</span>(<span class="class">WarehouseInventoryModel</span>)\\
+        .<span class="function">filter_by</span>(warehouse_id=warehouse_id, product_id=product_id)\\
+        .<span class="function">first</span>()
+    
+    <span class="keyword">if not</span> record:
+        <span class="keyword">raise</span> <span class="class">InsufficientInventoryException</span>(
+            <span class="string">f"Product {product_id} not in warehouse {warehouse_id}"</span>
+        )
+    
+    <span class="keyword">if</span> record.quantity < quantity:
+        <span class="keyword">raise</span> <span class="class">InsufficientInventoryException</span>(
+            <span class="string">f"Insufficient quantity. Available: {record.quantity}, Required: {quantity}"</span>
+        )
+    
+    <span class="comment"># Reduce quantity</span>
+    record.quantity -= quantity
+    
+    <span class="comment"># Delete if quantity reaches 0</span>
+    <span class="keyword">if</span> record.quantity == <span class="class">0</span>:
+        <span class="keyword">self</span>.session.<span class="function">delete</span>(record)
+    
+    <span class="keyword">self</span>.<span class="function">_commit_if_auto</span>()`,
+                        explanation: '<strong>Validation:</strong> We check if sufficient quantity exists BEFORE removing. Any validation failure raises an exception, triggering automatic rollback.'
+                    }
+                ]
+            },
+            'Process Transfer<br/>Move Between Warehouses': {
+                title: 'Transfer Document Processing',
+                sections: [
+                    {
+                        heading: 'Transfer Business Logic',
+                        file: 'app/services/document_service.py',
+                        code: `<span class="keyword">async def</span> <span class="function">_process_transfer_document</span>(<span class="keyword">self</span>, document: <span class="class">Document</span>):
+    <span class="keyword">assert</span> document.from_warehouse_id <span class="keyword">is not None</span>
+    <span class="keyword">assert</span> document.to_warehouse_id <span class="keyword">is not None</span>
+    
+    <span class="keyword">for</span> item <span class="keyword">in</span> document.items:
+        <span class="comment"># 1. Remove from source warehouse</span>
+        <span class="keyword">await self</span>.warehouse_repo.<span class="function">remove_product_from_warehouse</span>(
+            warehouse_id=document.from_warehouse_id,
+            product_id=item.product_id,
+            quantity=item.quantity
+        )
+        
+        <span class="comment"># 2. Add to destination warehouse</span>
+        <span class="keyword">await self</span>.warehouse_repo.<span class="function">add_product_to_warehouse</span>(
+            warehouse_id=document.to_warehouse_id,
+            product_id=item.product_id,
+            quantity=item.quantity
+        )
+        
+        <span class="comment"># Note: Global inventory stays the same (just moving location)</span>`,
+                        explanation: '<strong>Transfer Flow:</strong> Remove from source, add to destination. Global inventory unchanged. All-or-nothing: if ANY item fails, the entire transfer is rolled back.'
+                    }
+                ]
+            },
+            'Update Status to POSTED': {
+                title: 'Document Status Update',
+                sections: [
+                    {
+                        heading: 'Mark as Posted',
+                        file: 'app/services/document_service.py',
+                        code: `<span class="comment"># After successful processing, update document status</span>
+document.status = <span class="class">DocumentStatus</span>.POSTED
+document.posted_at = datetime.<span class="function">now</span>()
+document.posted_by = user
+
+<span class="comment"># Update in database (no commit yet)</span>
+<span class="keyword">self</span>.document_repo.<span class="function">update</span>(document)
+
+logger.<span class="function">info</span>(<span class="string">f"Document {document.document_id} marked as POSTED"</span>)`,
+                        explanation: '<strong>Status Change:</strong> Only after ALL inventory operations succeed do we mark the document as POSTED. This prevents partial execution.'
+                    }
+                ]
+            },
+            'COMMIT Transaction': {
+                title: 'Transaction Commit',
+                sections: [
+                    {
+                        heading: 'Commit All Changes',
+                        file: 'app/services/document_service.py',
+                        code: `        <span class="comment"># All operations successful - commit the transaction</span>
+        session.<span class="function">commit</span>()
+        logger.<span class="function">info</span>(<span class="string">f"✅ Document {document_id} posted successfully"</span>)
+        
+        <span class="keyword">return</span> document
+        
+    <span class="keyword">except</span> <span class="class">Exception</span> <span class="keyword">as</span> e:
+        <span class="comment"># Any error triggers rollback</span>
+        session.<span class="function">rollback</span>()
+        logger.<span class="function">error</span>(<span class="string">f"❌ Failed to post document {document_id}: {e}"</span>)
+        <span class="keyword">raise</span>
+        
+    <span class="keyword">finally</span>:
+        <span class="comment"># Always re-enable auto-commit</span>
+        <span class="keyword">self</span>.<span class="function">_set_repos_auto_commit</span>(<span class="class">True</span>)`,
+                        explanation: '<strong>COMMIT:</strong> This is the magic moment! All queued database changes (warehouse updates, inventory updates, document status) are written to PostgreSQL atomically. Either ALL succeed or NONE do.'
+                    },
+                    {
+                        heading: 'PostgreSQL Transaction',
+                        file: 'Database Layer',
+                        code: `<span class="comment">-- What PostgreSQL executes when we call session.commit():</span>
+
+<span class="keyword">BEGIN</span>;
+
+<span class="comment">-- Update warehouse inventory</span>
+<span class="keyword">UPDATE</span> warehouse_inventory 
+<span class="keyword">SET</span> quantity = quantity + <span class="class">100</span> 
+<span class="keyword">WHERE</span> warehouse_id = <span class="class">1</span> <span class="keyword">AND</span> product_id = <span class="class">5</span>;
+
+<span class="comment">-- Update global inventory</span>
+<span class="keyword">UPDATE</span> inventory 
+<span class="keyword">SET</span> quantity = quantity + <span class="class">100</span> 
+<span class="keyword">WHERE</span> product_id = <span class="class">5</span>;
+
+<span class="comment">-- Update document status</span>
+<span class="keyword">UPDATE</span> documents 
+<span class="keyword">SET</span> status = <span class="string">'POSTED'</span>, posted_at = <span class="keyword">NOW</span>() 
+<span class="keyword">WHERE</span> document_id = <span class="class">1</span>;
+
+<span class="comment">-- COMMIT makes all changes permanent</span>
+<span class="keyword">COMMIT</span>;`,
+                        explanation: '<strong>Database ACID:</strong> PostgreSQL wraps all operations in a transaction. COMMIT makes them permanent. If power fails before COMMIT, ALL changes are lost - that\'s atomicity!'
+                    }
+                ]
+            },
+            'ROLLBACK on Error': {
+                title: 'Error Handling & Rollback',
+                sections: [
+                    {
+                        heading: 'Automatic Rollback',
+                        file: 'app/services/document_service.py',
+                        code: `    <span class="keyword">except</span> <span class="class">InsufficientInventoryException</span> <span class="keyword">as</span> e:
+        <span class="comment"># Business rule violation</span>
+        session.<span class="function">rollback</span>()
+        logger.<span class="function">warning</span>(<span class="string">f"Insufficient inventory: {e}"</span>)
+        <span class="keyword">raise</span>
+        
+    <span class="keyword">except</span> <span class="class">Exception</span> <span class="keyword">as</span> e:
+        <span class="comment"># Any other error (database, network, etc.)</span>
+        session.<span class="function">rollback</span>()
+        logger.<span class="function">error</span>(<span class="string">f"Transaction failed: {e}"</span>, exc_info=<span class="class">True</span>)
+        <span class="keyword">raise</span>
+        
+    <span class="keyword">finally</span>:
+        <span class="comment"># Always restore auto-commit mode</span>
+        <span class="keyword">self</span>.<span class="function">_set_repos_auto_commit</span>(<span class="class">True</span>)`,
+                        explanation: '<strong>Rollback:</strong> ANY exception triggers session.rollback(), which tells PostgreSQL to discard ALL changes. It\'s as if the transaction never happened - no partial state!'
+                    },
+                    {
+                        heading: 'PostgreSQL Rollback',
+                        file: 'Database Layer',
+                        code: `<span class="comment">-- When an error occurs during transaction:</span>
+
+<span class="keyword">BEGIN</span>;
+
+<span class="keyword">UPDATE</span> warehouse_inventory <span class="keyword">SET</span> quantity = quantity + <span class="class">100</span> ...;
+<span class="keyword">UPDATE</span> inventory <span class="keyword">SET</span> quantity = quantity + <span class="class">100</span> ...;
+
+<span class="comment">-- ERROR: Constraint violation or business rule failure</span>
+
+<span class="keyword">ROLLBACK</span>;  <span class="comment">-- Discard ALL changes!</span>
+
+<span class="comment">-- Result: Database unchanged, as if nothing happened</span>`,
+                        explanation: '<strong>Why This Matters:</strong> Without transactions, the first UPDATE might succeed and the second fail, leaving inconsistent data. ROLLBACK prevents this nightmare scenario.'
+                    }
+                ]
+            },
+            'Return Success/Error': {
+                title: 'API Response',
+                sections: [
+                    {
+                        heading: 'Success Response',
+                        file: 'app/api/routers/documents.py',
+                        code: `<span class="comment"># If all operations succeed:</span>
+<span class="keyword">return</span> {
+    <span class="string">"document_id"</span>: document.document_id,
+    <span class="string">"status"</span>: <span class="string">"POSTED"</span>,
+    <span class="string">"doc_type"</span>: document.doc_type,
+    <span class="string">"posted_at"</span>: document.posted_at,
+    <span class="string">"posted_by"</span>: user,
+    <span class="string">"message"</span>: <span class="string">"Document posted successfully"</span>
+}
+
+<span class="comment"># HTTP Status: 200 OK</span>`,
+                        explanation: '<strong>Success:</strong> Document is now POSTED, inventory is updated, and changes are permanent in the database.'
+                    },
+                    {
+                        heading: 'Error Response',
+                        file: 'app/api/routers/documents.py',
+                        code: `<span class="comment"># If any error occurs (handled by exception middleware):</span>
+<span class="keyword">return</span> {
+    <span class="string">"error"</span>: <span class="string">"InsufficientInventoryException"</span>,
+    <span class="string">"message"</span>: <span class="string">"Insufficient quantity in warehouse"</span>,
+    <span class="string">"details"</span>: {
+        <span class="string">"product_id"</span>: <span class="class">5</span>,
+        <span class="string">"required"</span>: <span class="class">100</span>,
+        <span class="string">"available"</span>: <span class="class">50</span>
+    }
+}
+
+<span class="comment"># HTTP Status: 400 Bad Request or 500 Internal Server Error</span>`,
+                        explanation: '<strong>Error:</strong> Transaction was rolled back. Database is unchanged. Document remains in DRAFT status. User can fix the issue and retry.'
+                    }
+                ]
+            }
+        };
+
+        // Make diagram interactive
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('codeModal');
+            const span = document.getElementsByClassName('close')[0];
+            
+            span.onclick = function() {
+                modal.style.display = 'none';
+            }
+            
+            window.onclick = function(event) {
+                if (event.target == modal) {
+                    modal.style.display = 'none';
+                }
+            }
+            
+            // Add click handlers to diagram nodes
+            setTimeout(() => {
+                const nodes = document.querySelectorAll('.node');
+                nodes.forEach(node => {
+                    node.style.cursor = 'pointer';
+                    node.addEventListener('click', function() {
+                        const text = this.querySelector('span').textContent.trim();
+                        showCode(text);
+                    });
+                });
+            }, 1000);
+        });
+
+        function showCode(nodeText) {
+            const data = codeData[nodeText];
+            if (!data) return;
+            
+            document.getElementById('modalTitle').textContent = data.title;
+            
+            let html = '';
+            data.sections.forEach(section => {
+                html += `
+                    <div class="code-section">
+                        <h3>${section.heading}</h3>
+                        <div class="file-path">📁 ${section.file}</div>
+                        <div class="code-block">${section.code}</div>
+                        <div class="explanation">${section.explanation}</div>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('modalBody').innerHTML = html;
+            document.getElementById('codeModal').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
