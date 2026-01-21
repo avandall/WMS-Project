@@ -7,7 +7,10 @@ import pytest
 
 from app.models.inventory_domain import InventoryItem
 from app.models.product_domain import Product
-from app.exceptions.business_exceptions import InvalidQuantityError, InsufficientStockError
+from app.exceptions.business_exceptions import (
+    InvalidQuantityError,
+    InsufficientStockError,
+)
 
 
 class TestInventoryRepoSQL:
@@ -25,7 +28,9 @@ class TestInventoryRepoSQL:
         quantity = inventory_repo_sql.get_quantity(1)
         assert quantity == 100
 
-    def test_save_existing_inventory_updates(self, inventory_repo_sql, product_repo_sql):
+    def test_save_existing_inventory_updates(
+        self, inventory_repo_sql, product_repo_sql
+    ):
         """Test that save updates existing inventory."""
         product = Product(product_id=1, name="Product A", price=50.0)
         product_repo_sql.save(product)
@@ -62,7 +67,9 @@ class TestInventoryRepoSQL:
         quantity = inventory_repo_sql.get_quantity(1)
         assert quantity == 50  # 25 + 15 + 10
 
-    def test_add_negative_quantity_raises_error(self, inventory_repo_sql, product_repo_sql):
+    def test_add_negative_quantity_raises_error(
+        self, inventory_repo_sql, product_repo_sql
+    ):
         """Test that adding negative quantity raises error."""
         product = Product(product_id=1, name="Product A", price=50.0)
         product_repo_sql.save(product)
@@ -133,16 +140,22 @@ class TestInventoryRepoSQL:
         with pytest.raises(KeyError, match="not found in inventory"):
             inventory_repo_sql.remove_quantity(9999, 10)
 
-    def test_remove_negative_quantity_raises_error(self, inventory_repo_sql, product_repo_sql):
+    def test_remove_negative_quantity_raises_error(
+        self, inventory_repo_sql, product_repo_sql
+    ):
         """Test removing negative quantity raises error."""
         product = Product(product_id=1, name="Product A", price=50.0)
         product_repo_sql.save(product)
         inventory_repo_sql.add_quantity(1, 100)
 
-        with pytest.raises(InvalidQuantityError, match="Cannot remove negative quantity"):
+        with pytest.raises(
+            InvalidQuantityError, match="Cannot remove negative quantity"
+        ):
             inventory_repo_sql.remove_quantity(1, -10)
 
-    def test_remove_more_than_available_raises_error(self, inventory_repo_sql, product_repo_sql):
+    def test_remove_more_than_available_raises_error(
+        self, inventory_repo_sql, product_repo_sql
+    ):
         """Test removing more than available raises error."""
         product = Product(product_id=1, name="Product A", price=50.0)
         product_repo_sql.save(product)
@@ -179,7 +192,9 @@ class TestInventoryRepoSQL:
         product_repo_sql.save(product)
         inventory_repo_sql.add_quantity(1, 50)
 
-        with pytest.raises(InvalidQuantityError, match="Cannot delete item with non-zero quantity"):
+        with pytest.raises(
+            InvalidQuantityError, match="Cannot delete item with non-zero quantity"
+        ):
             inventory_repo_sql.delete(1)
 
     def test_update_total_inventory_helper(self, inventory_repo_sql, product_repo_sql):
@@ -196,9 +211,7 @@ class TestInventoryRepoSQL:
         quantity = inventory_repo_sql.get_quantity(1)
         assert quantity == 200
 
-    def test_inventory_persistence_across_sessions(
-        self, test_engine, product_repo_sql
-    ):
+    def test_inventory_persistence_across_sessions(self, test_engine, product_repo_sql):
         """Test that inventory persists across different sessions."""
         from sqlalchemy.orm import sessionmaker
         from app.repositories.sql.inventory_repo import InventoryRepo

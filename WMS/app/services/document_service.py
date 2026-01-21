@@ -22,6 +22,10 @@ from app.repositories.interfaces.interfaces import (
     IInventoryRepo,
 )
 from app.utils.infrastructure import document_id_generator
+from app.core.logging import get_logger
+from sqlalchemy.orm import Session
+
+logger = get_logger(__name__)
 
 
 class DocumentService:
@@ -36,11 +40,14 @@ class DocumentService:
         warehouse_repo: IWarehouseRepo,
         product_repo: IProductRepo,
         inventory_repo: IInventoryRepo,
+        session: Optional[Session] = None,
     ):
         self.document_repo = document_repo
         self.warehouse_repo = warehouse_repo
         self.product_repo = product_repo
         self.inventory_repo = inventory_repo
+        self.session = session
+        logger.info("DocumentService initialized")
         self._doc_id_generator = document_id_generator()
 
     def create_import_document(
@@ -65,7 +72,7 @@ class DocumentService:
             raise WarehouseNotFoundError(f"Warehouse {to_warehouse_id} not found")
 
         # Validate and convert items
-        document_items = self._validate_and_convert_items(items)
+        document_items = self._validate_and_convert_items(items, check_product_exists=True)
 
         # Generate document
         document_id = self._doc_id_generator()
@@ -102,7 +109,7 @@ class DocumentService:
             raise WarehouseNotFoundError(f"Warehouse {from_warehouse_id} not found")
 
         # Validate and convert items (without product check - deferred to posting)
-        document_items = self._validate_and_convert_items_without_product_check(items)
+        document_items = self._validate_and_convert_items(items, check_product_exists=False)
 
         # Generate document
         document_id = self._doc_id_generator()
@@ -150,7 +157,7 @@ class DocumentService:
             )
 
         # Validate and convert items without product check (deferred to posting)
-        document_items = self._validate_and_convert_items_without_product_check(items)
+        document_items = self._validate_and_convert_items(items, check_product_exists=False)
 
         # Generate document
         document_id = self._doc_id_generator()
@@ -169,17 +176,38 @@ class DocumentService:
 
     def post_document(self, document_id: int, approved_by: str) -> Document:
         """
-        Post a document with transactional execution of warehouse operations.
+        Post a document with ACID-compliant transactional execution.
 
-        Orchestrates:
-        1. Validate document exists and is in DRAFT status
-        2. Execute warehouse operations based on document type (transactional)
-        3. Update document status to POSTED
-        4. Return updated document
+        All warehouse operations execute atomically - either all succeed
+        or all are rolled back, preventing partial state corruption.
+
+        Args:
+            document_id: ID of document to post
+            approved_by: Username approving the document
+
+        Returns:
+            Posted document with updated status
+
+        Raises:
+            DocumentNotFoundError: Document doesn't exist
+            InvalidDocumentStatusError: Document not in DRAFT status
+            InsufficientStockError: Not enough stock for operation
+            ValidationError: Other validation failures
         """
+        logger.info(f"Starting document posting: document_id={document_id}, approved_by={approved_by}")
         document = self._get_document_for_processing(document_id)
+        
+        if not self.session:
+            logger.warning("No session provided - using auto-commit mode (not recommended)")
+            return self._post_document_legacy(document, approved_by)
 
+        # Transaction-safe implementation
         try:
+            logger.debug(f"Executing {document.doc_type.value} operations for document {document_id}")
+            
+            # Disable auto-commit on repositories
+            self._set_repos_auto_commit(False)
+            
             # Execute operations based on document type
             if document.doc_type == DocumentType.IMPORT:
                 self._execute_import_operations(document)
@@ -192,15 +220,51 @@ class DocumentService:
             document.status = DocumentStatus.POSTED
             document.approved_by = approved_by
             document.posted_at = datetime.now()
-
             self.document_repo.save(document)
+            
+            # Commit all changes atomically
+            self.session.commit()
+            logger.info(f"Document {document_id} posted successfully by {approved_by}")
             return document
 
+        except InsufficientStockError as e:
+            self.session.rollback()
+            logger.error(f"Document {document_id} posting failed - insufficient stock: {str(e)}")
+            raise
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Document {document_id} posting failed - transaction rolled back: {type(e).__name__}: {str(e)}")
+            raise ValidationError(f"Failed to post document {document_id}: {str(e)}")
+        finally:
+            # Re-enable auto-commit
+            self._set_repos_auto_commit(True)
+    
+    def _post_document_legacy(self, document: Document, approved_by: str) -> Document:
+        """Legacy posting without transaction scope (for backwards compatibility)."""
+        logger.warning("Using legacy posting mode - partial failures may corrupt state")
+        try:
+            if document.doc_type == DocumentType.IMPORT:
+                self._execute_import_operations(document)
+            elif document.doc_type == DocumentType.EXPORT:
+                self._execute_export_operations(document)
+            elif document.doc_type == DocumentType.TRANSFER:
+                self._execute_transfer_operations(document)
+
+            document.status = DocumentStatus.POSTED
+            document.approved_by = approved_by
+            document.posted_at = datetime.now()
+            self.document_repo.save(document)
+            return document
         except InsufficientStockError:
             raise
         except Exception as e:
-            # In a real system, you would rollback any partial operations here
-            raise ValidationError(f"Failed to post document {document_id}: {str(e)}")
+            raise ValidationError(f"Failed to post document: {str(e)}")
+    
+    def _set_repos_auto_commit(self, enabled: bool) -> None:
+        """Control auto-commit behavior on all repositories."""
+        for repo in [self.warehouse_repo, self.inventory_repo, self.document_repo]:
+            if hasattr(repo, 'set_auto_commit'):
+                repo.set_auto_commit(enabled)
 
     def cancel_document(
         self, document_id: int, cancelled_by: str, reason: Optional[str] = None
@@ -296,42 +360,16 @@ class DocumentService:
             raise DocumentNotFoundError(f"Document {document_id} not found")
         return document
 
-    def _validate_and_convert_items_without_product_check(
-        self, items: List[Dict[str, Any]]
-    ) -> List[DocumentProduct]:
-        """Validate items without checking product existence (for exports/transfers in draft)."""
-        if not items:
-            raise ValidationError("Document must contain at least one item")
-
-        document_items = []
-        for item_data in items:
-            product_id = item_data.get("product_id")
-            quantity = item_data.get("quantity")
-            unit_price = item_data.get("unit_price")
-
-            if product_id is None or quantity is None or unit_price is None:
-                raise ValidationError(
-                    "Each item must have product_id, quantity, and unit_price"
-                )
-
-            if quantity <= 0:
-                raise InvalidQuantityError("Quantity must be positive")
-
-            if unit_price < 0:
-                raise ValidationError("Unit price cannot be negative")
-
-            document_items.append(
-                DocumentProduct(
-                    product_id=product_id, quantity=quantity, unit_price=unit_price
-                )
-            )
-
-        return document_items
-
     def _validate_and_convert_items(
-        self, items: List[Dict[str, Any]]
+        self, items: List[Dict[str, Any]], check_product_exists: bool = True
     ) -> List[DocumentProduct]:
-        """Validate items and convert to domain objects."""
+        """
+        Validate items and convert to domain objects.
+        
+        Args:
+            items: List of item dictionaries with product_id, quantity, unit_price
+            check_product_exists: If True, validate that products exist in the system
+        """
         if not items:
             raise ValidationError("Document must contain at least one item")
 
@@ -352,44 +390,17 @@ class DocumentService:
             if unit_price < 0:
                 raise ValidationError("Unit price cannot be negative")
 
-            # Validate product exists
-            product = self.product_repo.get(product_id)
-            if not product:
-                raise ProductNotFoundError(f"Product {product_id} not found")
+            # Validate product exists if requested
+            if check_product_exists:
+                product = self.product_repo.get(product_id)
+                if not product:
+                    raise ProductNotFoundError(f"Product {product_id} not found")
 
             document_items.append(
                 DocumentProduct(
                     product_id=product_id, quantity=quantity, unit_price=unit_price
                 )
             )
-
-        return document_items
-
-    def _validate_and_convert_items_with_warehouse_stock(
-        self, items: List[Dict[str, Any]], warehouse_id: int
-    ) -> List[DocumentProduct]:
-        """Validate items and check warehouse stock availability."""
-        document_items = self._validate_and_convert_items(items)
-
-        # Check warehouse stock for each item
-        for item in document_items:
-            warehouse_inventory = self.warehouse_repo.get_warehouse_inventory(
-                warehouse_id
-            )
-            current_quantity = 0
-
-            for wh_item in warehouse_inventory:
-                if wh_item.product_id == item.product_id:
-                    current_quantity = wh_item.quantity
-                    break
-
-            if current_quantity < item.quantity:
-                product = self.product_repo.get(item.product_id)
-                product_name = product.name if product else f"ID:{item.product_id}"
-                raise InsufficientStockError(
-                    f"Insufficient stock for {product_name}: requested {item.quantity}, "
-                    f"available {current_quantity}"
-                )
 
         return document_items
 
@@ -407,6 +418,9 @@ class DocumentService:
     def _execute_import_operations(self, document: Document) -> None:
         """Execute warehouse operations for import document.
         Ensure destination warehouse exists before any changes and avoid partial updates."""
+        # Type narrowing: IMPORT documents always have to_warehouse_id
+        assert document.to_warehouse_id is not None, "Import document must have to_warehouse_id"
+        
         # Validate destination warehouse still exists at posting time
         to_warehouse = self.warehouse_repo.get(document.to_warehouse_id)
         if not to_warehouse:
@@ -458,6 +472,10 @@ class DocumentService:
     def _execute_transfer_operations(self, document: Document) -> None:
         """Execute warehouse operations for transfer document.
         Validate both warehouses exist before any changes."""
+        # Type narrowing: TRANSFER documents always have both warehouse IDs
+        assert document.from_warehouse_id is not None, "Transfer document must have from_warehouse_id"
+        assert document.to_warehouse_id is not None, "Transfer document must have to_warehouse_id"
+        
         from_warehouse = self.warehouse_repo.get(document.from_warehouse_id)
         to_warehouse = self.warehouse_repo.get(document.to_warehouse_id)
         if not from_warehouse:

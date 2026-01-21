@@ -3,7 +3,6 @@ Warehouses API router.
 Provides endpoints for warehouse management operations.
 """
 
-from typing import List
 from fastapi import APIRouter, Depends
 from ..dependencies import get_warehouse_service
 from ..schemas.product import (
@@ -59,19 +58,19 @@ async def transfer_all_inventory(
 ):
     """
     Transfer all inventory from one warehouse to another.
-    
+
     This is useful when you need to:
     - Empty a warehouse before deletion
     - Consolidate inventory from multiple warehouses
     - Relocate stock due to warehouse closure or reorganization
-    
+
     All products and quantities will be moved from the source warehouse
     to the destination warehouse in a single atomic operation.
     """
     transferred_items = service.transfer_all_inventory(
         warehouse_id, transfer_request.to_warehouse_id
     )
-    
+
     return WarehouseTransferResponse(
         from_warehouse_id=warehouse_id,
         to_warehouse_id=transfer_request.to_warehouse_id,

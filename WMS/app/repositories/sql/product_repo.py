@@ -3,15 +3,16 @@ from typing import Dict, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.models.product_domain import Product
+from app.core.transaction import TransactionalRepository
 from ..interfaces.interfaces import IProductRepo
 from .models import InventoryModel, ProductModel
 
 
-class ProductRepo(IProductRepo):
+class ProductRepo(TransactionalRepository, IProductRepo):
     """PostgreSQL-backed repository for managing products."""
 
     def __init__(self, session: Session):
-        self.session = session
+        super().__init__(session)
 
     def save(self, product: Product) -> None:
         existing = self.session.get(ProductModel, product.product_id)
@@ -27,7 +28,7 @@ class ProductRepo(IProductRepo):
                 price=product.price,
             )
             self.session.add(model)
-        self.session.commit()
+        self._commit_if_auto()
 
     def get(self, product_id: int) -> Optional[Product]:
         model = self.session.get(ProductModel, product_id)
@@ -54,13 +55,7 @@ class ProductRepo(IProductRepo):
             self.session.delete(inventory_row)
 
         self.session.delete(model)
-        self.session.commit()
-
-    def get_product_details(self, product_id: int) -> Product:
-        product = self.get(product_id)
-        if not product:
-            raise KeyError("Product not found")
-        return product
+        self._commit_if_auto()
 
     @staticmethod
     def _to_domain(model: ProductModel) -> Product:

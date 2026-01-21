@@ -7,12 +7,8 @@ from typing import Optional, List
 from app.exceptions.business_exceptions import (
     ValidationError,
     BusinessRuleViolationError,
-    EntityAlreadyExistsError,
-)
-from app.exceptions.business_exceptions import (
     InvalidIDError,
     InvalidQuantityError,
-    WarehouseNotFoundError,
     ProductNotFoundError,
     InsufficientStockError,
 )
@@ -50,7 +46,7 @@ class Warehouse:
         if len(location) > 200:
             raise ValidationError(ErrorMessages.INVALID_WAREHOUSE_LOCATION_TOO_LONG)
 
-    def add_product(self, product_id: str, quantity: int) -> None:
+    def add_product(self, product_id: int, quantity: int) -> None:
         """Add product to warehouse inventory."""
         if quantity <= 0:
             raise InvalidQuantityError(ErrorMessages.INVALID_QUANTITY_POSITIVE)
@@ -65,7 +61,7 @@ class Warehouse:
         new_item = InventoryItem(product_id, quantity)
         self.inventory.append(new_item)
 
-    def remove_product(self, product_id: str, quantity: int) -> None:
+    def remove_product(self, product_id: int, quantity: int) -> None:
         """Remove product from warehouse inventory."""
         if quantity <= 0:
             raise InvalidQuantityError(ErrorMessages.INVALID_QUANTITY_POSITIVE)
@@ -90,14 +86,14 @@ class Warehouse:
             )
         )
 
-    def get_product_quantity(self, product_id: str) -> int:
+    def get_product_quantity(self, product_id: int) -> int:
         """Get quantity of a product in this warehouse."""
         for item in self.inventory:
             if item.product_id == product_id:
                 return item.quantity
         return 0
 
-    def has_product(self, product_id: str) -> bool:
+    def has_product(self, product_id: int) -> bool:
         """Check if warehouse has a specific product."""
         return any(item.product_id == product_id for item in self.inventory)
 
@@ -120,7 +116,7 @@ class Warehouse:
         }
 
     def transfer_product_to(
-        self, other_warehouse: "Warehouse", product_id: str, quantity: int
+        self, other_warehouse: "Warehouse", product_id: int, quantity: int
     ) -> None:
         """Transfer product to another warehouse."""
         if other_warehouse.warehouse_id == self.warehouse_id:
@@ -151,50 +147,3 @@ class Warehouse:
 
     def __hash__(self) -> int:
         return hash(self.warehouse_id)
-
-
-class WarehouseManager:
-    """Manager class for handling multiple warehouses."""
-
-    def __init__(self):
-        self._warehouses: dict[int, Warehouse] = {}
-
-    def add_warehouse(self, warehouse: Warehouse) -> None:
-        """Add a warehouse."""
-        if warehouse.warehouse_id in self._warehouses:
-            raise EntityAlreadyExistsError(
-                f"Warehouse {warehouse.warehouse_id} already exists"
-            )
-        self._warehouses[warehouse.warehouse_id] = warehouse
-
-    def get_warehouse(self, warehouse_id: int) -> Warehouse:
-        """Get warehouse by ID."""
-        if warehouse_id not in self._warehouses:
-            raise WarehouseNotFoundError(f"Warehouse {warehouse_id} not found")
-        return self._warehouses[warehouse_id]
-
-    def remove_warehouse(self, warehouse_id: int) -> None:
-        """Remove a warehouse."""
-        if warehouse_id not in self._warehouses:
-            raise WarehouseNotFoundError(f"Warehouse {warehouse_id} not found")
-        del self._warehouses[warehouse_id]
-
-    def get_all_warehouses(self) -> List[Warehouse]:
-        """Get all warehouses."""
-        return list(self._warehouses.values())
-
-    def find_warehouses_with_product(self, product_id: str) -> List[Warehouse]:
-        """Find warehouses that contain a specific product."""
-        return [w for w in self._warehouses.values() if w.has_product(product_id)]
-
-    def get_total_product_quantity(self, product_id: str) -> int:
-        """Get total quantity of a product across all warehouses."""
-        return sum(
-            w.get_product_quantity(product_id) for w in self._warehouses.values()
-        )
-
-    def __len__(self) -> int:
-        return len(self._warehouses)
-
-    def __str__(self) -> str:
-        return f"WarehouseManager(warehouses={len(self._warehouses)})"

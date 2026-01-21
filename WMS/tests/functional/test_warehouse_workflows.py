@@ -178,7 +178,7 @@ class TestWarehouseManagementWorkflow:
         warehouse = self.warehouse_service.create_warehouse("Export Test Warehouse")
         warehouse_id = warehouse.warehouse_id
 
-        product = self.product_service.create_product(
+        self.product_service.create_product(
             product_id=4, name="Export Test Product", price=60.0
         )
 
@@ -253,7 +253,7 @@ class TestWarehouseManagementWorkflow:
         warehouse = self.warehouse_service.create_warehouse("Stock Control Warehouse")
         warehouse_id = warehouse.warehouse_id
 
-        product = self.product_service.create_product(
+        self.product_service.create_product(
             product_id=6, name="Stock Control Product", price=90.0
         )
 
@@ -298,7 +298,7 @@ class TestWarehouseManagementWorkflow:
         w2_id = warehouse2.warehouse_id
 
         # Create product
-        product = self.product_service.create_product(
+        self.product_service.create_product(
             product_id=7, name="Multi-Warehouse Product", price=45.0
         )
 

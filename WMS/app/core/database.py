@@ -3,20 +3,39 @@ Database configuration for PMKT Warehouse Management System.
 Provides SQLAlchemy engine, session factory, and base class.
 """
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
-from sqlalchemy.pool import NullPool
-
+from sqlalchemy.pool import QueuePool
 from app.core.settings import settings
+from app.core.logging import get_logger
 
-# Create engine with PostgreSQL-specific settings
+logger = get_logger(__name__)
+
+# Production-grade connection pool configuration
 engine = create_engine(
     settings.database_url,
     future=True,
-    echo=False,
+    echo=settings.debug,  # Only log SQL in debug mode
     pool_pre_ping=True,  # Verify connections before using them
-    poolclass=NullPool if "sqlite" in settings.database_url else None,
+    pool_size=settings.db_pool_size,  # Connection pool size
+    max_overflow=settings.db_max_overflow,  # Additional connections when pool exhausted
+    pool_timeout=settings.db_pool_timeout,  # Wait time for connection
+    pool_recycle=settings.db_pool_recycle,  # Recycle connections after N seconds
+    poolclass=QueuePool,  # Production-grade pool
+    connect_args={
+        "connect_timeout": 10,  # PostgreSQL connection timeout
+        "options": "-c statement_timeout=30000",  # 30 second query timeout
+    } if "postgresql" in settings.database_url else {},
 )
+
+# Listen for connection events to log pool statistics
+@event.listens_for(engine, "connect")
+def receive_connect(dbapi_conn, connection_record):
+    logger.debug("Database connection established")
+
+@event.listens_for(engine, "close")
+def receive_close(dbapi_conn, connection_record):
+    logger.debug("Database connection closed")
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 Base = declarative_base()
 
@@ -26,13 +45,33 @@ def get_session():
     db = SessionLocal()
     try:
         yield db
+    except Exception as e:
+        logger.error(f"Database session error: {type(e).__name__}: {str(e)}")
+        db.rollback()
+        raise
     finally:
         db.close()
 
 
 def init_db() -> None:
     """Create database tables if they do not exist."""
-    # Import models to ensure they are registered with SQLAlchemy metadata
-    from app.repositories.sql import models  # noqa: F401
+    try:
+        # Import models to ensure they are registered with SQLAlchemy metadata
+        from app.repositories.sql import models  # noqa: F401
 
-    Base.metadata.create_all(bind=engine)
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {str(e)}")
+        raise
+
+
+def check_db_connection() -> bool:
+    """Check if database connection is healthy."""
+    try:
+        with engine.connect() as conn:
+            conn.execute("SELECT 1")
+        return True
+    except Exception as e:
+        logger.error(f"Database health check failed: {str(e)}")
+        return False

@@ -10,15 +10,16 @@ from app.exceptions.business_exceptions import (
 from app.models.inventory_domain import InventoryItem
 from app.models.warehouse_domain import Warehouse
 from app.utils.infrastructure.id_generator import IDGenerator
+from app.core.transaction import TransactionalRepository
 from ..interfaces.interfaces import IWarehouseRepo
 from .models import WarehouseInventoryModel, WarehouseModel
 
 
-class WarehouseRepo(IWarehouseRepo):
+class WarehouseRepo(TransactionalRepository, IWarehouseRepo):
     """PostgreSQL-backed repository for warehouses and their inventory."""
 
     def __init__(self, session: Session):
-        self.session = session
+        super().__init__(session)
         self._sync_id_generator()
 
     def _sync_id_generator(self) -> None:
@@ -33,7 +34,7 @@ class WarehouseRepo(IWarehouseRepo):
             warehouse_id=warehouse.warehouse_id, location=warehouse.location
         )
         self.session.add(model)
-        self.session.commit()
+        self._commit_if_auto()
 
     def save(self, warehouse: Warehouse) -> None:
         existing = self.session.get(WarehouseModel, warehouse.warehouse_id)
@@ -42,26 +43,27 @@ class WarehouseRepo(IWarehouseRepo):
         else:
             self.create_warehouse(warehouse)
             existing = self.session.get(WarehouseModel, warehouse.warehouse_id)
-        
+
         # Save inventory items to warehouse_inventory table
         # Delete existing inventory entries directly - O(1) operation
         from sqlalchemy import delete
+
         self.session.execute(
             delete(WarehouseInventoryModel).where(
                 WarehouseInventoryModel.warehouse_id == warehouse.warehouse_id
             )
         )
-        
+
         # Add new inventory items
         for item in warehouse.inventory:
             inv_model = WarehouseInventoryModel(
                 warehouse_id=warehouse.warehouse_id,
                 product_id=item.product_id,
-                quantity=item.quantity
+                quantity=item.quantity,
             )
             self.session.add(inv_model)
-        
-        self.session.commit()
+
+        self._commit_if_auto()
 
     def get(self, warehouse_id: int) -> Optional[Warehouse]:
         model = self.session.get(WarehouseModel, warehouse_id)
@@ -71,19 +73,25 @@ class WarehouseRepo(IWarehouseRepo):
 
     def get_all(self) -> Dict[int, Warehouse]:
         from sqlalchemy.orm import joinedload
+
         # Eager load inventory_items to prevent N+1 queries - O(1) instead of O(n+1)
-        rows = self.session.execute(
-            select(WarehouseModel).options(
-                joinedload(WarehouseModel.inventory_items)
+        rows = (
+            self.session.execute(
+                select(WarehouseModel).options(
+                    joinedload(WarehouseModel.inventory_items)
+                )
             )
-        ).unique().scalars().all()
+            .unique()
+            .scalars()
+            .all()
+        )
         return {row.warehouse_id: self._to_domain(row) for row in rows}
 
     def delete(self, warehouse_id: int) -> None:
         model = self.session.get(WarehouseModel, warehouse_id)
         if model:
             self.session.delete(model)
-            self.session.commit()
+            self._commit_if_auto()
 
     def get_warehouse_inventory(self, warehouse_id: int) -> List[InventoryItem]:
         warehouse = self.session.get(WarehouseModel, warehouse_id)
@@ -118,7 +126,7 @@ class WarehouseRepo(IWarehouseRepo):
             )
             self.session.add(row)
 
-        self.session.commit()
+        self._commit_if_auto()
 
     def remove_product_from_warehouse(
         self, warehouse_id: int, product_id: int, quantity: int
@@ -143,12 +151,11 @@ class WarehouseRepo(IWarehouseRepo):
         if row.quantity == 0:
             self.session.delete(row)
 
-        self.session.commit()
+        self._commit_if_auto()
 
     def _to_domain(self, model: WarehouseModel) -> Warehouse:
         inventory = [
-            InventoryItem(row.product_id, row.quantity)
-            for row in model.inventory_items
+            InventoryItem(row.product_id, row.quantity) for row in model.inventory_items
         ]
         return Warehouse(
             warehouse_id=model.warehouse_id,

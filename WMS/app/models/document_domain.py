@@ -100,6 +100,7 @@ class Document:
         self.created_at = self.date  # Alias for compatibility
         self.posted_at: Optional[datetime] = None
         self.cancelled_at: Optional[datetime] = None
+        self.cancelled_by: Optional[str] = None
         self.cancellation_reason: Optional[str] = None
         self.from_warehouse_id = from_warehouse_id
         self.to_warehouse_id = to_warehouse_id
@@ -176,6 +177,11 @@ class Document:
     def update_item(self, product_id: int, quantity: int, unit_price: float) -> None:
         """Update an item in the document."""
         self._ensure_draft_status()
+        
+        # Validate new values before updating
+        DocumentProduct._validate_quantity(quantity)
+        DocumentProduct._validate_unit_price(unit_price)
+        
         for item in self.items:
             if item.product_id == product_id:
                 item.quantity = quantity

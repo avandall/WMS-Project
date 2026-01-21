@@ -15,6 +15,9 @@ from app.repositories.interfaces.interfaces import (
     IInventoryRepo,
 )
 from app.utils.infrastructure import warehouse_id_generator
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class WarehouseService:
@@ -93,18 +96,6 @@ class WarehouseService:
         product = self.product_repo.get(product_id)
         if not product:
             raise ProductNotFoundError(f"Product {product_id} not found")
-
-        # Business rule: Check if there's enough total inventory
-        total_available = self.inventory_repo.get_quantity(product_id)
-        current_warehouse_quantity = self._get_warehouse_product_quantity(
-            warehouse_id, product_id
-        )
-
-        if total_available < current_warehouse_quantity + quantity:
-            raise InsufficientStockError(
-                f"Insufficient stock: only {total_available} items available, "
-                f"warehouse already has {current_warehouse_quantity}"
-            )
 
         # Add to warehouse (repository handles the actual storage)
         self.warehouse_repo.add_product_to_warehouse(warehouse_id, product_id, quantity)
@@ -247,7 +238,7 @@ class WarehouseService:
         """
         Transfer all inventory from one warehouse to another.
         Used before deleting a warehouse to preserve inventory.
-        
+
         Returns list of transferred items.
         """
         if from_warehouse_id == to_warehouse_id:
@@ -258,8 +249,10 @@ class WarehouseService:
         self.get_warehouse(to_warehouse_id)
 
         # Get all inventory from source warehouse
-        source_inventory = self.warehouse_repo.get_warehouse_inventory(from_warehouse_id)
-        
+        source_inventory = self.warehouse_repo.get_warehouse_inventory(
+            from_warehouse_id
+        )
+
         if not source_inventory:
             return []
 
@@ -289,7 +282,7 @@ class WarehouseService:
 
         # Check if warehouse has any inventory
         inventory = self.warehouse_repo.get_warehouse_inventory(warehouse_id)
-        if inventory and len(inventory) > 0:
+        if inventory:
             total_items = sum(item.quantity for item in inventory)
             unique_products = len(inventory)
             raise ValidationError(

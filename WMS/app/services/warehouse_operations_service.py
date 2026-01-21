@@ -94,18 +94,27 @@ class WarehouseOperationsService:
 
         for transfer in transfers:
             try:
-                # This would use the warehouse service's transfer_product method
-                # but coordinated across multiple transfers
                 from_wh = transfer["from_warehouse_id"]
+                to_wh = transfer["to_warehouse_id"]
                 product_id = transfer["product_id"]
                 quantity = transfer["quantity"]
 
-                # Check if transfer is possible
-                available = self.warehouse_repo.get_product_quantity(
-                    from_wh, product_id
-                )
+                # Get warehouse inventory
+                inventory = self.warehouse_repo.get_warehouse_inventory(from_wh)
+                available = 0
+                for item in inventory:
+                    if item.product_id == product_id:
+                        available = item.quantity
+                        break
+
                 if available >= quantity:
-                    # Execute transfer (would call warehouse service)
+                    # Execute transfer
+                    self.warehouse_repo.remove_product_from_warehouse(
+                        from_wh, product_id, quantity
+                    )
+                    self.warehouse_repo.add_product_to_warehouse(
+                        to_wh, product_id, quantity
+                    )
                     results.append(
                         {
                             "transfer": transfer,
@@ -143,7 +152,7 @@ class WarehouseOperationsService:
         """
         warehouses = self.warehouse_repo.get_all()
         products = self.product_repo.get_all()
-        
+
         # Build products dictionary for O(1) lookup
         if isinstance(products, dict):
             products_dict = products
@@ -152,8 +161,12 @@ class WarehouseOperationsService:
 
         # Batch load all warehouse inventories - O(W×I) instead of O(W×P×I)
         warehouse_inventories = {}
-        for warehouse in warehouses.values() if isinstance(warehouses, dict) else warehouses:
-            inventory = self.warehouse_repo.get_warehouse_inventory(warehouse.warehouse_id)
+        for warehouse in (
+            warehouses.values() if isinstance(warehouses, dict) else warehouses
+        ):
+            inventory = self.warehouse_repo.get_warehouse_inventory(
+                warehouse.warehouse_id
+            )
             warehouse_inventories[warehouse.warehouse_id] = {
                 item.product_id: item.quantity for item in inventory
             }
@@ -161,7 +174,9 @@ class WarehouseOperationsService:
         report = {"warehouses": [], "system_health_score": 0, "recommendations": []}
         total_health_score = 0
 
-        for warehouse in (warehouses.values() if isinstance(warehouses, dict) else warehouses):
+        for warehouse in (
+            warehouses.values() if isinstance(warehouses, dict) else warehouses
+        ):
             warehouse_data = {
                 "warehouse_id": warehouse.warehouse_id,
                 "location": warehouse.location,
@@ -169,7 +184,7 @@ class WarehouseOperationsService:
                 "total_value": 0,
                 "health_score": 0,
             }
-            
+
             inventory = warehouse_inventories[warehouse.warehouse_id]
 
             # Now iterate products with O(1) inventory lookup instead of O(I) query
@@ -195,7 +210,9 @@ class WarehouseOperationsService:
             report["warehouses"].append(warehouse_data)
 
         report["system_health_score"] = (
-            total_health_score / len(report["warehouses"]) if report["warehouses"] else 0
+            total_health_score / len(report["warehouses"])
+            if report["warehouses"]
+            else 0
         )
 
         return report
@@ -206,14 +223,14 @@ class WarehouseOperationsService:
         """
         # Get all inventory at once - O(1) query
         all_inventory = self.inventory_repo.get_all()
-        
+
         # Build products dictionary for O(1) lookup
         products = self.product_repo.get_all()
         if isinstance(products, dict):
             products_dict = products
         else:
             products_dict = {p.product_id: p for p in products}
-        
+
         # Single pass calculation - O(n) where n = inventory items
         total_value = sum(
             item.quantity * products_dict[item.product_id].price

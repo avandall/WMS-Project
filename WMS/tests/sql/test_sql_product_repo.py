@@ -129,7 +129,9 @@ class TestProductRepoSQL:
 
         # Try to delete product - should fail due to FK constraint
         # The warehouse_inventory table has a FK to products
-        with pytest.raises(Exception):  # SQLAlchemy will raise IntegrityError or similar
+        with pytest.raises(
+            Exception
+        ):  # SQLAlchemy will raise IntegrityError or similar
             product_repo_sql.delete(1)
 
     def test_get_product_details(self, product_repo_sql):

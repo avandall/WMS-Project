@@ -200,14 +200,18 @@ class TestDocumentRepoSQL:
         document_repo_sql.save(doc)
 
         # Verify items exist
-        item_count = test_session.query(DocumentItemModel).filter_by(document_id=1).count()
+        item_count = (
+            test_session.query(DocumentItemModel).filter_by(document_id=1).count()
+        )
         assert item_count == 2
 
         # Delete document
         document_repo_sql.delete(1)
 
         # Verify items are also deleted
-        item_count = test_session.query(DocumentItemModel).filter_by(document_id=1).count()
+        item_count = (
+            test_session.query(DocumentItemModel).filter_by(document_id=1).count()
+        )
         assert item_count == 0
 
     def test_get_document_helper(
@@ -322,7 +326,7 @@ class TestDocumentRepoSQL:
 
         retrieved = document_repo_sql.get(1)
         assert len(retrieved.items) == 3
-        
+
         # Verify all items
         item_dict = {item.product_id: item for item in retrieved.items}
         assert item_dict[1].quantity == 5
@@ -350,7 +354,7 @@ class TestDocumentRepoSQL:
         )
         doc.approved_by = "Approver"
         doc.posted_at = datetime.now()
-        
+
         document_repo_sql.save(doc)
 
         retrieved = document_repo_sql.get(1)

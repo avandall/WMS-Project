@@ -83,6 +83,7 @@ def get_document_service(db: Session = Depends(get_session)) -> DocumentService:
         warehouse_repo=warehouse_repo,
         product_repo=product_repo,
         inventory_repo=inventory_repo,
+        session=db,  # Pass session for transaction management
     )
 
 

@@ -2,10 +2,13 @@
 FastAPI application for PMKT Warehouse Management System.
 """
 
-from fastapi import FastAPI
+import uuid
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from ..core.settings import settings
-from ..core.database import init_db
+from ..core.database import init_db, check_db_connection
+from ..core.logging import setup_logging, set_request_id, clear_request_id, get_logger
 from .routers.products import router as products_router
 from .routers.warehouses import router as warehouses_router
 from .routers.inventory import router as inventory_router
@@ -24,6 +27,10 @@ from ..exceptions.business_exceptions import (
     EntityAlreadyExistsError,
 )
 
+# Initialize logging
+setup_logging(level="INFO")
+logger = get_logger(__name__)
+
 app = FastAPI(
     title=settings.title,
     description=settings.description,
@@ -31,8 +38,79 @@ app = FastAPI(
     debug=settings.debug,
 )
 
+# Configure CORS (CRITICAL for production)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,  # Configure specific origins in production
+    allow_credentials=settings.cors_allow_credentials,
+    allow_methods=settings.cors_allow_methods,
+    allow_headers=settings.cors_allow_headers,
+)
+
 # Ensure database tables exist at startup
 init_db()
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """
+    Add request ID to all requests for tracing.
+    Request ID is included in all log messages for correlation.
+    """
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    set_request_id(request_id)
+    
+    logger.debug(f"Request started: {request.method} {request.url.path}")
+    
+    try:
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        logger.debug(f"Request completed: {request.method} {request.url.path} - Status {response.status_code}")
+        return response
+    except Exception as e:
+        logger.error(f"Request failed: {request.method} {request.url.path} - {type(e).__name__}: {str(e)}")
+        raise
+    finally:
+        clear_request_id()
+
+
+@app.get("/health", tags=["Health Check"])
+async def health_check():
+    """
+    Health check endpoint for load balancers and monitoring.
+    Returns service status and database connectivity.
+    """
+    db_healthy = check_db_connection()
+    
+    status = "healthy" if db_healthy else "unhealthy"
+    status_code = 200 if db_healthy else 503
+    
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": status,
+            "database": "connected" if db_healthy else "disconnected",
+            "version": settings.version,
+        }
+    )
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Log application startup."""
+    logger.info(f"Starting {settings.title} v{settings.version}")
+    logger.info(f"Debug mode: {settings.debug}")
+    if check_db_connection():
+        logger.info("Database connection: OK")
+    else:
+        logger.error("Database connection: FAILED")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Log application shutdown."""
+    logger.info("Shutting down application")
+
 
 
 # Exception handlers

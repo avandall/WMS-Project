@@ -9,6 +9,9 @@ from app.exceptions.business_exceptions import (
     EntityNotFoundError,
     InsufficientStockError,
 )
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class InventoryService:
@@ -169,7 +172,7 @@ class InventoryService:
 
         return low_stock_products
 
-    def get_all_inventory_items(self):
+    def get_all_inventory_items(self) -> List[InventoryItem]:
         """Return raw inventory items for simple listings."""
         return self.inventory_repo.get_all()
 

@@ -27,10 +27,6 @@ class IProductRepo(ABC):
     def delete(self, product_id: int) -> None:
         pass
 
-    @abstractmethod
-    def get_product_details(self, product_id: int) -> Product:
-        pass
-
 
 class IWarehouseRepo(ABC):
     @abstractmethod
@@ -115,8 +111,4 @@ class IDocumentRepo(ABC):
 
     @abstractmethod
     def delete(self, document_id: int) -> None:
-        pass
-
-    @abstractmethod
-    def get_document(self, document_id: int) -> Document:
         pass

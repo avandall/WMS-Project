@@ -3,17 +3,21 @@ from typing import List
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.exceptions.business_exceptions import InvalidQuantityError
+from app.exceptions.business_exceptions import (
+    InvalidQuantityError,
+    InsufficientStockError,
+)
 from app.models.inventory_domain import InventoryItem
+from app.core.transaction import TransactionalRepository
 from ..interfaces.interfaces import IInventoryRepo
 from .models import InventoryModel
 
 
-class InventoryRepo(IInventoryRepo):
-    """PostgreSQL-backed repository for total inventory across all warehouses."""
+class InventoryRepo(TransactionalRepository, IInventoryRepo):
+    """PostgreSQL-backed repository for inventory management."""
 
     def __init__(self, session: Session):
-        self.session = session
+        super().__init__(session)
 
     def save(self, inventory_item: InventoryItem) -> None:
         row = self.session.get(InventoryModel, inventory_item.product_id)
@@ -24,11 +28,11 @@ class InventoryRepo(IInventoryRepo):
                 product_id=inventory_item.product_id, quantity=inventory_item.quantity
             )
             self.session.add(row)
-        self.session.commit()
+        self._commit_if_auto()
 
     def add_quantity(self, product_id: int, quantity: int) -> None:
         row = self.session.get(InventoryModel, product_id)
-        
+
         if quantity < 0:
             if row:
                 # Adding negative to existing product
@@ -44,7 +48,7 @@ class InventoryRepo(IInventoryRepo):
         else:
             row = InventoryModel(product_id=product_id, quantity=quantity)
             self.session.add(row)
-        self.session.commit()
+        self._commit_if_auto()
 
     def get_quantity(self, product_id: int) -> int:
         row = self.session.get(InventoryModel, product_id)
@@ -61,7 +65,7 @@ class InventoryRepo(IInventoryRepo):
         if row.quantity != 0:
             raise InvalidQuantityError("Cannot delete item with non-zero quantity")
         self.session.delete(row)
-        self.session.commit()
+        self._commit_if_auto()
 
     def remove_quantity(self, product_id: int, quantity: int) -> None:
         row = self.session.get(InventoryModel, product_id)
@@ -70,12 +74,11 @@ class InventoryRepo(IInventoryRepo):
         if quantity < 0:
             raise InvalidQuantityError("Cannot remove negative quantity")
         if quantity > row.quantity:
-            from app.exceptions.business_exceptions import InsufficientStockError
             raise InsufficientStockError(
                 f"Insufficient stock. Available: {row.quantity}, Requested: {quantity}"
             )
         row.quantity -= quantity
-        self.session.commit()
+        self._commit_if_auto()
 
     @staticmethod
     def _to_domain(row: InventoryModel) -> InventoryItem:

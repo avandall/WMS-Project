@@ -65,7 +65,7 @@ class InventoryItem:
 
     def __str__(self) -> str:
         return (
-            f"InventoryItem(product_id='{self.product_id}', quantity={self.quantity})"
+            f"InventoryItem(product_id={self.product_id}, quantity={self.quantity})"
         )
 
     def __repr__(self) -> str:

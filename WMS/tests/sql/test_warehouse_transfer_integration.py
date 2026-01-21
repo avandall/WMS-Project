@@ -11,9 +11,7 @@ from app.exceptions.business_exceptions import ValidationError, WarehouseNotFoun
 
 
 @pytest.fixture
-def warehouse_service_sql(
-    warehouse_repo_sql, product_repo_sql, inventory_repo_sql
-):
+def warehouse_service_sql(warehouse_repo_sql, product_repo_sql, inventory_repo_sql):
     """Fixture for warehouse service with SQL repos."""
     return WarehouseService(
         warehouse_repo=warehouse_repo_sql,
@@ -108,9 +106,7 @@ class TestWarehouseTransferIntegration:
         )
         assert len(source_inventory) == 0
 
-    def test_transfer_all_inventory_empty_source(
-        self, warehouse_service_sql
-    ):
+    def test_transfer_all_inventory_empty_source(self, warehouse_service_sql):
         """Test transferring from empty warehouse returns empty list."""
         warehouse1 = warehouse_service_sql.create_warehouse("Empty Warehouse")
         warehouse2 = warehouse_service_sql.create_warehouse("Destination Warehouse")
@@ -127,7 +123,9 @@ class TestWarehouseTransferIntegration:
         """Test transferring to same warehouse raises error."""
         warehouse = warehouse_service_sql.create_warehouse("Test Warehouse")
 
-        with pytest.raises(ValidationError, match="Cannot transfer to the same warehouse"):
+        with pytest.raises(
+            ValidationError, match="Cannot transfer to the same warehouse"
+        ):
             warehouse_service_sql.transfer_all_inventory(
                 warehouse.warehouse_id, warehouse.warehouse_id
             )

@@ -6,6 +6,9 @@ from app.exceptions.business_exceptions import (
     EntityAlreadyExistsError,
     EntityNotFoundError,
 )
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class ProductService:
@@ -106,11 +109,7 @@ class ProductService:
                 f"Cannot delete product {product_id}: still has {current_quantity} items in inventory"
             )
 
-        # Clean up inventory
-        # Note: In a real system, you might want to keep historical data
-        self.inventory_repo.remove_quantity(product_id, current_quantity)
-
-        # Delete the product
+        # Delete the product (inventory cleanup handled by cascade)
         self.product_repo.delete(product_id)
 
     def get_product_with_inventory(self, product_id: int) -> dict:

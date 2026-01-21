@@ -7,7 +7,10 @@ import pytest
 
 from app.models.warehouse_domain import Warehouse
 from app.models.product_domain import Product
-from app.exceptions.business_exceptions import WarehouseNotFoundError, InsufficientStockError
+from app.exceptions.business_exceptions import (
+    WarehouseNotFoundError,
+    InsufficientStockError,
+)
 
 
 class TestWarehouseRepoSQL:
@@ -109,9 +112,7 @@ class TestWarehouseRepoSQL:
         inventory_after = warehouse_repo_sql.get_warehouse_inventory(5)
         assert len(inventory_after) == 0
 
-    def test_add_product_to_warehouse(
-        self, warehouse_repo_sql, product_repo_sql
-    ):
+    def test_add_product_to_warehouse(self, warehouse_repo_sql, product_repo_sql):
         """Test adding product to warehouse."""
         # Create product and warehouse
         product = Product(product_id=1, name="Product A", price=50.0)
@@ -157,9 +158,7 @@ class TestWarehouseRepoSQL:
         with pytest.raises(WarehouseNotFoundError):
             warehouse_repo_sql.add_product_to_warehouse(9999, 1, 5)
 
-    def test_remove_product_from_warehouse(
-        self, warehouse_repo_sql, product_repo_sql
-    ):
+    def test_remove_product_from_warehouse(self, warehouse_repo_sql, product_repo_sql):
         """Test removing product from warehouse."""
         product = Product(product_id=1, name="Product A", price=50.0)
         product_repo_sql.save(product)
@@ -248,7 +247,7 @@ class TestWarehouseRepoSQL:
 
         inventory = warehouse_repo_sql.get_warehouse_inventory(1)
         assert len(inventory) == 3
-        
+
         # Check quantities
         quantities = {item.product_id: item.quantity for item in inventory}
         assert quantities[1] == 5
@@ -272,10 +271,10 @@ class TestWarehouseRepoSQL:
 
         # Add product to warehouse using the repository method (which handles updates)
         warehouse_repo_sql.add_product_to_warehouse(1, 1, 5)
-        
+
         # Adding again should update, not fail with constraint error
         warehouse_repo_sql.add_product_to_warehouse(1, 1, 3)
-        
+
         inventory = warehouse_repo_sql.get_warehouse_inventory(1)
         assert len(inventory) == 1
         assert inventory[0].quantity == 8  # Should be accumulated

@@ -28,12 +28,12 @@ def test_engine():
         connect_args={"check_same_thread": False},  # Needed for SQLite
         future=True,
     )
-    
+
     # Create all tables
     Base.metadata.create_all(bind=engine)
-    
+
     yield engine
-    
+
     # Drop all tables after test
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
@@ -46,9 +46,9 @@ def test_session(test_engine):
         bind=test_engine, autoflush=False, autocommit=False, future=True
     )
     session = TestSessionLocal()
-    
+
     yield session
-    
+
     # Clean up
     session.rollback()
     session.close()

@@ -136,7 +136,7 @@ class TestInventoryRepo:
         assert self.repo.get_quantity(1) == 10
 
     def test_inventory_item_operations(self):
-        """Test that inventory operations properly use InventoryItem methods."""        # Add initial quantity
+        """Test that inventory operations properly use InventoryItem methods."""  # Add initial quantity
         self.repo.add_quantity(1, 10)
 
         # Get the item and verify quantity

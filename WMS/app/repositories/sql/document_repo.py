@@ -11,15 +11,16 @@ from app.models.document_domain import (
     DocumentType,
 )
 from app.utils.infrastructure.id_generator import IDGenerator
+from app.core.transaction import TransactionalRepository
 from ..interfaces.interfaces import IDocumentRepo
 from .models import DocumentItemModel, DocumentModel
 
 
-class DocumentRepo(IDocumentRepo):
+class DocumentRepo(TransactionalRepository, IDocumentRepo):
     """PostgreSQL-backed repository for documents and their items."""
 
     def __init__(self, session: Session):
-        self.session = session
+        super().__init__(session)
         self._sync_id_generator()
 
     def _sync_id_generator(self) -> None:
@@ -73,7 +74,7 @@ class DocumentRepo(IDocumentRepo):
                 )
             )
 
-        self.session.commit()
+        self._commit_if_auto()
 
     def get(self, document_id: int) -> Optional[Document]:
         model = self.session.get(DocumentModel, document_id)
@@ -88,20 +89,14 @@ class DocumentRepo(IDocumentRepo):
         if not model:
             raise DocumentNotFoundError(f"Document {document_id} not found")
         model.status = new_status.value
-        self.session.commit()
+        self._commit_if_auto()
 
     def delete(self, document_id: int) -> None:
         model = self.session.get(DocumentModel, document_id)
         if not model:
             raise DocumentNotFoundError(f"Document {document_id} not found")
         self.session.delete(model)
-        self.session.commit()
-
-    def get_document(self, document_id: int) -> Document:
-        doc = self.get(document_id)
-        if not doc:
-            raise DocumentNotFoundError(f"Document {document_id} not found")
-        return doc
+        self._commit_if_auto()
 
     @staticmethod
     def _to_domain(model: DocumentModel) -> Document:
