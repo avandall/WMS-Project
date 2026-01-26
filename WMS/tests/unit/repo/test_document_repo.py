@@ -113,11 +113,11 @@ class TestDocumentRepo:
         )
         self.repo.save(doc)
 
-        retrieved = self.repo.get_document(1)
+        retrieved = self.repo.get(1)
         assert retrieved.document_id == 1
         assert retrieved.doc_type == DocumentType.IMPORT
 
     def test_get_document_nonexistent(self):
-        """Test getting document details for nonexistent document raises DocumentNotFoundError."""
-        with pytest.raises(DocumentNotFoundError, match="Document 999 not found"):
-            self.repo.get_document(999)
+        """Test getting document details for nonexistent document returns None."""
+        result = self.repo.get(999)
+        assert result is None

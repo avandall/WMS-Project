@@ -70,11 +70,11 @@ class TestProductRepo:
         )
         self.repo.save(product)
 
-        retrieved = self.repo.get_product_details(1)
+        retrieved = self.repo.get(1)
         assert retrieved.product_id == 1
         assert retrieved.name == "Test Product"
 
     def test_get_product_details_nonexistent(self):
-        """Test getting product details for nonexistent product raises KeyError."""
-        with pytest.raises(KeyError, match="Product not found"):
-            self.repo.get_product_details(999)
+        """Test getting product details for nonexistent product returns None."""
+        result = self.repo.get(999)
+        assert result is None

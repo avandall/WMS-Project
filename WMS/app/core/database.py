@@ -69,8 +69,9 @@ def init_db() -> None:
 def check_db_connection() -> bool:
     """Check if database connection is healthy."""
     try:
+        from sqlalchemy import text
         with engine.connect() as conn:
-            conn.execute("SELECT 1")
+            conn.execute(text("SELECT 1"))
         return True
     except Exception as e:
         logger.error(f"Database health check failed: {str(e)}")

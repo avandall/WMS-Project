@@ -220,6 +220,12 @@ class WarehouseService:
 
         return result
 
+    def get_all_warehouses(self) -> List[Warehouse]:
+        """
+        Get all warehouses without inventory details.
+        """
+        return list(self.warehouse_repo.get_all().values())
+
     def _get_warehouse_product_quantity(
         self, warehouse_id: int, product_id: int
     ) -> int:

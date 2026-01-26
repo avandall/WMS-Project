@@ -109,16 +109,40 @@ WMS/
 
 ### **Development Server**
 ```bash
-# From the WMS directory
+# From the WMS directory with virtual environment activated
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 python app/main.py
+```
+
+### **Convenience Script (Recommended)**
+```bash
+# From the WMS directory (automatically handles venv activation)
+./run_server.sh
 ```
 
 Or run as a module:
 ```bash
+source venv/bin/activate
 python -m app.main
 ```
 
-The API will be available at: **http://localhost:8000**
+The API will be available at: **http://localhost:8000** (or **http://0.0.0.0:8000**)
+
+### **Troubleshooting**
+
+**"ModuleNotFoundError: No module named 'uvicorn'"**
+- Make sure you're running from the WMS directory
+- Activate the virtual environment: `source venv/bin/activate`
+- Install dependencies: `pip install -e .`
+
+**"python: command not found"**
+- Use `python3` instead of `python`
+- Or use the convenience script: `./run_server.sh`
+
+**Server not starting**
+- Check if port 8000 is already in use: `lsof -i :8000`
+- Kill existing process: `pkill -f uvicorn`
+- Try different port by setting `PORT` environment variable
 
 ### **API Documentation**
 - **Swagger UI**: http://localhost:8000/docs

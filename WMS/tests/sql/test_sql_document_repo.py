@@ -234,13 +234,13 @@ class TestDocumentRepoSQL:
         )
         document_repo_sql.save(doc)
 
-        retrieved = document_repo_sql.get_document(1)
+        retrieved = document_repo_sql.get(1)
         assert retrieved.document_id == 1
 
     def test_get_document_nonexistent_raises_error(self, document_repo_sql):
         """Test get_document with non-existent ID raises error."""
         with pytest.raises(DocumentNotFoundError):
-            document_repo_sql.get_document(9999)
+            document_repo_sql.get(9999)
 
     def test_document_with_transfer_type(
         self, document_repo_sql, product_repo_sql, warehouse_repo_sql

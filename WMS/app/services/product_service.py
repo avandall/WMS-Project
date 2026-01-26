@@ -111,6 +111,8 @@ class ProductService:
 
         # Delete the product (inventory cleanup handled by cascade)
         self.product_repo.delete(product_id)
+        # Clean up inventory record
+        self.inventory_repo.delete(product_id)
 
     def get_product_with_inventory(self, product_id: int) -> dict:
         """
@@ -131,3 +133,9 @@ class ProductService:
             quantity = self.inventory_repo.get_quantity(product_id)
             products.append({"product": product, "current_inventory": quantity})
         return products
+
+    def get_all_products(self) -> list:
+        """
+        Get all products without inventory information.
+        """
+        return list(self.product_repo.get_all().values())

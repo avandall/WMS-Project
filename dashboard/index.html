@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WMS Dashboard - Warehouse Management System</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="dashboard">
+        <header class="header">
+            <h1>🏭 Warehouse Management System</h1>
+            <div class="header-info">
+                <span id="connection-status" class="status-connected">● Connected</span>
+                <span id="current-time"></span>
+            </div>
+        </header>
+
+        <nav class="nav">
+            <button class="nav-btn active" onclick="showSection('overview')">Overview</button>
+            <button class="nav-btn" onclick="showSection('products')">Products</button>
+            <button class="nav-btn" onclick="showSection('warehouses')">Warehouses</button>
+            <button class="nav-btn" onclick="showSection('inventory')">Inventory</button>
+            <button class="nav-btn" onclick="showSection('documents')">Documents</button>
+            <button class="nav-btn" onclick="showSection('reports')">Reports</button>
+        </nav>
+
+        <main class="main-content">
+            <!-- Overview Section -->
+            <section id="overview-section" class="section active">
+                <h2>Dashboard Overview</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Total Products</h3>
+                        <div class="stat-number" id="total-products">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Warehouses</h3>
+                        <div class="stat-number" id="total-warehouses">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Inventory Items</h3>
+                        <div class="stat-number" id="total-inventory">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Today's Documents</h3>
+                        <div class="stat-number" id="today-documents">0</div>
+                    </div>
+                </div>
+
+                <div class="recent-activity">
+                    <h3>Recent Activity</h3>
+                    <div id="recent-activity-list" class="activity-list">
+                        <p>Loading recent activity...</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Products Section -->
+            <section id="products-section" class="section">
+                <div class="section-header">
+                    <h2>Product Management</h2>
+                    <button class="btn-primary" onclick="showCreateProductModal()">+ Add Product</button>
+                </div>
+                <div id="products-list" class="data-table">
+                    <p>Loading products...</p>
+                </div>
+            </section>
+
+            <!-- Warehouses Section -->
+            <section id="warehouses-section" class="section">
+                <div class="section-header">
+                    <h2>Warehouse Management</h2>
+                    <button class="btn-primary" onclick="showCreateWarehouseModal()">+ Add Warehouse</button>
+                </div>
+                <div id="warehouses-list" class="data-table">
+                    <p>Loading warehouses...</p>
+                </div>
+            </section>
+
+            <!-- Inventory Section -->
+            <section id="inventory-section" class="section">
+                <h2>Inventory Overview</h2>
+                <div id="inventory-overview" class="inventory-grid">
+                    <p>Loading inventory data...</p>
+                </div>
+            </section>
+
+            <!-- Documents Section -->
+            <section id="documents-section" class="section">
+                <div class="section-header">
+                    <h2>Document Management</h2>
+                    <button class="btn-primary" onclick="showCreateDocumentModal()">+ New Document</button>
+                </div>
+                <div id="documents-list" class="data-table">
+                    <p>Loading documents...</p>
+                </div>
+            </section>
+
+            <!-- Reports Section -->
+            <section id="reports-section" class="section">
+                <h2>Reports & Analytics</h2>
+                <div class="reports-grid">
+                    <div class="report-card" onclick="generateInventoryReport()">
+                        <h3>📊 Inventory Report</h3>
+                        <p>Current stock levels across all warehouses</p>
+                    </div>
+                    <div class="report-card" onclick="generateProductReport()">
+                        <h3>📦 Product Report</h3>
+                        <p>Product catalog and pricing information</p>
+                    </div>
+                    <div class="report-card" onclick="generateDocumentReport()">
+                        <h3>📄 Transaction Report</h3>
+                        <p>Import, export, and transfer history</p>
+                    </div>
+                    <div class="report-card" onclick="generateWarehouseReport()">
+                        <h3>🏭 Warehouse Report</h3>
+                        <p>Warehouse utilization and performance</p>
+                    </div>
+                </div>
+                <div id="report-results" class="report-results">
+                    <p>Select a report to generate</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="product-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('product-modal')">&times;</span>
+            <h2>Create New Product</h2>
+            <form id="product-form">
+                <div class="form-group">
+                    <label for="product-name">Product Name:</label>
+                    <input type="text" id="product-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="product-price">Price:</label>
+                    <input type="number" id="product-price" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="product-description">Description:</label>
+                    <textarea id="product-description"></textarea>
+                </div>
+                <button type="submit" class="btn-primary">Create Product</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="warehouse-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('warehouse-modal')">&times;</span>
+            <h2>Create New Warehouse</h2>
+            <form id="warehouse-form">
+                <div class="form-group">
+                    <label for="warehouse-location">Location:</label>
+                    <input type="text" id="warehouse-location" required>
+                </div>
+                <button type="submit" class="btn-primary">Create Warehouse</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="document-modal" class="modal">
+        <div class="modal-content large-modal">
+            <span class="close" onclick="closeModal('document-modal')">&times;</span>
+            <h2>Create New Document</h2>
+            <form id="document-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="doc-type">Document Type:</label>
+                        <select id="doc-type" required onchange="updateDocumentForm()">
+                            <option value="import">Import</option>
+                            <option value="export">Export</option>
+                            <option value="transfer">Transfer</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="source-warehouse-group" style="display: none;">
+                        <label for="source-warehouse">Source Warehouse:</label>
+                        <select id="source-warehouse"></select>
+                    </div>
+                    <div class="form-group" id="dest-warehouse-group">
+                        <label for="dest-warehouse">Destination Warehouse:</label>
+                        <select id="dest-warehouse"></select>
+                    </div>
+                </div>
+                <div id="document-items">
+                    <h3>Items</h3>
+                    <div class="item-row">
+                        <select class="product-select" required>
+                            <option value="">Select Product</option>
+                        </select>
+                        <input type="number" class="quantity-input" placeholder="Quantity" min="1" required>
+                        <input type="number" class="price-input" placeholder="Unit Price" step="0.01" required>
+                        <button type="button" class="btn-secondary" onclick="removeItem(this)">Remove</button>
+                    </div>
+                </div>
+                <button type="button" class="btn-secondary" onclick="addItem()">+ Add Item</button>
+                <br><br>
+                <button type="submit" class="btn-primary">Create Document</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
