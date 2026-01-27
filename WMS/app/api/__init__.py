@@ -14,7 +14,11 @@ from .routers.warehouses import router as warehouses_router
 from .routers.inventory import router as inventory_router
 from .routers.documents import router as documents_router
 from .routers.reports import router as reports_router
+from .routers.customers import router as customers_router
+from .routers.auth import router as auth_router
+from .routers.users import router as users_router
 from .warehouse_operations import router as warehouse_operations_router
+from .middleware import audit_middleware, rate_limit_middleware
 from ..exceptions.business_exceptions import (
     EntityNotFoundError,
     ValidationError,
@@ -46,6 +50,10 @@ app.add_middleware(
     allow_methods=settings.cors_allow_methods,
     allow_headers=settings.cors_allow_headers,
 )
+
+# Security middlewares
+app.middleware("http")(rate_limit_middleware)
+app.middleware("http")(audit_middleware)
 
 # Ensure database tables exist at startup
 init_db()
@@ -186,6 +194,9 @@ app.include_router(warehouses_router, prefix="/api/warehouses", tags=["warehouse
 app.include_router(inventory_router, prefix="/api/inventory", tags=["inventory"])
 app.include_router(documents_router, prefix="/api/documents", tags=["documents"])
 app.include_router(reports_router, prefix="/api/reports", tags=["reports"])
+app.include_router(customers_router, prefix="/api/customers", tags=["customers"])
 app.include_router(
     warehouse_operations_router, prefix="/api", tags=["warehouse-operations"]
 )
+app.include_router(auth_router, prefix="/auth", tags=["auth"])
+app.include_router(users_router, prefix="/api/users", tags=["users"])

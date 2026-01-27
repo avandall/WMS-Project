@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # Security settings
     secret_key: str = "your-secret-key-here"  # CHANGE IN PRODUCTION!
     api_key_header: str = "X-API-Key"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
+    refresh_token_expire_minutes: int = 7 * 24 * 60
     
     # CORS settings
     cors_origins: list[str] = ["*"]  # Configure specific origins in production

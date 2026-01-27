@@ -12,11 +12,13 @@ from app.repositories.interfaces.interfaces import (
     IInventoryRepo,
     IProductRepo,
     IWarehouseRepo,
+    ICustomerRepo,
 )
 from app.repositories.sql.document_repo import DocumentRepo
 from app.repositories.sql.inventory_repo import InventoryRepo
 from app.repositories.sql.product_repo import ProductRepo
 from app.repositories.sql.warehouse_repo import WarehouseRepo
+from app.repositories.sql.customer_repo import CustomerRepo
 from app.services.document_service import DocumentService
 from app.services.inventory_service import InventoryService
 from app.services.product_service import ProductService
@@ -43,6 +45,11 @@ def get_warehouse_repo(db: Session = Depends(get_session)) -> IWarehouseRepo:
 def get_document_repo(db: Session = Depends(get_session)) -> IDocumentRepo:
     """Provide a document repository bound to the current DB session."""
     return DocumentRepo(db)
+
+
+def get_customer_repo(db: Session = Depends(get_session)) -> ICustomerRepo:
+    """Provide a customer repository bound to the current DB session."""
+    return CustomerRepo(db)
 
 
 def get_product_service(db: Session = Depends(get_session)) -> ProductService:
@@ -78,11 +85,13 @@ def get_document_service(db: Session = Depends(get_session)) -> DocumentService:
     warehouse_repo = WarehouseRepo(db)
     product_repo = ProductRepo(db)
     inventory_repo = InventoryRepo(db)
+    customer_repo = CustomerRepo(db)
     return DocumentService(
         document_repo=document_repo,
         warehouse_repo=warehouse_repo,
         product_repo=product_repo,
         inventory_repo=inventory_repo,
+        customer_repo=customer_repo,
         session=db,  # Pass session for transaction management
     )
 

@@ -64,9 +64,17 @@ WMS/
 │       ├── domain/
 │       └── application/
 ├── tests/                       # Test suite
-│   ├── unit/
-│   ├── integration/
-│   └── functional/
+│   ├── unit/                    # Unit tests
+│   ├── integration/             # Integration tests
+│   ├── functional/              # Functional tests
+│   ├── comprehensive_test.py    # Full end-to-end integration test
+│   └── COMPREHENSIVE_TEST_README.md
+├── scripts/                     # Utility scripts
+│   ├── create_admin.py          # Create/update admin user
+│   ├── add_customer_id.py       # Database migration
+│   ├── test_db.py               # Database inspection
+│   ├── check_warehouses.py      # Warehouse inspection
+│   └── README.md                # Scripts documentation
 ├── .env                         # Environment variables
 ├── .gitignore                   # Git ignore rules
 ├── requirements.txt             # Python dependencies
@@ -156,21 +164,55 @@ The API will be available at: **http://localhost:8000** (or **http://0.0.0.0:800
 pytest
 ```
 
+### **Run Unit Tests Only**
+```bash
+pytest tests/unit/
+```
+
+### **Run Integration Tests**
+```bash
+pytest tests/integration/
+```
+
+### **Run Comprehensive End-to-End Test**
+```bash
+# Make sure server is running first
+python main.py
+
+# In another terminal:
+python tests/comprehensive_test.py
+```
+
+See [tests/COMPREHENSIVE_TEST_README.md](tests/COMPREHENSIVE_TEST_README.md) for details.
+
 ### **Run with Coverage**
 ```bash
 pytest --cov=app --cov-report=html
 ```
 
-### **Run Specific Test Categories**
+## 🛠️ Utility Scripts
+
+All utility scripts are located in the `scripts/` directory. See [scripts/README.md](scripts/README.md) for full documentation.
+
+### **Setup Admin User**
 ```bash
-# Unit tests
-pytest tests/unit/
+python scripts/create_admin.py
+```
+Creates admin user (admin@example.com / admin) with bcrypt password hashing.
 
-# Integration tests
-pytest tests/integration/
+### **Database Migrations**
+```bash
+python scripts/add_customer_id.py
+```
+Adds customer_id column to documents table (safe to run multiple times).
 
-# API tests
-pytest tests/api/
+### **Database Inspection**
+```bash
+# View all tables and schema
+python scripts/test_db.py
+
+# Check warehouse data
+python scripts/check_warehouses.py
 ```
 
 ## 📖 Usage Examples

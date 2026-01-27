@@ -12,9 +12,11 @@ from ..schemas.product import (
     TransferInventoryRequest,
     WarehouseTransferResponse,
 )
+from app.api.auth_deps import get_current_user, require_permissions
+from app.core.permissions import Permission
 from app.services.warehouse_service import WarehouseService
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @router.get("/", response_model=list[WarehouseResponse])
@@ -32,7 +34,11 @@ async def get_all_warehouses(service: WarehouseService = Depends(get_warehouse_s
     return result
 
 
-@router.post("/", response_model=WarehouseResponse)
+@router.post(
+    "/",
+    response_model=WarehouseResponse,
+    dependencies=[Depends(require_permissions(Permission.MANAGE_WAREHOUSES))],
+)
 async def create_warehouse(
     warehouse: WarehouseCreate,
     service: WarehouseService = Depends(get_warehouse_service),
@@ -56,7 +62,10 @@ async def get_warehouse(
     )
 
 
-@router.delete("/{warehouse_id}")
+@router.delete(
+    "/{warehouse_id}",
+    dependencies=[Depends(require_permissions(Permission.MANAGE_WAREHOUSES))],
+)
 async def delete_warehouse(
     warehouse_id: int, service: WarehouseService = Depends(get_warehouse_service)
 ):
@@ -65,7 +74,11 @@ async def delete_warehouse(
     return {"message": f"Warehouse {warehouse_id} deleted successfully"}
 
 
-@router.post("/{warehouse_id}/transfer", response_model=WarehouseTransferResponse)
+@router.post(
+    "/{warehouse_id}/transfer",
+    response_model=WarehouseTransferResponse,
+    dependencies=[Depends(require_permissions(Permission.MANAGE_WAREHOUSES))],
+)
 async def transfer_all_inventory(
     warehouse_id: int,
     transfer_request: TransferInventoryRequest,

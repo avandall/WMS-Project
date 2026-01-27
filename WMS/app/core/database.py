@@ -6,6 +6,7 @@ Provides SQLAlchemy engine, session factory, and base class.
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
+import time
 from app.core.settings import settings
 from app.core.logging import get_logger
 
@@ -36,6 +37,19 @@ def receive_connect(dbapi_conn, connection_record):
 @event.listens_for(engine, "close")
 def receive_close(dbapi_conn, connection_record):
     logger.debug("Database connection closed")
+
+
+@event.listens_for(engine, "before_cursor_execute")
+def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    context._query_start_time = time.perf_counter()
+
+
+@event.listens_for(engine, "after_cursor_execute")
+def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    if hasattr(context, "_query_start_time"):
+        elapsed_ms = (time.perf_counter() - context._query_start_time) * 1000
+        if elapsed_ms > 200:
+            logger.warning(f"Slow query ({elapsed_ms:.1f} ms): {statement}")
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 Base = declarative_base()
 
@@ -45,11 +59,13 @@ def get_session():
     db = SessionLocal()
     try:
         yield db
+        db.commit()  # Ensure any pending changes are committed
     except Exception as e:
         logger.error(f"Database session error: {type(e).__name__}: {str(e)}")
         db.rollback()
         raise
     finally:
+        db.expunge_all()  # Detach all objects to prevent DetachedInstanceError
         db.close()
 
 

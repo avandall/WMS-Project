@@ -4,6 +4,8 @@ from app.models.product_domain import Product
 from app.models.warehouse_domain import Warehouse
 from app.models.inventory_domain import InventoryItem
 from app.models.document_domain import Document, DocumentStatus
+from app.models.user_domain import User
+from app.models import document_domain
 
 
 class IProductRepo(ABC):
@@ -111,4 +113,48 @@ class IDocumentRepo(ABC):
 
     @abstractmethod
     def delete(self, document_id: int) -> None:
+        pass
+
+
+class IUserRepo(ABC):
+    @abstractmethod
+    def save(self, user: User) -> User:
+        pass
+
+    @abstractmethod
+    def get_by_email(self, email: str) -> Optional[User]:
+        pass
+
+    @abstractmethod
+    def get(self, user_id: int) -> Optional[User]:
+        pass
+
+    @abstractmethod
+    def get_all(self) -> Dict[int, User]:
+        pass
+
+
+class ICustomerRepo(ABC):
+    @abstractmethod
+    def create(self, data: dict):
+        pass
+
+    @abstractmethod
+    def get(self, customer_id: int):
+        pass
+
+    @abstractmethod
+    def get_all(self) -> List[dict]:
+        pass
+
+    @abstractmethod
+    def update_debt(self, customer_id: int, delta: float) -> None:
+        pass
+
+    @abstractmethod
+    def record_purchase(self, customer_id: int, document_id: int, total_value: float) -> None:
+        pass
+
+    @abstractmethod
+    def list_purchases(self, customer_id: int) -> List[dict]:
         pass

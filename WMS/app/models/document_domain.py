@@ -24,6 +24,7 @@ class DocumentType(str, Enum):
     IMPORT = "IMPORT"  # Nhập
     EXPORT = "EXPORT"  # Xuất
     TRANSFER = "TRANSFER"  # Chuyển kho
+    SALE = "SALE"  # Bán hàng (xuất ra khỏi hệ thống)
 
 
 class DocumentStatus(str, Enum):
@@ -87,6 +88,7 @@ class Document:
         items: Optional[List[DocumentProduct]] = None,
         created_by: str = "",
         note: Optional[str] = None,
+        customer_id: Optional[int] = None,
     ):
         self._validate_document_id(document_id)
         self._validate_document_type(doc_type)
@@ -104,6 +106,7 @@ class Document:
         self.cancellation_reason: Optional[str] = None
         self.from_warehouse_id = from_warehouse_id
         self.to_warehouse_id = to_warehouse_id
+        self.customer_id = customer_id
         self.items: List[DocumentProduct] = items or []
         self.created_by = created_by
         self.note = note
@@ -122,6 +125,7 @@ class Document:
             DocumentType.IMPORT,
             DocumentType.EXPORT,
             DocumentType.TRANSFER,
+            DocumentType.SALE,
         ]:
             raise ValidationError(ErrorMessages.INVALID_DOCUMENT_TYPE)
 
@@ -135,7 +139,7 @@ class Document:
         if doc_type == DocumentType.IMPORT:
             if to_warehouse_id is None:
                 raise ValidationError(ErrorMessages.IMPORT_MISSING_DESTINATION)
-        elif doc_type == DocumentType.EXPORT:
+        elif doc_type in (DocumentType.EXPORT, DocumentType.SALE):
             if from_warehouse_id is None:
                 raise ValidationError(ErrorMessages.EXPORT_MISSING_SOURCE)
         elif doc_type == DocumentType.TRANSFER:

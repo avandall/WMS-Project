@@ -42,6 +42,7 @@ class DocumentRepo(TransactionalRepository, IDocumentRepo):
                 created_by=document.created_by,
                 approved_by=document.approved_by,
                 note=document.note,
+                customer_id=document.customer_id,
                 created_at=document.date,
                 posted_at=document.posted_at,
                 cancelled_at=document.cancelled_at,
@@ -56,6 +57,7 @@ class DocumentRepo(TransactionalRepository, IDocumentRepo):
             model.created_by = document.created_by
             model.approved_by = document.approved_by
             model.note = document.note
+            model.customer_id = document.customer_id
             model.created_at = document.date
             model.posted_at = document.posted_at
             model.cancelled_at = document.cancelled_at
@@ -116,6 +118,7 @@ class DocumentRepo(TransactionalRepository, IDocumentRepo):
             items=items,
             created_by=model.created_by,
             note=model.note,
+            customer_id=model.customer_id,
         )
         document.status = DocumentStatus(model.status)
         document.date = model.created_at

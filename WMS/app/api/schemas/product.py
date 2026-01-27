@@ -9,7 +9,6 @@ from datetime import datetime
 
 # Product models
 class ProductCreate(BaseModel):
-    product_id: int = Field(..., gt=0, description="Unique product identifier")
     name: str = Field(..., min_length=1, max_length=100, description="Product name")
     price: float = Field(
         ...,
@@ -100,23 +99,24 @@ class WarehouseTransferResponse(BaseModel):
 class DocumentProductItem(BaseModel):
     product_id: int = Field(..., gt=0)
     quantity: int = Field(..., gt=0)
-    unit_price: float = Field(..., ge=0)
+    unit_price: Optional[float] = Field(None, ge=0, description="Optional; defaults to 0 for transfer/export/sale")
 
 
 class DocumentCreate(BaseModel):
-    warehouse_id: Optional[int] = Field(
-        None, gt=0, description="Target warehouse for import/export"
+    doc_type: str = Field(..., description="Document type: import, export, or transfer")
+    destination_warehouse_id: Optional[int] = Field(
+        None, gt=0, description="Target warehouse for import"
     )
-    from_warehouse_id: Optional[int] = Field(
-        None, gt=0, description="Source warehouse for transfer"
+    source_warehouse_id: Optional[int] = Field(
+        None, gt=0, description="Source warehouse for export or transfer"
     )
-    to_warehouse_id: Optional[int] = Field(
-        None, gt=0, description="Target warehouse for transfer"
+    customer_id: Optional[int] = Field(
+        None, gt=0, description="Customer ID for sale documents"
     )
     items: List[DocumentProductItem] = Field(
         ..., min_items=1, description="Document items"
     )
-    created_by: str = Field(..., min_length=1, description="Creator name")
+    created_by: Optional[str] = Field(None, description="Creator name (auto-filled if not provided)")
     note: Optional[str] = Field(None, description="Optional note")
 
 
@@ -130,6 +130,7 @@ class DocumentResponse(BaseModel):
     status: str
     from_warehouse_id: Optional[int]
     to_warehouse_id: Optional[int]
+    customer_id: Optional[int]
     items: List[DocumentProductItem]
     created_by: str
     approved_by: Optional[str]
@@ -156,6 +157,7 @@ class DocumentResponse(BaseModel):
             approved_by=document.approved_by,
             date=document.date,
             note=document.note,
+            customer_id=getattr(document, "customer_id", None),
         )
 
 

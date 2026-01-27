@@ -20,6 +20,7 @@ from app.repositories.interfaces.interfaces import (
     IWarehouseRepo,
     IProductRepo,
     IInventoryRepo,
+    ICustomerRepo,
 )
 from app.utils.infrastructure import document_id_generator
 from app.core.logging import get_logger
@@ -40,12 +41,14 @@ class DocumentService:
         warehouse_repo: IWarehouseRepo,
         product_repo: IProductRepo,
         inventory_repo: IInventoryRepo,
+        customer_repo: Optional[ICustomerRepo] = None,
         session: Optional[Session] = None,
     ):
         self.document_repo = document_repo
         self.warehouse_repo = warehouse_repo
         self.product_repo = product_repo
         self.inventory_repo = inventory_repo
+        self.customer_repo = customer_repo
         self.session = session
         logger.info("DocumentService initialized")
         self._doc_id_generator = document_id_generator()
@@ -120,6 +123,42 @@ class DocumentService:
             items=document_items,
             created_by=created_by,
             note=note,
+        )
+
+        self.document_repo.save(document)
+        return document
+
+    def create_sale_document(
+        self,
+        from_warehouse_id: int,
+        items: List[Dict[str, Any]],
+        created_by: str,
+        note: Optional[str] = None,
+        customer_id: Optional[int] = None,
+    ) -> Document:
+        """
+        Create a sale document (acts like export) with inventory validation.
+
+        Reuses export posting semantics: deducts from warehouse and total inventory.
+        """
+        # Validate warehouse exists
+        warehouse = self.warehouse_repo.get(from_warehouse_id)
+        if not warehouse:
+            raise WarehouseNotFoundError(f"Warehouse {from_warehouse_id} not found")
+
+        # Validate and convert items (without product check - deferred to posting)
+        document_items = self._validate_and_convert_items(items, check_product_exists=False)
+
+        # Generate document
+        document_id = self._doc_id_generator()
+        document = Document(
+            document_id=document_id,
+            doc_type=DocumentType.SALE,
+            from_warehouse_id=from_warehouse_id,
+            items=document_items,
+            created_by=created_by,
+            note=note,
+            customer_id=customer_id,
         )
 
         self.document_repo.save(document)
@@ -211,10 +250,15 @@ class DocumentService:
             # Execute operations based on document type
             if document.doc_type == DocumentType.IMPORT:
                 self._execute_import_operations(document)
-            elif document.doc_type == DocumentType.EXPORT:
+            elif document.doc_type in (DocumentType.EXPORT, DocumentType.SALE):
                 self._execute_export_operations(document)
             elif document.doc_type == DocumentType.TRANSFER:
                 self._execute_transfer_operations(document)
+
+            # Handle customer debt and purchase tracking for sales
+            if document.doc_type == DocumentType.SALE and document.customer_id and self.customer_repo:
+                total_value = sum(item.quantity * item.unit_price for item in document.items)
+                self.customer_repo.record_purchase(document.customer_id, document.document_id, total_value)
 
             # Update document status
             document.status = DocumentStatus.POSTED
@@ -245,10 +289,14 @@ class DocumentService:
         try:
             if document.doc_type == DocumentType.IMPORT:
                 self._execute_import_operations(document)
-            elif document.doc_type == DocumentType.EXPORT:
+            elif document.doc_type in (DocumentType.EXPORT, DocumentType.SALE):
                 self._execute_export_operations(document)
             elif document.doc_type == DocumentType.TRANSFER:
                 self._execute_transfer_operations(document)
+
+            if document.doc_type == DocumentType.SALE and document.customer_id and self.customer_repo:
+                total_value = sum(item.quantity * item.unit_price for item in document.items)
+                self.customer_repo.record_purchase(document.customer_id, document.document_id, total_value)
 
             document.status = DocumentStatus.POSTED
             document.approved_by = approved_by
@@ -379,10 +427,14 @@ class DocumentService:
             quantity = item_data.get("quantity")
             unit_price = item_data.get("unit_price")
 
-            if product_id is None or quantity is None or unit_price is None:
+            if product_id is None or quantity is None:
                 raise ValidationError(
-                    "Each item must have product_id, quantity, and unit_price"
+                    "Each item must have product_id and quantity"
                 )
+
+            # Allow unit_price to be optional; default to 0 when missing
+            if unit_price is None:
+                unit_price = 0
 
             if quantity <= 0:
                 raise InvalidQuantityError("Quantity must be positive")

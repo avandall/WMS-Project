@@ -23,17 +23,28 @@ class ProductService:
 
     def create_product(
         self,
-        product_id: int,
         name: str,
         price: float,
         description: Optional[str] = None,
+        product_id: Optional[int] = None,
     ) -> Product:
         """
         Create a new product with business orchestration.
         - Validates business rules (product doesn't already exist)
         - Creates the product domain entity
         - Initializes inventory for the product
+        
+        If product_id is not provided, it will be auto-generated.
         """
+        # Auto-generate product_id if not provided
+        if product_id is None:
+            # Get the maximum product_id and increment
+            all_products = self.product_repo.get_all()
+            if all_products:
+                product_id = max(all_products.keys()) + 1
+            else:
+                product_id = 1
+        
         # Business rule: Check if product already exists
         existing_product = self.product_repo.get(product_id)
         if existing_product:
@@ -139,3 +150,29 @@ class ProductService:
         Get all products without inventory information.
         """
         return list(self.product_repo.get_all().values())
+
+    def import_products(self, rows: list[dict]) -> dict:
+        """Bulk import products from parsed rows.
+
+        Each row must have product_id, name, price, description (optional).
+        Existing products are updated; new ones are created with inventory initialized.
+        """
+        created = 0
+        updated = 0
+        for row in rows:
+            product_id = int(row["product_id"])
+            name = row["name"]
+            price = float(row.get("price", 0))
+            description = row.get("description")
+            existing = self.product_repo.get(product_id)
+            if existing:
+                if name:
+                    existing.update_name(name)
+                existing.update_price(price)
+                existing.update_description(description)
+                self.product_repo.save(existing)
+                updated += 1
+            else:
+                self.create_product(product_id, name, price, description)
+                created += 1
+        return {"created": created, "updated": updated}

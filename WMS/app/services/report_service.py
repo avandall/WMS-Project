@@ -340,7 +340,7 @@ class ReportService:
 
                         if doc.doc_type == DocumentType.IMPORT:
                             total_imported += item.quantity
-                        elif doc.doc_type == DocumentType.EXPORT:
+                        elif doc.doc_type in (DocumentType.EXPORT, DocumentType.SALE):
                             total_exported += item.quantity
                         elif doc.doc_type == DocumentType.TRANSFER:
                             if (
@@ -411,7 +411,7 @@ class ReportService:
 
                     if doc.doc_type == DocumentType.IMPORT:
                         product_movements[product_id]["total_imported"] += item.quantity
-                    elif doc.doc_type == DocumentType.EXPORT:
+                    elif doc.doc_type in (DocumentType.EXPORT, DocumentType.SALE):
                         product_movements[product_id]["total_exported"] += item.quantity
                     elif doc.doc_type == DocumentType.TRANSFER:
                         if doc.from_warehouse_id:
@@ -461,7 +461,7 @@ class ReportService:
         exports = [
             doc
             for doc in documents
-            if doc.doc_type == DocumentType.EXPORT
+            if doc.doc_type in (DocumentType.EXPORT, DocumentType.SALE)
             and doc.from_warehouse_id == warehouse_id
         ]
         transfers_in = [
@@ -594,7 +594,7 @@ class ReportService:
         posted_docs = [doc for doc in documents if doc.status == DocumentStatus.POSTED]
 
         imports = [doc for doc in posted_docs if doc.doc_type == DocumentType.IMPORT]
-        exports = [doc for doc in posted_docs if doc.doc_type == DocumentType.EXPORT]
+        exports = [doc for doc in posted_docs if doc.doc_type in (DocumentType.EXPORT, DocumentType.SALE)]
         transfers = [
             doc for doc in posted_docs if doc.doc_type == DocumentType.TRANSFER
         ]
