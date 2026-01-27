@@ -441,6 +441,9 @@ class DocumentService:
         """Execute warehouse operations for export document.
         Optimized: O(n+I) instead of O(n×I) - fetch inventory once.
         """
+        if not document.from_warehouse_id:
+            raise ValidationError("Export document must have from_warehouse_id")
+            
         from_warehouse = self.warehouse_repo.get(document.from_warehouse_id)
         if not from_warehouse:
             raise WarehouseNotFoundError(
