@@ -1,5 +1,5 @@
 // WMS Dashboard JavaScript
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = 'http://localhost:8080';
 
 // Global state
 let products = [];
@@ -31,12 +31,12 @@ function updateTime() {
 
 // Setup event listeners
 function setupEventListeners() {
-    // Navigation
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            showSection(this.textContent.toLowerCase());
-        });
-    });
+    // Navigation - remove conflicting listeners, use inline onclick instead
+    // document.querySelectorAll('.nav-btn').forEach(btn => {
+    //     btn.addEventListener('click', function() {
+    //         showSection(this.textContent.toLowerCase());
+    //     });
+    // });
 
     // Forms
     document.getElementById('product-form').addEventListener('submit', handleCreateProduct);
@@ -50,7 +50,13 @@ function showSection(sectionName) {
     document.querySelectorAll('.nav-btn').forEach(btn => {
         btn.classList.remove('active');
     });
-    event.target.classList.add('active');
+    // Find the button that was clicked and add active class
+    const clickedBtn = Array.from(document.querySelectorAll('.nav-btn')).find(btn => 
+        btn.textContent.toLowerCase() === sectionName
+    );
+    if (clickedBtn) {
+        clickedBtn.classList.add('active');
+    }
 
     // Show section
     document.querySelectorAll('.section').forEach(section => {
@@ -71,6 +77,9 @@ function showSection(sectionName) {
             break;
         case 'documents':
             loadDocuments();
+            break;
+        case 'overview':
+            loadDashboardData();
             break;
     }
 }
@@ -688,12 +697,70 @@ function showSuccess(message) {
 }
 
 // Placeholder functions for future implementation
-function editProduct(id) {
-    showError('Edit functionality coming soon!');
+async function editProduct(id) {
+    // Find the product
+    const product = products.find(p => p.product_id === id);
+    if (!product) {
+        showError('Product not found');
+        return;
+    }
+
+    // Populate the form
+    document.getElementById('product-name').value = product.name;
+    document.getElementById('product-price').value = product.price;
+    document.getElementById('product-description').value = product.description;
+
+    // Change form submit handler
+    const form = document.getElementById('product-form');
+    form.onsubmit = (event) => handleUpdateProduct(event, id);
+
+    // Show modal
+    document.getElementById('product-modal').style.display = 'block';
 }
 
-function deleteProduct(id) {
-    showError('Delete functionality coming soon!');
+async function deleteProduct(id) {
+    if (!confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
+        return;
+    }
+
+    try {
+        await apiRequest(`/api/products/${id}`, { method: 'DELETE' });
+        showSuccess('Product deleted successfully!');
+        products = products.filter(p => p.product_id !== id);
+        loadProducts();
+        loadDashboardData();
+    } catch (error) {
+        showError('Failed to delete product');
+    }
+}
+
+async function handleUpdateProduct(event, id) {
+    event.preventDefault();
+
+    const productData = {
+        name: document.getElementById('product-name').value,
+        price: parseFloat(document.getElementById('product-price').value),
+        description: document.getElementById('product-description').value
+    };
+
+    try {
+        await apiRequest(`/api/products/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(productData)
+        });
+
+        showSuccess('Product updated successfully!');
+        closeModal('product-modal');
+        event.target.reset();
+        products = []; // Reset cache
+        loadProducts();
+        loadDashboardData();
+
+        // Reset form handler
+        event.target.onsubmit = handleCreateProduct;
+    } catch (error) {
+        showError('Failed to update product');
+    }
 }
 
 function editWarehouse(id) {
