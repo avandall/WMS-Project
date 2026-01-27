@@ -41,6 +41,8 @@ def test_engine():
         future=True,
     )
 
+    # Drop all tables first to ensure clean state
+    Base.metadata.drop_all(bind=engine)
     # Create all tables
     Base.metadata.create_all(bind=engine)
 

@@ -11,6 +11,13 @@ from app.services.product_service import ProductService
 router = APIRouter()
 
 
+@router.get("/", response_model=list[ProductResponse])
+async def get_all_products(service: ProductService = Depends(get_product_service)):
+    """Get all products."""
+    products = service.get_all_products()
+    return [ProductResponse.from_domain(product) for product in products]
+
+
 @router.post("/", response_model=ProductResponse)
 async def create_product(
     product: ProductCreate, service: ProductService = Depends(get_product_service)

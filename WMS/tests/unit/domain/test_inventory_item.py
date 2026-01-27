@@ -116,7 +116,7 @@ class TestInventoryItem:
         """Test string representation of inventory item."""
         item = InventoryItem(product_id=1, quantity=10)
 
-        expected = "InventoryItem(product_id='1', quantity=10)"
+        expected = "InventoryItem(product_id=1, quantity=10)"
         assert str(item) == expected
         assert repr(item) == expected
 

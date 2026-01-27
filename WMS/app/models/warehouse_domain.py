@@ -3,7 +3,7 @@ Warehouse domain logic for PMKT Warehouse Management System.
 Contains business rules and validation for warehouse operations.
 """
 
-from typing import Optional, List
+from typing import Optional, List, Dict
 from app.exceptions.business_exceptions import (
     ValidationError,
     BusinessRuleViolationError,
@@ -11,6 +11,8 @@ from app.exceptions.business_exceptions import (
     InvalidQuantityError,
     ProductNotFoundError,
     InsufficientStockError,
+    EntityAlreadyExistsError,
+    WarehouseNotFoundError,
 )
 from app.core.error_constants import ErrorMessages
 from .inventory_domain import InventoryItem
@@ -147,3 +149,62 @@ class Warehouse:
 
     def __hash__(self) -> int:
         return hash(self.warehouse_id)
+
+
+class WarehouseManager:
+    """Manager class for handling multiple warehouses."""
+
+    def __init__(self):
+        self._warehouses: Dict[int, Warehouse] = {}
+
+    def add_warehouse(self, warehouse: Warehouse) -> None:
+        """Add a warehouse to the manager."""
+        if warehouse.warehouse_id in self._warehouses:
+            raise EntityAlreadyExistsError(
+                ErrorMessages.WAREHOUSE_ALREADY_EXISTS.format(warehouse_id=warehouse.warehouse_id)
+            )
+        self._warehouses[warehouse.warehouse_id] = warehouse
+
+    def get_warehouse(self, warehouse_id: int) -> Warehouse:
+        """Get a warehouse by ID."""
+        if warehouse_id not in self._warehouses:
+            raise WarehouseNotFoundError(
+                ErrorMessages.WAREHOUSE_NOT_FOUND.format(warehouse_id=warehouse_id)
+            )
+        return self._warehouses[warehouse_id]
+
+    def remove_warehouse(self, warehouse_id: int) -> None:
+        """Remove a warehouse from the manager."""
+        if warehouse_id not in self._warehouses:
+            raise WarehouseNotFoundError(
+                ErrorMessages.WAREHOUSE_NOT_FOUND.format(warehouse_id=warehouse_id)
+            )
+        del self._warehouses[warehouse_id]
+
+    def get_all_warehouses(self) -> List[Warehouse]:
+        """Get all warehouses."""
+        return list(self._warehouses.values())
+
+    def find_warehouses_with_product(self, product_id: int) -> List[Warehouse]:
+        """Find all warehouses that contain a specific product."""
+        return [
+            warehouse for warehouse in self._warehouses.values()
+            if warehouse.has_product(product_id)
+        ]
+
+    def get_total_product_quantity(self, product_id: int) -> int:
+        """Get total quantity of a product across all warehouses."""
+        return sum(
+            warehouse.get_product_quantity(product_id)
+            for warehouse in self._warehouses.values()
+        )
+
+    def __len__(self) -> int:
+        """Get number of warehouses."""
+        return len(self._warehouses)
+
+    def __str__(self) -> str:
+        return f"WarehouseManager(warehouses={len(self)})"
+
+    def __repr__(self) -> str:
+        return self.__str__()

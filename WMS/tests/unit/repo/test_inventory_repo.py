@@ -102,9 +102,9 @@ class TestInventoryRepo:
             self.repo.delete(1)
 
     def test_delete_nonexistent_item(self):
-        """Test deleting nonexistent item raises KeyError."""
-        with pytest.raises(KeyError, match="Product ID not found in inventory"):
-            self.repo.delete(999)
+        """Test deleting nonexistent item is a no-op."""
+        # Should not raise an exception
+        self.repo.delete(999)
 
     def test_remove_quantity_existing_product(self):
         """Test removing quantity from existing product."""

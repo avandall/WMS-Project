@@ -165,7 +165,7 @@ class TestProductService:
 
         # Assert
         mock_product_repo.delete.assert_called_once_with(1)
-        mock_inventory_repo.remove_quantity.assert_called_once_with(1, 0)
+        mock_inventory_repo.delete.assert_called_once_with(1)
 
     def test_delete_product_not_found(self, product_service, mock_product_repo):
         """Test deleting a non-existent product."""

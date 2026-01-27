@@ -60,12 +60,11 @@ class InventoryRepo(TransactionalRepository, IInventoryRepo):
 
     def delete(self, product_id: int) -> None:
         row = self.session.get(InventoryModel, product_id)
-        if not row:
-            raise KeyError("Product ID not found in inventory")
-        if row.quantity != 0:
-            raise InvalidQuantityError("Cannot delete item with non-zero quantity")
-        self.session.delete(row)
-        self._commit_if_auto()
+        if row:
+            if row.quantity != 0:
+                raise InvalidQuantityError("Cannot delete item with non-zero quantity")
+            self.session.delete(row)
+            self._commit_if_auto()
 
     def remove_quantity(self, product_id: int, quantity: int) -> None:
         row = self.session.get(InventoryModel, product_id)

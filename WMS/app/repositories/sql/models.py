@@ -25,7 +25,7 @@ class ProductModel(Base):
     __tablename__ = "products"
 
     product_id = Column(Integer, primary_key=True)
-    name = Column(String(100), nullable=False, index=True)  # Index for searching
+    name = Column(String(100), nullable=False)  # Index defined in __table_args__
     description = Column(String(500))
     price = Column(Float, nullable=False, default=0.0)
     
@@ -94,18 +94,18 @@ class DocumentModel(Base):
     __tablename__ = "documents"
 
     document_id = Column(Integer, primary_key=True, autoincrement=True)
-    doc_type = Column(String(20), nullable=False, index=True)  # Index for filtering by type
-    status = Column(String(20), nullable=False, index=True)  # Index for filtering by status
+    doc_type = Column(String(20), nullable=False)  # Index in composite
+    status = Column(String(20), nullable=False)  # Index in composite
     from_warehouse_id = Column(
         Integer, ForeignKey("warehouses.warehouse_id"), nullable=True, index=True
     )
     to_warehouse_id = Column(
         Integer, ForeignKey("warehouses.warehouse_id"), nullable=True, index=True
     )
-    created_by = Column(String(100), nullable=False, index=True)
+    created_by = Column(String(100), nullable=False)  # Index in composite
     approved_by = Column(String(100))
     note = Column(String(500))
-    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)  # Index for date queries
+    created_at = Column(DateTime, default=datetime.now, nullable=False)  # Index in composite
     posted_at = Column(DateTime, index=True)
     cancelled_at = Column(DateTime)
     cancellation_reason = Column(String(500))

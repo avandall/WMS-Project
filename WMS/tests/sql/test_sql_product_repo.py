@@ -144,7 +144,7 @@ class TestProductRepoSQL:
         )
         product_repo_sql.save(product)
 
-        details = product_repo_sql.get_product_details(1)
+        details = product_repo_sql.get(1)
         assert details.product_id == 1
         assert details.name == "Detailed Product"
         assert details.description == "Very detailed"
@@ -153,7 +153,7 @@ class TestProductRepoSQL:
     def test_get_product_details_nonexistent_raises_error(self, product_repo_sql):
         """Test getting details of non-existent product raises KeyError."""
         with pytest.raises(KeyError, match="Product not found"):
-            product_repo_sql.get_product_details(9999)
+            product_repo_sql.get(9999)
 
     def test_save_product_with_none_description(self, product_repo_sql):
         """Test saving product with None description."""

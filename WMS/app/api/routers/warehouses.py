@@ -17,6 +17,21 @@ from app.services.warehouse_service import WarehouseService
 router = APIRouter()
 
 
+@router.get("/", response_model=list[WarehouseResponse])
+async def get_all_warehouses(service: WarehouseService = Depends(get_warehouse_service)):
+    """Get all warehouses."""
+    warehouses = service.get_all_warehouses()
+    result = []
+    for warehouse in warehouses:
+        inventory = service.get_warehouse_inventory(warehouse.warehouse_id)
+        result.append(WarehouseResponse(
+            warehouse_id=warehouse.warehouse_id,
+            location=warehouse.location,
+            inventory=[InventoryItemResponse.from_domain(item) for item in inventory],
+        ))
+    return result
+
+
 @router.post("/", response_model=WarehouseResponse)
 async def create_warehouse(
     warehouse: WarehouseCreate,

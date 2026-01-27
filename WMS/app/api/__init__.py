@@ -95,6 +95,27 @@ async def health_check():
     )
 
 
+@app.get("/", tags=["Root"])
+async def root():
+    """
+    Root endpoint providing API information and available endpoints.
+    """
+    return {
+        "message": "Welcome to PMKT Warehouse Management System API",
+        "version": settings.version,
+        "documentation": "/docs",
+        "health_check": "/health",
+        "api_endpoints": {
+            "products": "/api/products",
+            "warehouses": "/api/warehouses", 
+            "inventory": "/api/inventory",
+            "documents": "/api/documents",
+            "reports": "/api/reports",
+            "warehouse_operations": "/api/warehouse-operations"
+        }
+    }
+
+
 @app.on_event("startup")
 async def startup_event():
     """Log application startup."""
