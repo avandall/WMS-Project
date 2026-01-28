@@ -108,12 +108,12 @@ function updateTime() {
 
 // Setup event listeners
 function setupEventListeners() {
-    // Navigation
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            showSection(this.textContent.toLowerCase());
-        });
-    });
+    // Navigation - remove conflicting listeners, use inline onclick instead
+    // document.querySelectorAll('.nav-btn').forEach(btn => {
+    //     btn.addEventListener('click', function() {
+    //         showSection(this.textContent.toLowerCase());
+    //     });
+    // });
 
     // Forms
     document.getElementById('product-form').addEventListener('submit', handleCreateProduct);
