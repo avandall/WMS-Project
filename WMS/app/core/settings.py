@@ -11,10 +11,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:postgres@localhost:5432/warehouse_db"
     
     # Database connection pool settings (PRODUCTION CRITICAL)
-    db_pool_size: int = 20  # Number of connections to maintain
-    db_max_overflow: int = 10  # Additional connections when pool exhausted
-    db_pool_timeout: int = 30  # Seconds to wait for connection
-    db_pool_recycle: int = 3600  # Recycle connections after 1 hour
+    db_pool_size: int = 50  # Increased for high concurrent requests
+    db_max_overflow: int = 30  # More overflow connections
+    db_pool_timeout: int = 5  # Quick timeout to fail fast
+    db_pool_recycle: int = 1800  # Recycle connections more frequently
 
     # Application settings
     debug: bool = False
@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8080
     
-    # API Rate limiting
-    rate_limit_per_minute: int = 60
+    # API Rate limiting - Increased for UI rapid switching
+    rate_limit_per_minute: int = 300  # Allow more requests for fast UI navigation
     
     # Security settings
     secret_key: str = "your-secret-key-here"  # CHANGE IN PRODUCTION!

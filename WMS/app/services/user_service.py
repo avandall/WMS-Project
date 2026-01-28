@@ -73,3 +73,8 @@ class UserService:
             is_active=user.is_active,
         )
         return self.user_repo.save(updated)
+
+    def delete_user(self, user_id: int) -> None:
+        """Delete a user account permanently."""
+        user = self.get_user(user_id)  # Verify user exists
+        self.user_repo.delete(user_id)

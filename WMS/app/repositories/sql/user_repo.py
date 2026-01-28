@@ -53,6 +53,13 @@ class UserRepo(TransactionalRepository, IUserRepo):
             _ = row.email, row.role, row.full_name
         return {row.user_id: self._to_domain(row) for row in rows}
 
+    def delete(self, user_id: int) -> None:
+        """Delete a user by ID."""
+        user = self.session.get(UserModel, user_id)
+        if user:
+            self.session.delete(user)
+            self._commit_if_auto()
+
     @staticmethod
     def _to_domain(model: UserModel) -> User:
         return User(

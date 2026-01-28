@@ -1,18 +1,95 @@
 // WMS Dashboard JavaScript
-const API_BASE = 'http://127.0.0.1:8000';
+// Version: 2026-01-28 - Customer Sales Report Feature
+let API_BASE = 'http://127.0.0.1:8000';
+
+// Auth state
+let accessToken = localStorage.getItem('accessToken') || '';
+let refreshToken = localStorage.getItem('refreshToken') || '';
+let currentUser = null;
+let realtimeHandle = null;
 
 // Global state
 let products = [];
 let warehouses = [];
 let documents = [];
 let inventory = [];
+let customers = [];
+
+// Request management system to handle rapid switching
+const RequestManager = {
+    // Store active requests per endpoint
+    activeRequests: new Map(),
+    // Store abort controllers per endpoint
+    abortControllers: new Map(),
+    // Debounce timers
+    debounceTimers: new Map(),
+    
+    /**
+     * Cancel previous request for an endpoint and create new controller
+     */
+    getController(endpoint) {
+        // Cancel existing request for this endpoint
+        if (this.abortControllers.has(endpoint)) {
+            this.abortControllers.get(endpoint).abort();
+        }
+        // Create new controller
+        const controller = new AbortController();
+        this.abortControllers.set(endpoint, controller);
+        return controller;
+    },
+    
+    /**
+     * Debounce requests to prevent thundering herd
+     */
+    debounce(endpoint, fn, delay = 300) {
+        // Clear existing timer
+        if (this.debounceTimers.has(endpoint)) {
+            clearTimeout(this.debounceTimers.get(endpoint));
+        }
+        // Set new timer
+        const timer = setTimeout(() => {
+            fn();
+            this.debounceTimers.delete(endpoint);
+        }, delay);
+        this.debounceTimers.set(endpoint, timer);
+    },
+    
+    /**
+     * Track active request
+     */
+    trackRequest(endpoint, promise) {
+        this.activeRequests.set(endpoint, promise);
+        return promise.finally(() => {
+            this.activeRequests.delete(endpoint);
+        });
+    },
+    
+    /**
+     * Check if request is cancelled
+     */
+    isCancelled(endpoint) {
+        const controller = this.abortControllers.get(endpoint);
+        return controller && controller.signal.aborted;
+    }
+};
 
 // Initialize dashboard
 document.addEventListener('DOMContentLoaded', function() {
     updateTime();
     setInterval(updateTime, 1000);
-    loadDashboardData();
     setupEventListeners();
+    updateAuthUI();
+    const savedApiBase = localStorage.getItem('API_BASE');
+    if (savedApiBase) {
+        API_BASE = savedApiBase;
+        const apiInput = document.getElementById('api-base-input');
+        if (apiInput) apiInput.value = API_BASE;
+    }
+    if (accessToken) {
+        fetchCurrentUser().finally(loadDashboardData);
+    } else {
+        openLoginModal();
+    }
 });
 
 // Update current time
@@ -42,6 +119,26 @@ function setupEventListeners() {
     document.getElementById('product-form').addEventListener('submit', handleCreateProduct);
     document.getElementById('warehouse-form').addEventListener('submit', handleCreateWarehouse);
     document.getElementById('document-form').addEventListener('submit', handleCreateDocument);
+
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        loginForm.addEventListener('submit', handleLogin);
+    }
+
+    const userForm = document.getElementById('user-form');
+    if (userForm) {
+        userForm.addEventListener('submit', handleCreateUser);
+    }
+
+    const changePasswordForm = document.getElementById('change-password-form');
+    if (changePasswordForm) {
+        changePasswordForm.addEventListener('submit', handleChangePassword);
+    }
+
+    const customerForm = document.getElementById('customer-form');
+    if (customerForm) {
+        customerForm.addEventListener('submit', handleCreateCustomer);
+    }
 }
 
 // Navigation
@@ -50,7 +147,12 @@ function showSection(sectionName) {
     document.querySelectorAll('.nav-btn').forEach(btn => {
         btn.classList.remove('active');
     });
-    event.target.classList.add('active');
+    if (event && event.target) {
+        event.target.classList.add('active');
+    } else {
+        const btn = Array.from(document.querySelectorAll('.nav-btn')).find(b => b.textContent.toLowerCase() === sectionName);
+        if (btn) btn.classList.add('active');
+    }
 
     // Show section
     document.querySelectorAll('.section').forEach(section => {
@@ -72,34 +174,224 @@ function showSection(sectionName) {
         case 'documents':
             loadDocuments();
             break;
+        case 'customers':
+            loadCustomers();
+            break;
+        case 'users':
+            loadUsers();
+            break;
+        case 'settings':
+            // no-op; settings uses toggles/inputs
+            break;
     }
 }
 
 // API helper functions
 async function apiRequest(endpoint, options = {}) {
-    try {
-        const response = await fetch(`${API_BASE}${endpoint}`, {
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers
-            },
-            ...options
-        });
+    const headers = {
+        'Content-Type': 'application/json',
+        ...options.headers,
+    };
+    if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+    }
 
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    // Get abort controller for this endpoint
+    const controller = RequestManager.getController(endpoint);
+    
+    // Add request timeout (30 seconds)
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    try {
+        const fetchOptions = {
+            ...options,
+            headers,
+            signal: controller.signal,
+        };
+
+        const response = await fetch(`${API_BASE}${endpoint}`, fetchOptions);
+
+        clearTimeout(timeoutId);
+
+        if (response.status === 401 && refreshToken) {
+            // try refresh once
+            const refreshed = await refreshAccessToken();
+            if (refreshed) {
+                headers['Authorization'] = `Bearer ${accessToken}`;
+                const retryController = new AbortController();
+                const retryTimeoutId = setTimeout(() => retryController.abort(), 30000);
+                
+                const retry = await fetch(`${API_BASE}${endpoint}`, {
+                    ...options,
+                    headers,
+                    signal: retryController.signal,
+                });
+                
+                clearTimeout(retryTimeoutId);
+                
+                if (!retry.ok) {
+                    const errorData = await retry.json().catch(() => ({}));
+                    const errorMsg = errorData.detail || `HTTP ${retry.status}: ${retry.statusText}`;
+                    const error = new Error(errorMsg);
+                    error.status = retry.status;
+                    error.detail = errorData.detail;
+                    throw error;
+                }
+                return await retry.json();
+            }
         }
 
-        return await response.json();
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            
+            // Handle rate limit errors specially
+            if (response.status === 429) {
+                console.warn('Rate limit exceeded - slowing down requests');
+                const rateLimitError = new Error('Too many requests. Please slow down your navigation.');
+                rateLimitError.status = 429;
+                rateLimitError.isRateLimit = true;
+                throw rateLimitError;
+            }
+            
+            const errorMsg = errorData.detail || `HTTP ${response.status}: ${response.statusText}`;
+            const error = new Error(errorMsg);
+            error.status = response.status;
+            error.detail = errorData.detail;
+            throw error;
+        }
+
+        // some endpoints may return no body
+        const text = await response.text();
+        return text ? JSON.parse(text) : {};
     } catch (error) {
+        clearTimeout(timeoutId);
+        
+        // Handle aborted requests (user switched sections)
+        if (error.name === 'AbortError') {
+            console.log(`Request to ${endpoint} was cancelled (user navigated away)`);
+            return null; // Return null instead of throwing
+        }
+        
+        // Handle network errors
+        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+            console.error('Network error - is the server running?', error);
+            const netError = new Error('Server connection failed. Please check if the server is running.');
+            netError.isNetworkError = true;
+            throw netError;
+        }
+        
         console.error('API request failed:', error);
-        showError(`API Error: ${error.message}`);
         throw error;
     }
 }
 
+async function refreshAccessToken() {
+    if (!refreshToken) return false;
+    try {
+        const res = await fetch(`${API_BASE}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refreshToken })
+        });
+        if (!res.ok) {
+            logout();
+            return false;
+        }
+        const data = await res.json();
+        accessToken = data.access_token;
+        refreshToken = data.refresh_token;
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', refreshToken);
+        updateAuthUI();
+        return true;
+    } catch (e) {
+        logout();
+        return false;
+    }
+}
+
+async function handleLogin(event) {
+    event.preventDefault();
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    try {
+        const res = await fetch(`${API_BASE}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        if (!res.ok) throw new Error('Login failed');
+        const data = await res.json();
+        accessToken = data.access_token;
+        refreshToken = data.refresh_token;
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', refreshToken);
+        currentUser = data.user;
+        updateAuthUI();
+        closeModal('login-modal');
+        loadDashboardData();
+        loadUsers();
+        showSuccess('Logged in');
+    } catch (e) {
+        showError(e.message);
+    }
+}
+
+async function fetchCurrentUser() {
+    try {
+        const res = await apiRequest('/api/users/me');
+        currentUser = res;
+        updateAuthUI();
+    } catch (e) {
+        console.warn('Failed to fetch current user', e);
+    }
+}
+
+function updateAuthUI() {
+    const emailEl = document.getElementById('user-email');
+    const loginBtn = document.getElementById('login-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+    const changePasswordBtn = document.getElementById('change-password-btn');
+    if (!emailEl || !loginBtn || !logoutBtn) return;
+    if (currentUser || accessToken) {
+        emailEl.textContent = currentUser?.email || 'Authenticated';
+        loginBtn.style.display = 'none';
+        logoutBtn.style.display = 'inline-flex';
+        if (changePasswordBtn) changePasswordBtn.style.display = 'inline-flex';
+    } else {
+        emailEl.textContent = 'Guest';
+        loginBtn.style.display = 'inline-flex';
+        logoutBtn.style.display = 'none';
+        if (changePasswordBtn) changePasswordBtn.style.display = 'none';
+    }
+}
+
+function openLoginModal() {
+    document.getElementById('login-modal').style.display = 'block';
+}
+
+function logout() {
+    accessToken = '';
+    refreshToken = '';
+    currentUser = null;
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    updateAuthUI();
+    openLoginModal();
+}
+
+function updateApiBase(value) {
+    API_BASE = value.trim();
+    localStorage.setItem('API_BASE', API_BASE);
+    showSuccess('API base updated');
+}
+
 // Load dashboard overview data
 async function loadDashboardData() {
+    if (!accessToken) {
+        openLoginModal();
+        return;
+    }
     try {
         // Load all data in parallel
         const [productsRes, warehousesRes, inventoryRes, documentsRes] = await Promise.allSettled([
@@ -129,12 +421,15 @@ async function loadDashboardData() {
         if (documentsRes.status === 'fulfilled') {
             documents = documentsRes.value || [];
             const today = new Date().toISOString().split('T')[0];
-            const todayDocs = documents.filter(doc => doc.created_at.startsWith(today));
+            const todayDocs = documents.filter(doc => doc.date && doc.date.startsWith(today));
             document.getElementById('today-documents').textContent = todayDocs.length;
         }
 
         // Load recent activity
         loadRecentActivity();
+        
+        // Update connection status to show server is connected
+        updateConnectionStatus(true);
 
     } catch (error) {
         console.error('Failed to load dashboard data:', error);
@@ -149,13 +444,13 @@ function loadRecentActivity() {
 
     // Get recent documents
     const recentDocs = documents
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
         .slice(0, 5);
 
     recentDocs.forEach(doc => {
         recentItems.push({
-            title: `${doc.doc_type.toUpperCase()} Document #${doc.document_id}`,
-            description: `Created ${new Date(doc.created_at).toLocaleString()}`,
+            title: `${doc.doc_type} Document #${doc.document_id}`,
+            description: `Created ${new Date(doc.date).toLocaleString()}`,
             type: 'document'
         });
     });
@@ -175,115 +470,304 @@ function loadRecentActivity() {
 
 // Load products
 async function loadProducts() {
-    try {
-        const productsList = document.getElementById('products-list');
-        productsList.innerHTML = '<p>Loading products...</p>';
+    const endpoint = '/api/products';
+    RequestManager.debounce(endpoint, async () => {
+        try {
+            const productsList = document.getElementById('products-list');
+            if (RequestManager.isCancelled(endpoint)) return;
+            
+            productsList.innerHTML = '<p>Loading products...</p>';
 
-        if (products.length === 0) {
-            const response = await apiRequest('/api/products');
-            products = response || [];
-        }
+            if (products.length === 0) {
+                try {
+                    const response = await apiRequest(endpoint);
+                    // Check if request was cancelled (response will be null)
+                    if (response === null || RequestManager.isCancelled(endpoint)) {
+                        console.log('Products request was cancelled');
+                        return;
+                    }
+                    products = response || [];
+                } catch (error) {
+                    if (error.isNetworkError) {
+                        productsList.innerHTML = `<p style="color: red;">❌ ${error.message}</p>`;
+                        return;
+                    }
+                    if (error.isRateLimit) {
+                        productsList.innerHTML = `<p style="color: orange;">⚠️ ${error.message}</p>`;
+                        return;
+                    }
+                    throw error;
+                }
+            }
 
-        if (products.length === 0) {
-            productsList.innerHTML = '<p>No products found. Create your first product!</p>';
-            return;
-        }
+            if (RequestManager.isCancelled(endpoint)) return;
 
-        const tableHTML = `
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Name</th>
-                        <th>Price</th>
-                        <th>Description</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${products.map(product => `
+            if (products.length === 0) {
+                productsList.innerHTML = '<p>No products found. Create your first product!</p>';
+                return;
+            }
+
+            const tableHTML = `
+                <table>
+                    <thead>
                         <tr>
-                            <td>${product.product_id}</td>
-                            <td>${product.name}</td>
-                            <td>$${product.price.toFixed(2)}</td>
-                            <td>${product.description || '-'}</td>
-                            <td>
-                                <button class="btn-secondary" onclick="editProduct(${product.product_id})">Edit</button>
-                                <button class="btn-secondary" onclick="deleteProduct(${product.product_id})" style="background: #dc3545;">Delete</button>
-                            </td>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Price</th>
+                            <th>Description</th>
+                            <th>Actions</th>
                         </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        `;
+                    </thead>
+                    <tbody>
+                        ${products.map(product => `
+                            <tr>
+                                <td>${product.product_id}</td>
+                                <td>${product.name}</td>
+                                <td>$${product.price.toFixed(2)}</td>
+                                <td>${product.description || '-'}</td>
+                                <td>
+                                    <button class="btn-secondary" onclick="editProduct(${product.product_id})">Edit</button>
+                                    <button class="btn-secondary" onclick="deleteProduct(${product.product_id})" style="background: #dc3545;">Delete</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
 
-        productsList.innerHTML = tableHTML;
-    } catch (error) {
-        document.getElementById('products-list').innerHTML = '<p class="error">Failed to load products</p>';
-    }
+            if (RequestManager.isCancelled(endpoint)) return;
+            productsList.innerHTML = tableHTML;
+        } catch (error) {
+            if (!error.message.includes('Request cancelled')) {
+                const productsList = document.getElementById('products-list');
+                if (productsList) {
+                    productsList.innerHTML = '<p class="error">Failed to load products: ' + (error.message || 'Unknown error') + '</p>';
+                }
+            }
+        }
+    }, 200);
+}
+
+function filterProducts() {
+    const term = document.getElementById('product-search').value.toLowerCase();
+    const filtered = products.filter(p =>
+        p.name.toLowerCase().includes(term) ||
+        String(p.product_id).includes(term) ||
+        (p.description || '').toLowerCase().includes(term)
+    );
+    const productsList = document.getElementById('products-list');
+    productsList.innerHTML = filtered.length === 0 ? '<p>No matching products</p>' : `
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Price</th>
+                    <th>Description</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${filtered.map(product => `
+                    <tr>
+                        <td>${product.product_id}</td>
+                        <td>${product.name}</td>
+                        <td>$${product.price.toFixed(2)}</td>
+                        <td>${product.description || '-'}</td>
+                        <td>
+                            <button class="btn-secondary" onclick="editProduct(${product.product_id})">Edit</button>
+                            <button class="btn-secondary" onclick="deleteProduct(${product.product_id})" style="background: #dc3545;">Delete</button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
 }
 
 // Load warehouses
 async function loadWarehouses() {
-    try {
-        const warehousesList = document.getElementById('warehouses-list');
-        warehousesList.innerHTML = '<p>Loading warehouses...</p>';
+    const endpoint = '/api/warehouses';
+    RequestManager.debounce(endpoint, async () => {
+        try {
+            const warehousesList = document.getElementById('warehouses-list');
+            if (RequestManager.isCancelled(endpoint)) return;
+            
+            warehousesList.innerHTML = '<p>Loading warehouses...</p>';
 
-        if (warehouses.length === 0) {
-            const response = await apiRequest('/api/warehouses');
-            warehouses = response || [];
-        }
+            if (warehouses.length === 0) {
+                try {
+                    const response = await apiRequest(endpoint);
+                    if (response === null || RequestManager.isCancelled(endpoint)) return;
+                    warehouses = response || [];
+                } catch (error) {
+                    if (error.message && error.message.includes('Request cancelled')) return;
+                    if (error.isNetworkError) {
+                        warehousesList.innerHTML = `<p style="color: red;">❌ ${error.message}</p>`;
+                        return;
+                    }
+                    throw error;
+                }
+            }
 
-        if (warehouses.length === 0) {
-            warehousesList.innerHTML = '<p>No warehouses found. Create your first warehouse!</p>';
-            return;
-        }
+            if (RequestManager.isCancelled(endpoint)) return;
 
-        const tableHTML = `
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Location</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${warehouses.map(warehouse => `
+            if (warehouses.length === 0) {
+                warehousesList.innerHTML = '<p>No warehouses found. Create your first warehouse!</p>';
+                return;
+            }
+
+            const tableHTML = `
+                <table>
+                    <thead>
                         <tr>
-                            <td>${warehouse.warehouse_id}</td>
-                            <td>${warehouse.location}</td>
-                            <td>
-                                <button class="btn-secondary" onclick="viewWarehouseInventory(${warehouse.warehouse_id})">View Inventory</button>
-                                <button class="btn-secondary" onclick="editWarehouse(${warehouse.warehouse_id})">Edit</button>
-                            </td>
+                            <th>ID</th>
+                            <th>Location</th>
+                            <th>Actions</th>
                         </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        `;
+                    </thead>
+                    <tbody>
+                        ${warehouses.map(warehouse => `
+                            <tr>
+                                <td>${warehouse.warehouse_id}</td>
+                                <td>${warehouse.location}</td>
+                                <td>
+                                    <button class="btn-secondary" onclick="viewWarehouseInventory(${warehouse.warehouse_id})">View Inventory</button>
+                                    <button class="btn-secondary" onclick="editWarehouse(${warehouse.warehouse_id})">Edit</button>
+                                    <button class="btn-danger" onclick="deleteWarehouse(${warehouse.warehouse_id})">Delete</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
 
-        warehousesList.innerHTML = tableHTML;
-    } catch (error) {
-        document.getElementById('warehouses-list').innerHTML = '<p class="error">Failed to load warehouses</p>';
-    }
+            if (RequestManager.isCancelled(endpoint)) return;
+            warehousesList.innerHTML = tableHTML;
+        } catch (error) {
+            if (!error.message.includes('Request cancelled')) {
+                const warehousesList = document.getElementById('warehouses-list');
+                if (warehousesList) {
+                    warehousesList.innerHTML = '<p class="error">Failed to load warehouses: ' + (error.message || 'Unknown error') + '</p>';
+                }
+            }
+        }
+    }, 200);
+}
+
+function filterWarehouses() {
+    const term = document.getElementById('warehouse-search').value.toLowerCase();
+    const filtered = warehouses.filter(w =>
+        w.location.toLowerCase().includes(term) || String(w.warehouse_id).includes(term)
+    );
+    const warehousesList = document.getElementById('warehouses-list');
+    warehousesList.innerHTML = filtered.length === 0 ? '<p>No matching warehouses</p>' : `
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Location</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${filtered.map(warehouse => `
+                    <tr>
+                        <td>${warehouse.warehouse_id}</td>
+                        <td>${warehouse.location}</td>
+                        <td>
+                            <button class="btn-secondary" onclick="viewWarehouseInventory(${warehouse.warehouse_id})">View Inventory</button>
+                            <button class="btn-secondary" onclick="editWarehouse(${warehouse.warehouse_id})">Edit</button>
+                            <button class="btn-danger" onclick="deleteWarehouse(${warehouse.warehouse_id})">Delete</button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
 }
 
 // Load inventory
 async function loadInventory() {
+    const endpoint = '/api/inventory';
+    RequestManager.debounce(endpoint, async () => {
+        try {
+            const inventoryDiv = document.getElementById('inventory-list');
+            if (RequestManager.isCancelled(endpoint)) return;
+            
+            inventoryDiv.innerHTML = '<p>Loading inventory data...</p>';
+
+            if (inventory.length === 0) {
+                try {
+                    const response = await apiRequest(endpoint);
+                    if (response === null || RequestManager.isCancelled(endpoint)) return;
+                    inventory = response || [];
+                } catch (error) {
+                    if (error.message && error.message.includes('Request cancelled')) return;
+                    if (error.isNetworkError) {
+                        inventoryDiv.innerHTML = `<p style="color: red;">❌ ${error.message}</p>`;
+                        return;
+                    }
+                    throw error;
+                }
+            }
+
+            if (RequestManager.isCancelled(endpoint)) return;
+
+            if (inventory.length === 0) {
+                inventoryDiv.innerHTML = '<p>No inventory data available</p>';
+                loadInventorySummary();
+                return;
+            }
+
+        // Create table with inventory items
+        const tableHTML = `
+            <table>
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Warehouse</th>
+                        <th>Quantity</th>
+                        <th>Unit Price</th>
+                        <th>Total Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${inventory.map(item => {
+                        const product = products.find(p => p.product_id === item.product_id);
+                        const warehouse = warehouses.find(w => w.warehouse_id === item.warehouse_id);
+                        const totalValue = (product?.price || 0) * item.quantity;
+                        return `
+                            <tr>
+                                <td>${product ? product.name : `Product ${item.product_id}`}</td>
+                                <td>${warehouse ? warehouse.location : `Warehouse ${item.warehouse_id}`}</td>
+                                <td>${item.quantity}</td>
+                                <td>$${((product?.price || 0).toFixed(2))}</td>
+                                <td>$${totalValue.toFixed(2)}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
+
+            if (RequestManager.isCancelled(endpoint)) return;
+            inventoryDiv.innerHTML = tableHTML;
+            loadInventorySummary();
+        } catch (error) {
+            if (!error.message.includes('Request cancelled')) {
+                const inventoryDiv = document.getElementById('inventory-list');
+                if (inventoryDiv) {
+                    inventoryDiv.innerHTML = '<p class="error">Failed to load inventory: ' + (error.message || 'Unknown error') + '</p>';
+                }
+            }
+        }
+    }, 200);
+}
+
+function loadInventorySummary() {
     try {
-        const inventoryDiv = document.getElementById('inventory-overview');
-        inventoryDiv.innerHTML = '<p>Loading inventory data...</p>';
-
-        if (inventory.length === 0) {
-            const response = await apiRequest('/api/inventory');
-            inventory = response || [];
-        }
-
-        if (inventory.length === 0) {
-            inventoryDiv.innerHTML = '<p>No inventory data available</p>';
-            return;
-        }
+        const summaryDiv = document.getElementById('inventory-overview');
 
         // Group by warehouse
         const warehouseInventory = {};
@@ -323,22 +807,39 @@ async function loadInventory() {
             `;
         }).join('');
 
-        inventoryDiv.innerHTML = inventoryHTML;
+        summaryDiv.innerHTML = inventoryHTML || '<p>No inventory data</p>';
     } catch (error) {
-        document.getElementById('inventory-overview').innerHTML = '<p class="error">Failed to load inventory</p>';
+        console.error('Failed to load inventory summary:', error);
     }
 }
 
 // Load documents
 async function loadDocuments() {
-    try {
-        const documentsList = document.getElementById('documents-list');
-        documentsList.innerHTML = '<p>Loading documents...</p>';
+    const endpoint = '/api/documents';
+    RequestManager.debounce(endpoint, async () => {
+        try {
+            const documentsList = document.getElementById('documents-list');
+            if (RequestManager.isCancelled(endpoint)) return;
+            
+            documentsList.innerHTML = '<p>Loading documents...</p>';
 
-        if (documents.length === 0) {
-            const response = await apiRequest('/api/documents');
-            documents = response || [];
-        }
+            if (documents.length === 0) {
+                try {
+                    const response = await apiRequest(endpoint);
+                    // If response is null, request was cancelled
+                    if (response === null || RequestManager.isCancelled(endpoint)) return;
+                    documents = response || [];
+                } catch (error) {
+                    // Silently handle cancelled requests
+                    if (error.message && error.message.includes('Request cancelled')) return;
+                    // Show network errors to user
+                    if (error.isNetworkError) {
+                        documentsList.innerHTML = `<p style="color: red;">❌ ${error.message}</p>`;
+                        return;
+                    }
+                    throw error;
+                }
+            }
 
         if (documents.length === 0) {
             documentsList.innerHTML = '<p>No documents found. Create your first document!</p>';
@@ -352,6 +853,7 @@ async function loadDocuments() {
                         <th>ID</th>
                         <th>Type</th>
                         <th>Status</th>
+                        <th>Created By</th>
                         <th>Created</th>
                         <th>Actions</th>
                     </tr>
@@ -361,11 +863,14 @@ async function loadDocuments() {
                         <tr>
                             <td>${doc.document_id}</td>
                             <td>${doc.doc_type}</td>
-                            <td>${doc.status}</td>
-                            <td>${new Date(doc.created_at).toLocaleDateString()}</td>
+                            <td><span style="padding:4px 8px;border-radius:4px;background:#${doc.status.toLowerCase() === 'draft' ? 'fff3cd' : doc.status.toLowerCase() === 'posted' ? 'cfe2ff' : 'd1e7dd'}">${doc.status}</span></td>
+                            <td>${doc.created_by || '-'}</td>
+                            <td>${new Date(doc.date).toLocaleDateString()}</td>
                             <td>
-                                <button class="btn-secondary" onclick="viewDocument(${doc.document_id})">View</button>
-                                ${doc.status === 'draft' ? `<button class="btn-primary" onclick="postDocument(${doc.document_id})">Post</button>` : ''}
+                                <button class="btn-secondary" onclick="viewDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em">View</button>
+                                ${doc.status.toLowerCase() === 'draft' ? `<button class="btn-primary" onclick="postDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em">Approve & Post</button>` : ''}
+                                ${doc.status.toLowerCase() === 'draft' ? `<button class="btn-secondary" onclick="deleteDocument(${doc.document_id})" style="padding:4px 8px;font-size:0.9em;background:#dc3545;">Delete</button>` : ''}
+                                ${doc.status.toLowerCase() === 'posted' ? `<span style="color:#6c757d;font-size:0.9em">Posted</span>` : ''}
                             </td>
                         </tr>
                     `).join('')}
@@ -373,10 +878,188 @@ async function loadDocuments() {
             </table>
         `;
 
-        documentsList.innerHTML = tableHTML;
-    } catch (error) {
-        document.getElementById('documents-list').innerHTML = '<p class="error">Failed to load documents</p>';
-    }
+            if (RequestManager.isCancelled(endpoint)) return;
+            documentsList.innerHTML = tableHTML;
+        } catch (error) {
+            if (!error.message.includes('Request cancelled')) {
+                const documentsList = document.getElementById('documents-list');
+                if (documentsList) {
+                    documentsList.innerHTML = '<p class="error">Failed to load documents: ' + (error.message || 'Unknown error') + '</p>';
+                }
+            }
+        }
+    }, 200);
+}
+
+// Load users (admin only)
+async function loadUsers() {
+    const endpoint = '/api/users';
+    RequestManager.debounce(endpoint, async () => {
+        try {
+            const usersList = document.getElementById('users-list');
+            if (RequestManager.isCancelled(endpoint)) return;
+            
+            usersList.innerHTML = '<p>Loading users...</p>';
+            
+            const response = await apiRequest(endpoint);
+            if (response === null || RequestManager.isCancelled(endpoint)) return;
+            
+            if (!response || response.length === 0) {
+                usersList.innerHTML = '<p>No users found.</p>';
+                return;
+            }
+            
+            // Create table manually to avoid onclick issues
+            const table = document.createElement('table');
+            
+            // Create header
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            ['ID', 'Email', 'Role', 'Status', 'Actions'].forEach(header => {
+                const th = document.createElement('th');
+                th.textContent = header;
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+            
+            // Create body
+            const tbody = document.createElement('tbody');
+            response.forEach(u => {
+                const row = document.createElement('tr');
+                
+                // ID
+                const tdId = document.createElement('td');
+                tdId.textContent = u.user_id;
+                row.appendChild(tdId);
+                
+                // Email
+                const tdEmail = document.createElement('td');
+                tdEmail.textContent = u.email;
+                row.appendChild(tdEmail);
+                
+                // Role
+                const tdRole = document.createElement('td');
+                tdRole.textContent = u.role;
+                row.appendChild(tdRole);
+                
+                // Status
+                const tdStatus = document.createElement('td');
+                tdStatus.textContent = u.is_active ? 'Active' : 'Inactive';
+                row.appendChild(tdStatus);
+                
+                // Actions
+                const tdActions = document.createElement('td');
+                
+                // Manage button
+                const manageBtn = document.createElement('button');
+                manageBtn.className = 'btn-secondary';
+                manageBtn.textContent = 'Manage';
+                manageBtn.onclick = () => openManageUserModal(u.user_id);
+                tdActions.appendChild(manageBtn);
+                
+                // Delete button
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'btn-danger';
+                deleteBtn.textContent = 'Delete';
+                deleteBtn.onclick = () => deleteUserConfirm(u.user_id, u.email);
+                tdActions.appendChild(deleteBtn);
+                
+                row.appendChild(tdActions);
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            
+            usersList.innerHTML = '';
+            usersList.appendChild(table);
+            
+        } catch (error) {
+            console.error('Failed to load users:', error);
+            if (error.isNetworkError) {
+                document.getElementById('users-list').innerHTML = `<p style="color: red;">❌ ${error.message}</p>`;
+                return;
+            }
+            // Show the actual error message from the API
+            const errorMsg = error.detail || error.message || 'Failed to load users. You may not have sufficient permissions.';
+            document.getElementById('users-list').innerHTML = `<p class="error">${errorMsg}</p>`;
+        }
+    });
+}
+
+// Load customers
+async function loadCustomers() {
+    const endpoint = '/api/customers';
+    RequestManager.debounce(endpoint, async () => {
+        try {
+            const customersList = document.getElementById('customers-list');
+            if (customersList) customersList.innerHTML = '<p>Loading customers...</p>';
+            if (RequestManager.isCancelled(endpoint)) return;
+
+            let response;
+            try {
+                response = await apiRequest(endpoint);
+                // If response is null, request was cancelled
+                if (response === null || RequestManager.isCancelled(endpoint)) return;
+                customers = response || [];
+            } catch (error) {
+                // Silently handle cancelled requests
+                if (error.message && error.message.includes('Request cancelled')) return;
+                // Show network errors to user
+                if (error.isNetworkError && customersList) {
+                    customersList.innerHTML = `<p style="color: red;">❌ ${error.message}</p>`;
+                    return;
+                }
+                throw error;
+            }
+
+        populateCustomerSelect();
+
+        if (!customersList) return;
+        if (customers.length === 0) {
+            customersList.innerHTML = '<p>No customers found.</p>';
+            return;
+        }
+
+        const tableHTML = `
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Contact</th>
+                        <th>Debt</th>
+                        <th>Purchases</th>
+                        <th>Total Spent</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${customers.map(c => `
+                        <tr>
+                            <td>${c.name}</td>
+                            <td>${c.email || ''}${c.phone ? `<br>${c.phone}` : ''}</td>
+                            <td>$${(c.debt_balance || 0).toFixed(2)}</td>
+                            <td>${c.purchase_count || 0}</td>
+                            <td>$${(c.total_purchased || 0).toFixed(2)}</td>
+                            <td>
+                                <button class="btn-secondary" style="padding:4px 8px;font-size:0.9em" onclick="viewCustomer(${c.customer_id})">View</button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+
+            if (RequestManager.isCancelled(endpoint)) return;
+            customersList.innerHTML = tableHTML;
+        } catch (error) {
+            if (!error.message.includes('Request cancelled')) {
+                const customersList = document.getElementById('customers-list');
+                if (customersList) {
+                    customersList.innerHTML = '<p class="error">Failed to load customers: ' + (error.message || 'Unknown error') + '</p>';
+                }
+            }
+        }
+    }, 200);
 }
 
 // Form handlers
@@ -432,6 +1115,92 @@ async function handleCreateWarehouse(event) {
     }
 }
 
+function openCustomerModal() {
+    document.getElementById('customer-modal').style.display = 'block';
+}
+
+async function handleCreateCustomer(event) {
+    event.preventDefault();
+    const payload = {
+        name: document.getElementById('customer-name').value,
+        email: document.getElementById('customer-email').value || null,
+        phone: document.getElementById('customer-phone').value || null,
+        address: document.getElementById('customer-address').value || null,
+    };
+    try {
+        await apiRequest('/api/customers', { method: 'POST', body: JSON.stringify(payload) });
+        showSuccess('Customer created');
+        closeModal('customer-modal');
+        event.target.reset();
+        customers = [];
+        loadCustomers();
+    } catch (error) {
+        showError(error.detail || 'Failed to create customer');
+    }
+}
+
+function populateCustomerSelect() {
+    const select = document.getElementById('sale-customer');
+    if (!select) return;
+    select.innerHTML = '<option value="">No Customer</option>';
+    (customers || []).forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.customer_id;
+        opt.textContent = `${c.name} ${c.phone ? '(' + c.phone + ')' : ''}`;
+        select.appendChild(opt);
+    });
+}
+
+async function viewCustomer(customerId) {
+    try {
+        const data = await apiRequest(`/api/customers/${customerId}`);
+        const detailDiv = document.getElementById('customer-detail-content');
+        const purchases = data.purchases || [];
+        const purchasesHTML = purchases.length === 0 ? '<p>No purchases yet.</p>' : `
+            <table>
+                <thead><tr><th>Document</th><th>Total</th><th>Date</th></tr></thead>
+                <tbody>
+                    ${purchases.map(p => `
+                        <tr><td>${p.document_id}</td><td>$${p.total_value.toFixed(2)}</td><td>${new Date(p.created_at).toLocaleString()}</td></tr>
+                    `).join('')}
+                </tbody>
+            </table>`;
+
+        detailDiv.innerHTML = `
+            <p><strong>Name:</strong> ${data.name}</p>
+            <p><strong>Contact:</strong> ${data.email || ''} ${data.phone || ''}</p>
+            <p><strong>Address:</strong> ${data.address || ''}</p>
+            <p><strong>Debt Balance:</strong> $${(data.debt_balance || 0).toFixed(2)}</p>
+            <div style="margin:12px 0;">
+                <input type="number" id="payment-amount" placeholder="Payment amount (use negative to reduce debt)" style="width:60%;padding:8px;">
+                <button class="btn-secondary" onclick="recordCustomerPayment(${customerId})">Apply</button>
+            </div>
+            <h4>Purchase History</h4>
+            ${purchasesHTML}
+        `;
+        document.getElementById('customer-detail-modal').style.display = 'block';
+    } catch (error) {
+        showError(error.detail || 'Failed to load customer');
+    }
+}
+
+async function recordCustomerPayment(customerId) {
+    const amountInput = document.getElementById('payment-amount');
+    const val = parseFloat(amountInput.value);
+    if (isNaN(val)) {
+        showError('Enter a valid amount');
+        return;
+    }
+    try {
+        await apiRequest(`/api/customers/${customerId}/debt`, { method: 'PATCH', body: JSON.stringify({ amount: val }) });
+        showSuccess('Debt updated');
+        loadCustomers();
+        viewCustomer(customerId);
+    } catch (error) {
+        showError(error.detail || 'Failed to update debt');
+    }
+}
+
 async function handleCreateDocument(event) {
     event.preventDefault();
 
@@ -444,11 +1213,16 @@ async function handleCreateDocument(event) {
     // Add warehouse info based on type
     if (docType === 'import') {
         documentData.destination_warehouse_id = parseInt(document.getElementById('dest-warehouse').value);
-    } else if (docType === 'export') {
+    } else if (docType === 'export' || docType === 'sale') {
         documentData.source_warehouse_id = parseInt(document.getElementById('source-warehouse').value);
     } else if (docType === 'transfer') {
         documentData.source_warehouse_id = parseInt(document.getElementById('source-warehouse').value);
         documentData.destination_warehouse_id = parseInt(document.getElementById('dest-warehouse').value);
+    }
+
+    if (docType === 'sale') {
+        const customerId = document.getElementById('sale-customer')?.value;
+        if (customerId) documentData.customer_id = parseInt(customerId);
     }
 
     // Collect items
@@ -458,17 +1232,32 @@ async function handleCreateDocument(event) {
         const quantityInput = row.querySelector('.quantity-input');
         const priceInput = row.querySelector('.price-input');
 
-        if (productSelect.value && quantityInput.value && priceInput.value) {
-            documentData.items.push({
+        if (productSelect.value && quantityInput.value) {
+            const item = {
                 product_id: parseInt(productSelect.value),
-                quantity: parseInt(quantityInput.value),
-                unit_price: parseFloat(priceInput.value)
-            });
+                quantity: parseInt(quantityInput.value)
+            };
+            if (docType === 'import') {
+                if (!priceInput.value) return; // skip row without required price
+                item.unit_price = parseFloat(priceInput.value);
+            } else if (docType === 'export' || docType === 'sale') {
+                item.unit_price = priceInput.value ? parseFloat(priceInput.value) : 0;
+            } else if (docType === 'transfer') {
+                item.unit_price = 0;
+            }
+            documentData.items.push(item);
         }
     });
 
+    if (documentData.items.length === 0) {
+        showError('Please add at least one item to the document');
+        return;
+    }
+
     try {
-        const response = await apiRequest('/api/documents', {
+        // Route to correct endpoint based on document type
+        const endpoint = `/api/documents/${docType}`;
+        const response = await apiRequest(endpoint, {
             method: 'POST',
             body: JSON.stringify(documentData)
         });
@@ -480,7 +1269,221 @@ async function handleCreateDocument(event) {
         loadDocuments();
         loadDashboardData();
     } catch (error) {
-        showError('Failed to create document');
+        console.error('Document creation error:', error);
+        showError(error.detail || 'Failed to create document');
+    }
+}
+
+async function handleCreateUser(event) {
+    console.log('handleCreateUser called');
+    event.preventDefault();
+    
+    const emailInput = document.getElementById('create-user-email');
+    const passwordInput = document.getElementById('create-user-password');
+    const roleInput = document.getElementById('create-user-role');
+    
+    const email = emailInput.value;
+    const password = passwordInput.value;
+    const role = roleInput.value;
+    
+    const payload = { email, password, role, full_name: null };
+    console.log('Creating user with payload:', payload);
+    
+    try {
+        const response = await apiRequest('/api/users', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        console.log('User creation response:', response);
+        
+        // IMMEDIATELY clear sensitive fields to prevent password manager popup
+        console.log('Clearing form fields immediately...');
+        emailInput.value = '';
+        passwordInput.value = '';
+        roleInput.value = 'user';
+        
+        // IMMEDIATELY close modal
+        console.log('Closing modal...');
+        closeModal('user-modal');
+        
+        // Small delay to ensure modal is closed before showing success
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Show success message
+        console.log('Showing success message');
+        showSuccess('User created successfully');
+        
+        // Load users in background
+        console.log('Loading users in background...');
+        await loadUsersAndRender();
+        console.log('Users loaded successfully');
+        
+    } catch (e) {
+        console.error('User creation error:', e);
+        
+        // Clear form fields even on error
+        emailInput.value = '';
+        passwordInput.value = '';
+        roleInput.value = 'user';
+        
+        // Close modal to unblock UI
+        closeModal('user-modal');
+        
+        // Extract meaningful error message
+        let errorMsg = 'Failed to create user';
+        if (e && typeof e === 'object') {
+            if (Array.isArray(e.detail)) {
+                const errors = e.detail.map(err => {
+                    if (typeof err === 'object' && err.msg) {
+                        return `${err.loc?.join('.')} - ${err.msg}`;
+                    }
+                    return String(err);
+                });
+                errorMsg = errors.join('; ');
+            } else if (e.message && e.message !== '[object Object],[object Object]') {
+                errorMsg = e.message;
+            } else if (e.detail) {
+                errorMsg = typeof e.detail === 'string' ? e.detail : JSON.stringify(e.detail);
+            } else if (e.error) {
+                errorMsg = e.error;
+            }
+        } else if (typeof e === 'string') {
+            errorMsg = e;
+        }
+        console.error('Final error message:', errorMsg);
+        showError(errorMsg);
+    }
+}
+
+// Helper function to load and render users list
+async function loadUsersAndRender() {
+    try {
+        console.log('loadUsersAndRender: starting');
+        const usersList = document.getElementById('users-list');
+        if (!usersList) {
+            console.warn('users-list element not found');
+            return;
+        }
+        
+        usersList.innerHTML = '<p>Loading users...</p>';
+        
+        const users = await apiRequest('/api/users');
+        console.log('loadUsersAndRender: received users:', users);
+        
+        if (users && users.length > 0) {
+            console.log(`loadUsersAndRender: rendering ${users.length} users`);
+            
+            // Create table manually to avoid inline onclick issues
+            const table = document.createElement('table');
+            
+            // Create header
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            ['ID', 'Email', 'Role', 'Status', 'Actions'].forEach(header => {
+                const th = document.createElement('th');
+                th.textContent = header;
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+            
+            // Create body
+            const tbody = document.createElement('tbody');
+            users.forEach(u => {
+                const row = document.createElement('tr');
+                
+                // ID
+                const tdId = document.createElement('td');
+                tdId.textContent = u.user_id;
+                row.appendChild(tdId);
+                
+                // Email
+                const tdEmail = document.createElement('td');
+                tdEmail.textContent = u.email;
+                row.appendChild(tdEmail);
+                
+                // Role
+                const tdRole = document.createElement('td');
+                tdRole.textContent = u.role;
+                row.appendChild(tdRole);
+                
+                // Status
+                const tdStatus = document.createElement('td');
+                tdStatus.textContent = u.is_active ? 'Active' : 'Inactive';
+                row.appendChild(tdStatus);
+                
+                // Actions
+                const tdActions = document.createElement('td');
+                
+                // Manage button
+                const manageBtn = document.createElement('button');
+                manageBtn.className = 'btn-secondary';
+                manageBtn.textContent = 'Manage';
+                manageBtn.onclick = () => openManageUserModal(u.user_id);
+                tdActions.appendChild(manageBtn);
+                
+                // Delete button
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'btn-danger';
+                deleteBtn.textContent = 'Delete';
+                deleteBtn.onclick = () => deleteUserConfirm(u.user_id, u.email);
+                tdActions.appendChild(deleteBtn);
+                
+                row.appendChild(tdActions);
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            
+            usersList.innerHTML = '';
+            usersList.appendChild(table);
+            console.log('loadUsersAndRender: table rendered successfully');
+        } else {
+            console.log('loadUsersAndRender: no users found');
+            usersList.innerHTML = '<p>No users found.</p>';
+        }
+    } catch (loadError) {
+        console.error('Error loading users after creation:', loadError);
+    }
+}
+
+// Delete user account
+async function deleteUserConfirm(userId, userEmail) {
+    // Confirm deletion
+    const confirmDelete = confirm(`Are you sure you want to delete user "${userEmail}"? This action cannot be undone.`);
+    if (!confirmDelete) return;
+    
+    try {
+        console.log(`Deleting user ${userId} (${userEmail})`);
+        await apiRequest(`/api/users/${userId}`, {
+            method: 'DELETE'
+        });
+        
+        console.log(`User ${userId} deleted successfully`);
+        showSuccess(`User "${userEmail}" deleted successfully`);
+        
+        // Reload users list
+        await loadUsersAndRender();
+        
+    } catch (e) {
+        console.error('User deletion error:', e);
+        
+        let errorMsg = `Failed to delete user "${userEmail}"`;
+        if (e && typeof e === 'object') {
+            if (Array.isArray(e.detail)) {
+                const errors = e.detail.map(err => {
+                    if (typeof err === 'object' && err.msg) {
+                        return err.msg;
+                    }
+                    return String(err);
+                });
+                errorMsg = errors.join('; ');
+            } else if (e.message) {
+                errorMsg = e.message;
+            } else if (e.detail) {
+                errorMsg = typeof e.detail === 'string' ? e.detail : JSON.stringify(e.detail);
+            }
+        }
+        showError(errorMsg);
     }
 }
 
@@ -498,27 +1501,211 @@ function showCreateDocumentModal() {
     updateWarehouseDropdowns();
     // Load products for item selection
     updateProductDropdowns();
+    loadCustomers();
     document.getElementById('document-modal').style.display = 'block';
 }
 
+function openUserModal() {
+    document.getElementById('user-modal').style.display = 'block';
+}
+
+async function openManageUserModal(preselectUserId) {
+    // Build modal if not exists
+    let modal = document.getElementById('manage-user-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'manage-user-modal';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content large-modal">
+                <span class="close" onclick="closeModal('manage-user-modal')">&times;</span>
+                <h2>Manage Roles & Permissions</h2>
+                <div class="form-group">
+                    <label for="manage-user-select">Select User</label>
+                    <select id="manage-user-select"></select>
+                </div>
+                <div class="form-group">
+                    <label for="manage-role-select">Role</label>
+                    <select id="manage-role-select"></select>
+                </div>
+                <div class="form-group">
+                    <label>Permissions (override)</label>
+                    <div id="permissions-checkboxes" style="display:grid;grid-template-columns:repeat(2, minmax(200px, 1fr));gap:8px;"></div>
+                    <small>Leave all unchecked to use role defaults.</small>
+                </div>
+                <div style="margin-top: 16px; display:flex; gap:8px; justify-content:flex-end;">
+                    <button class="btn-secondary" onclick="closeModal('manage-user-modal')">Cancel</button>
+                    <button class="btn-secondary" onclick="clearUserOverrides()">Clear Overrides</button>
+                    <button class="btn-primary" onclick="saveUserPermissions()">Save</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+    }
+
+    // Load users and permissions
+    const [usersRes, permsRes] = await Promise.all([
+        apiRequest('/api/users'),
+        apiRequest('/api/users/permissions')
+    ]);
+
+    // Populate user list
+    const userSelect = document.getElementById('manage-user-select');
+    userSelect.innerHTML = usersRes.map(u => `<option value="${u.user_id}">${u.email}</option>`).join('');
+    if (preselectUserId) userSelect.value = String(preselectUserId);
+
+    // Populate roles
+    const roleSelect = document.getElementById('manage-role-select');
+    const roles = Object.keys(permsRes.roles);
+    roleSelect.innerHTML = roles.map(r => `<option value="${r}">${r}</option>`).join('');
+
+    // Populate permissions checkboxes
+    const permsDiv = document.getElementById('permissions-checkboxes');
+    permsDiv.innerHTML = permsRes.permissions.map(p => `
+        <label><input type="checkbox" value="${p}"> ${p}</label>
+    `).join('');
+
+    // Show modal
+    modal.style.display = 'block';
+}
+
+async function saveUserPermissions() {
+    const userId = parseInt(document.getElementById('manage-user-select').value);
+    const role = document.getElementById('manage-role-select').value;
+    const checkboxes = Array.from(document.querySelectorAll('#permissions-checkboxes input[type=checkbox]'));
+    const selected = checkboxes.filter(c => c.checked).map(c => c.value);
+
+    // Update role
+    await apiRequest(`/api/users/${userId}/role`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role })
+    });
+
+    // Update overrides
+    await apiRequest(`/api/users/${userId}/permissions`, {
+        method: 'PATCH',
+        body: JSON.stringify({ permissions: selected, mode: 'override' })
+    });
+
+    showSuccess('User permissions saved');
+    closeModal('manage-user-modal');
+    loadUsers();
+}
+
+async function clearUserOverrides() {
+    const userId = parseInt(document.getElementById('manage-user-select').value);
+    await apiRequest(`/api/users/${userId}/permissions`, {
+        method: 'PATCH',
+        body: JSON.stringify({ mode: 'clear' })
+    });
+    showSuccess('Overrides cleared');
+}
+
+function openChangePasswordModal() {
+    document.getElementById('change-password-modal').style.display = 'block';
+}
+
+async function handleChangePassword(event) {
+    event.preventDefault();
+    const currentPassword = document.getElementById('current-password').value;
+    const newPassword = document.getElementById('new-password').value;
+    const confirmPassword = document.getElementById('confirm-password').value;
+
+    if (newPassword !== confirmPassword) {
+        showError('New passwords do not match');
+        return;
+    }
+
+    if (newPassword.length < 6) {
+        showError('Password must be at least 6 characters');
+        return;
+    }
+
+    try {
+        await apiRequest('/api/users/me/change-password', {
+            method: 'POST',
+            body: JSON.stringify({ old_password: currentPassword, new_password: newPassword })
+        });
+        showSuccess('Password changed successfully');
+        closeModal('change-password-modal');
+        event.target.reset();
+    } catch (e) {
+        showError('Failed to change password. Check your current password.');
+    }
+}
+
+function closeAllModals() {
+    console.log('Closing all modals');
+    const allModals = document.querySelectorAll('.modal');
+    allModals.forEach(modal => {
+        modal.style.display = 'none';
+        modal.style.visibility = 'hidden';
+        modal.style.opacity = '0';
+        modal.style.pointerEvents = 'none';
+    });
+}
+
 function closeModal(modalId) {
-    document.getElementById(modalId).style.display = 'none';
+    try {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            console.log(`Closing modal: ${modalId}`);
+            // Set all display properties to ensure it's truly hidden
+            modal.style.display = 'none';
+            modal.style.visibility = 'hidden';
+            modal.style.opacity = '0';
+            modal.style.pointerEvents = 'none';
+            modal.setAttribute('aria-hidden', 'true');
+            console.log(`Modal hidden`);
+        } else {
+            console.warn(`Modal not found: ${modalId}`);
+        }
+    } catch (e) {
+        console.error('Error closing modal:', e);
+    }
+}
+
+function openModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        console.log(`Opening modal: ${modalId}`);
+        // First close all other modals
+        closeAllModals();
+        // Then open this one
+        modal.style.display = 'block';
+        modal.style.visibility = 'visible';
+        modal.style.opacity = '1';
+        modal.style.pointerEvents = 'auto';
+        modal.setAttribute('aria-hidden', 'false');
+    }
 }
 
 function updateDocumentForm() {
     const docType = document.getElementById('doc-type').value;
     const sourceGroup = document.getElementById('source-warehouse-group');
     const destGroup = document.getElementById('dest-warehouse-group');
+    const priceInputs = document.querySelectorAll('.price-input');
+    const customerGroup = document.getElementById('customer-group');
 
     if (docType === 'import') {
         sourceGroup.style.display = 'none';
         destGroup.style.display = 'block';
+        priceInputs.forEach(inp => { inp.required = true; inp.style.display = ''; });
+        if (customerGroup) customerGroup.style.display = 'none';
     } else if (docType === 'export') {
         sourceGroup.style.display = 'block';
         destGroup.style.display = 'none';
+        priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
+        if (customerGroup) customerGroup.style.display = 'none';
     } else if (docType === 'transfer') {
         sourceGroup.style.display = 'block';
         destGroup.style.display = 'block';
+        priceInputs.forEach(inp => { inp.required = false; inp.style.display = 'none'; inp.value = ''; });
+        if (customerGroup) customerGroup.style.display = 'none';
+    } else if (docType === 'sale') {
+        sourceGroup.style.display = 'block';
+        destGroup.style.display = 'none';
+        priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
+        if (customerGroup) customerGroup.style.display = 'block';
     }
 }
 
@@ -542,14 +1729,23 @@ function updateProductDropdowns() {
     const productSelects = document.querySelectorAll('.product-select');
 
     productSelects.forEach(select => {
-        select.innerHTML = '<option value="">Select Product</option>';
+        // Only populate if this select is empty (no options except placeholder)
+        if (select.options.length <= 1 || (select.options.length === 1 && select.options[0].value === '')) {
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">Select Product</option>';
 
-        products.forEach(product => {
-            const option = document.createElement('option');
-            option.value = product.product_id;
-            option.textContent = `${product.product_id} - ${product.name}`;
-            select.appendChild(option);
-        });
+            products.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product.product_id;
+                option.textContent = `${product.product_id} - ${product.name}`;
+                select.appendChild(option);
+            });
+            
+            // Restore the previously selected value if it exists
+            if (currentValue) {
+                select.value = currentValue;
+            }
+        }
     });
 }
 
@@ -563,7 +1759,7 @@ function addItem() {
             <option value="">Select Product</option>
         </select>
         <input type="number" class="quantity-input" placeholder="Quantity" min="1" required>
-        <input type="number" class="price-input" placeholder="Unit Price" step="0.01" required>
+        <input type="number" class="price-input" placeholder="Unit Price" step="0.01">
         <button type="button" class="btn-secondary" onclick="removeItem(this)">Remove</button>
     `;
 
@@ -576,72 +1772,616 @@ function removeItem(button) {
 }
 
 // Report functions
+// Report Modal Functions
+function openInventoryReportModal() {
+    populateWarehouseFilter('inventory-warehouse-filter');
+    populateProductFilter('inventory-product-filter');
+    openModal('inventory-report-modal');
+}
+
+function openProductReportModal() {
+    populateProductFilter('product-filter');
+    openModal('product-report-modal');
+}
+
+function openDocumentReportModal() {
+    openModal('document-report-modal');
+}
+
+function openWarehouseReportModal() {
+    populateWarehouseFilter('warehouse-filter');
+    openModal('warehouse-report-modal');
+}
+
+async function openCustomerSalesReportModal() {
+    console.log('Opening customer sales report modal...');
+    console.log('Customers array:', customers);
+    
+    // Load customers if not already loaded
+    if (customers.length === 0) {
+        try {
+            const response = await apiRequest('/api/customers');
+            if (response) customers = response;
+        } catch (error) {
+            console.error('Failed to load customers:', error);
+        }
+    }
+    
+    populateCustomerFilter('sales-customer-filter');
+    await populateSalespersonFilter('sales-salesperson-filter');
+    openModal('customer-sales-report-modal');
+}
+
+function populateWarehouseFilter(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    
+    // Clear existing options except the first one
+    while (select.options.length > 1) {
+        select.remove(1);
+    }
+    
+    warehouses.forEach(warehouse => {
+        const option = document.createElement('option');
+        option.value = warehouse.warehouse_id;
+        option.textContent = `${warehouse.warehouse_id} - ${warehouse.location}`;
+        select.appendChild(option);
+    });
+}
+
+function populateProductFilter(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    
+    // Clear existing options except the first one
+    while (select.options.length > 1) {
+        select.remove(1);
+    }
+    
+    products.forEach(product => {
+        const option = document.createElement('option');
+        option.value = product.product_id;
+        option.textContent = `${product.product_id} - ${product.name}`;
+        select.appendChild(option);
+    });
+}
+
+function populateCustomerFilter(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    
+    // Clear existing options except the first one
+    while (select.options.length > 1) {
+        select.remove(1);
+    }
+    
+    customers.forEach(customer => {
+        const option = document.createElement('option');
+        option.value = customer.customer_id;
+        option.textContent = `${customer.customer_id} - ${customer.name}`;
+        select.appendChild(option);
+    });
+}
+
+async function populateSalespersonFilter(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    
+    try {
+        // Get all users (salespersons are users who can create documents)
+        const users = await apiRequest('/api/users');
+        if (!users || users.length === 0) return;
+        
+        // Extract unique user emails
+        const salespersons = [...new Set(users.map(user => user.email).filter(Boolean))];
+        
+        // Clear existing options except the first one
+        while (select.options.length > 1) {
+            select.remove(1);
+        }
+        
+        // Add salesperson options
+        salespersons.forEach(salesperson => {
+            const option = document.createElement('option');
+            option.value = salesperson;
+            option.textContent = salesperson;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Failed to load salespersons:', error);
+    }
+}
+
 async function generateInventoryReport() {
     try {
-        const response = await apiRequest('/api/reports/inventory');
-        displayReportResults('Inventory Report', response);
+        const warehouseId = document.getElementById('inventory-warehouse-filter')?.value;
+        const productId = document.getElementById('inventory-product-filter')?.value;
+        const dateFrom = document.getElementById('inventory-date-from')?.value;
+        const dateTo = document.getElementById('inventory-date-to')?.value;
+
+        let url = '/api/reports/inventory/list';
+        const params = new URLSearchParams();
+        
+        if (warehouseId) params.append('warehouse_id', warehouseId);
+        if (dateFrom) params.append('start_date', dateFrom);
+        if (dateTo) params.append('end_date', dateTo);
+        
+        if (params.toString()) {
+            url += '?' + params.toString();
+        }
+
+        console.log('Generating inventory report from:', url);
+        const response = await apiRequest(url);
+        console.log('Report response:', response);
+        displayInventoryReport(response);
+        closeModal('inventory-report-modal');
     } catch (error) {
-        showError('Failed to generate inventory report');
+        console.error('Inventory report error:', error);
+        const message = error.detail || error.message || 'Failed to generate inventory report. Please check your filters and try again.';
+        showError(message);
     }
 }
 
 async function generateProductReport() {
     try {
-        const response = await apiRequest('/api/reports/products');
-        displayReportResults('Product Report', response);
+        const dateFrom = document.getElementById('product-date-from')?.value;
+        const dateTo = document.getElementById('product-date-to')?.value;
+
+        let url = '/api/products';
+        const params = new URLSearchParams();
+        
+        if (dateFrom) params.append('start_date', dateFrom);
+        if (dateTo) params.append('end_date', dateTo);
+        
+        if (params.toString()) {
+            url += '?' + params.toString();
+        }
+
+        console.log('Generating product report from:', url);
+        const response = await apiRequest(url);
+        console.log('Report response:', response);
+        displayProductReport(response);
+        closeModal('product-report-modal');
     } catch (error) {
-        showError('Failed to generate product report');
+        console.error('Product report error:', error);
+        const message = error.detail || error.message || 'Failed to generate product report. Please check your filters and try again.';
+        showError(message);
     }
 }
 
 async function generateDocumentReport() {
     try {
-        const response = await apiRequest('/api/reports/documents');
-        displayReportResults('Document Report', response);
+        const docType = document.getElementById('document-type-filter')?.value;
+        const status = document.getElementById('document-status-filter')?.value;
+        const dateFrom = document.getElementById('document-date-from')?.value;
+        const dateTo = document.getElementById('document-date-to')?.value;
+
+        let url = '/api/reports/documents';
+        const params = new URLSearchParams();
+        
+        if (dateFrom) params.append('start_date', dateFrom);
+        if (dateTo) params.append('end_date', dateTo);
+        
+        if (params.toString()) {
+            url += '?' + params.toString();
+        }
+
+        console.log('Generating document report from:', url);
+        const response = await apiRequest(url);
+        console.log('Report response:', response);
+        displayDocumentReport(response);
+        closeModal('document-report-modal');
     } catch (error) {
-        showError('Failed to generate document report');
+        console.error('Document report error:', error);
+        const message = error.detail || error.message || 'Failed to generate transaction report. Please check your filters and try again.';
+        showError(message);
     }
 }
 
 async function generateWarehouseReport() {
     try {
-        const response = await apiRequest('/api/reports/warehouses');
-        displayReportResults('Warehouse Report', response);
+        const warehouseId = document.getElementById('warehouse-filter')?.value;
+        const dateFrom = document.getElementById('warehouse-date-from')?.value;
+        const dateTo = document.getElementById('warehouse-date-to')?.value;
+
+        let url = warehouseId ? `/api/reports/warehouse/${warehouseId}` : '/api/warehouses';
+        const params = new URLSearchParams();
+        
+        if (dateFrom) params.append('start_date', dateFrom);
+        if (dateTo) params.append('end_date', dateTo);
+        
+        if (params.toString()) {
+            url += '?' + params.toString();
+        }
+
+        console.log('Generating warehouse report from:', url);
+        const response = await apiRequest(url);
+        console.log('Report response:', response);
+        displayWarehouseReport(response);
+        closeModal('warehouse-report-modal');
     } catch (error) {
-        showError('Failed to generate warehouse report');
+        console.error('Warehouse report error:', error);
+        const message = error.detail || error.message || 'Failed to generate warehouse report. Please check your filters and try again.';
+        showError(message);
     }
+}
+
+async function generateCustomerSalesReport() {
+    try {
+        const customerId = document.getElementById('sales-customer-filter')?.value;
+        const salesperson = document.getElementById('sales-salesperson-filter')?.value;
+        const dateFrom = document.getElementById('sales-date-from')?.value;
+        const dateTo = document.getElementById('sales-date-to')?.value;
+
+        let url = '/api/reports/sales';
+        const params = new URLSearchParams();
+        
+        if (customerId) params.append('customer_id', customerId);
+        if (salesperson) params.append('salesperson', salesperson);
+        if (dateFrom) params.append('start_date', dateFrom);
+        if (dateTo) params.append('end_date', dateTo);
+        
+        if (params.toString()) {
+            url += '?' + params.toString();
+        }
+
+        console.log('Generating customer sales report from:', url);
+        const response = await apiRequest(url);
+        console.log('Sales report response:', response);
+        displayCustomerSalesReport(response);
+        closeModal('customer-sales-report-modal');
+    } catch (error) {
+        console.error('Customer sales report error:', error);
+        const message = error.detail || error.message || 'Failed to generate customer sales report. Please check your filters and try again.';
+        showError(message);
+    }
+}
+
+
+function displayCustomerSalesReport(data) {
+    const resultsDiv = document.getElementById('report-results');
+    
+    if (!data || !data.summary) {
+        resultsDiv.innerHTML = '<p>No sales data found</p>';
+        return;
+    }
+
+    const summary = data.summary;
+    const sales = data.sales || [];
+
+    let html = `
+        <div class="report-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+            <h2 style="margin: 0;">💰 Customer Sales Report</h2>
+            <div style="display: flex; gap: 8px;">
+                <button onclick="exportCurrentReportAsExcel()" class="btn-primary" style="padding: 8px 16px;">📥 Export to Excel</button>
+                <button onclick="exportCurrentReportAsCSV()" class="btn-secondary" style="padding: 8px 16px;">📄 Export to CSV</button>
+            </div>
+        </div>
+        <div class="report-summary">
+            <div class="summary-card">
+                <h3>$${summary.total_sales.toLocaleString('en-US', {minimumFractionDigits: 2})}</h3>
+                <p>Total Sales</p>
+            </div>
+            <div class="summary-card">
+                <h3>$${summary.total_debt.toLocaleString('en-US', {minimumFractionDigits: 2})}</h3>
+                <p>Total Outstanding Debt</p>
+            </div>
+            <div class="summary-card">
+                <h3>${summary.transaction_count}</h3>
+                <p>Transactions</p>
+            </div>
+            <div class="summary-card">
+                <h3>${summary.unique_customers}</h3>
+                <p>Customers</p>
+            </div>
+        </div>
+    `;
+
+    if (summary.period && (summary.period.start || summary.period.end)) {
+        html += '<div class="report-period">';
+        if (summary.period.start && summary.period.end) {
+            html += `<p>Period: ${summary.period.start} to ${summary.period.end}</p>`;
+        } else if (summary.period.start) {
+            html += `<p>From: ${summary.period.start}</p>`;
+        } else if (summary.period.end) {
+            html += `<p>Until: ${summary.period.end}</p>`;
+        }
+        html += '</div>';
+    }
+
+    if (sales.length === 0) {
+        html += '<p>No sales transactions found for the selected criteria.</p>';
+    } else {
+        html += `
+            <div class="report-table-wrapper">
+                <table class="report-table">
+                    <thead>
+                        <tr>
+                            <th>Doc ID</th>
+                            <th>Date</th>
+                            <th>Customer</th>
+                            <th>Salesperson</th>
+                            <th>Sale Amount</th>
+                            <th>Customer Debt</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        sales.forEach(sale => {
+            const saleDate = sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : 'N/A';
+            html += `
+                <tr>
+                    <td>${sale.document_id}</td>
+                    <td>${saleDate}</td>
+                    <td>${sale.customer_name}</td>
+                    <td>${sale.salesperson}</td>
+                    <td class="amount">$${sale.total_sale.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                    <td class="amount ${sale.customer_debt > 0 ? 'text-warning' : ''}">
+                        $${sale.customer_debt.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    resultsDiv.innerHTML = html;
+    resultsDiv.scrollIntoView({ behavior: 'smooth' });
 }
 
 function displayReportResults(title, data) {
     const resultsDiv = document.getElementById('report-results');
 
-    if (!data || data.length === 0) {
-        resultsDiv.innerHTML = `<h3>${title}</h3><p>No data available</p>`;
+    console.log('Report data:', data);
+
+    // Handle both array and object responses
+    let records = Array.isArray(data) ? data : (data?.records || data?.data || data?.items || []);
+    
+    if (!records || records.length === 0) {
+        resultsDiv.innerHTML = `<div class="report-container"><h3>${title}</h3><div class="report-empty"><p>No data available for the selected criteria.</p></div></div>`;
         return;
     }
 
-    let html = `<h3>${title}</h3>`;
+    let html = `<div class="report-container"><h3>${title}</h3>`;
 
-    if (Array.isArray(data)) {
-        html += '<table><thead><tr>';
-        const keys = Object.keys(data[0]);
+    if (Array.isArray(records)) {
+        // Build professional table
+        html += '<table class="report-table"><thead><tr>';
+        const keys = Object.keys(records[0]).filter(k => k !== 'id'); // Hide internal IDs
         keys.forEach(key => {
-            html += `<th>${key.replace(/_/g, ' ').toUpperCase()}</th>`;
+            const header = key.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            html += `<th>${header}</th>`;
         });
         html += '</tr></thead><tbody>';
 
-        data.forEach(item => {
+        records.forEach(item => {
             html += '<tr>';
             keys.forEach(key => {
-                html += `<td>${item[key] || '-'}</td>`;
+                let value = item[key];
+                // Format values professionally
+                if (value === null || value === undefined) {
+                    value = '—';
+                } else if (typeof value === 'number' && key.includes('price')) {
+                    value = '$' + parseFloat(value).toFixed(2);
+                } else if (typeof value === 'number' && key.includes('quantity')) {
+                    value = Math.round(value);
+                } else if (key.includes('date') || key.includes('created') || key.includes('updated')) {
+                    try {
+                        value = new Date(value).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'});
+                    } catch (e) {
+                        // Keep original value if date parsing fails
+                    }
+                } else if (typeof value === 'boolean') {
+                    value = value ? '✓ Yes' : '✗ No';
+                }
+                html += `<td>${value}</td>`;
             });
             html += '</tr>';
         });
         html += '</tbody></table>';
+        
+        // Add summary and export button
+        html += `<div class="report-footer"><div class="report-summary"><p><strong>Total Records:</strong> ${records.length}</p></div><button class="btn-primary" onclick="exportCurrentReport()">📥 Export to Excel</button></div>`;
     } else {
-        html += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        html += `<div class="report-data"><pre>${JSON.stringify(records, null, 2)}</pre></div>`;
+    }
+    
+    html += '</div>';
+    resultsDiv.innerHTML = html;
+}
+
+function displayProductReport(data) {
+    const resultsDiv = document.getElementById('report-results');
+
+    console.log('Product report data:', data);
+
+    // Handle both array and object responses
+    let products = Array.isArray(data) ? data : (data?.products || data?.data || []);
+
+    if (!products || products.length === 0) {
+        resultsDiv.innerHTML = '<div class="report-container"><h3>Product Report</h3><div class="report-empty"><p>No products found.</p></div></div>';
+        return;
     }
 
+    let html = `
+        <div class="report-container">
+            <div class="report-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <h3 style="margin: 0;">Product Report</h3>
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="exportCurrentReportAsExcel()" class="btn-primary" style="padding: 8px 16px;">📥 Export to Excel</button>
+                    <button onclick="exportCurrentReportAsCSV()" class="btn-secondary" style="padding: 8px 16px;">📄 Export to CSV</button>
+                </div>
+            </div>
+    `;
+    html += '<table class="report-table"><thead><tr><th>Product ID</th><th>Product Name</th><th>Price</th><th>Description</th></tr></thead><tbody>';
+
+    let totalValue = 0;
+
+    products.forEach(product => {
+        html += '<tr>';
+        html += `<td>#${product.product_id}</td>`;
+        html += `<td>${product.name}</td>`;
+        html += `<td>$${parseFloat(product.price).toFixed(2)}</td>`;
+        html += `<td>${product.description || '—'}</td>`;
+        html += '</tr>';
+        totalValue += parseFloat(product.price);
+    });
+
+    html += '</tbody></table>';
+    html += `<div class="report-footer"><div class="report-summary"><div class="summary-grid"><div class="summary-item"><span class="label">Total Products:</span> <span class="value">${products.length}</span></div><div class="summary-item"><span class="label">Total Catalog Value:</span> <span class="value">$${totalValue.toFixed(2)}</span></div><div class="summary-item"><span class="label">Average Price:</span> <span class="value">$${(totalValue / products.length).toFixed(2)}</span></div></div></div></div>`;
+    html += '</div>';
+    resultsDiv.innerHTML = html;
+}
+
+function displayInventoryReport(data) {
+    const resultsDiv = document.getElementById('report-results');
+
+    console.log('Inventory report data:', data);
+
+    // Handle both array and object responses
+    let items = Array.isArray(data) ? data : (data?.items || data?.inventory || data?.data || []);
+
+    if (!items || items.length === 0) {
+        resultsDiv.innerHTML = '<div class="report-container"><h3>Inventory Report</h3><div class="report-empty"><p>No inventory data available for the selected criteria.</p></div></div>';
+        return;
+    }
+
+    let html = `
+        <div class="report-container">
+            <div class="report-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <h3 style="margin: 0;">Inventory Report</h3>
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="exportCurrentReportAsExcel()" class="btn-primary" style="padding: 8px 16px;">📥 Export to Excel</button>
+                    <button onclick="exportCurrentReportAsCSV()" class="btn-secondary" style="padding: 8px 16px;">📄 Export to CSV</button>
+                </div>
+            </div>
+    `;
+    html += '<table class="report-table"><thead><tr><th>Product ID</th><th>Warehouse ID</th><th>Quantity</th><th>Status</th></tr></thead><tbody>';
+
+    let totalQuantity = 0;
+
+    // If it's an array of inventory items
+    items.forEach(item => {
+        const status = item.quantity < 10 ? '<span class="warning">Low Stock</span>' : '<span class="success">In Stock</span>';
+        html += '<tr>';
+        html += `<td>#${item.product_id}</td>`;
+        html += `<td>W-${item.warehouse_id}</td>`;
+        html += `<td>${item.quantity}</td>`;
+        html += `<td>${status}</td>`;
+        html += '</tr>';
+        totalQuantity += item.quantity;
+    });
+
+    html += '</tbody></table>';
+    html += `<div class="report-footer"><div class="report-summary"><div class="summary-grid"><div class="summary-item"><span class="label">Total Items:</span> <span class="value">${totalQuantity}</span></div><div class="summary-item"><span class="label">Total SKUs:</span> <span class="value">${items.length}</span></div></div></div></div>`;
+    html += '</div>';
+    resultsDiv.innerHTML = html;
+}
+
+function displayDocumentReport(data) {
+    const resultsDiv = document.getElementById('report-results');
+
+    console.log('Document report data:', data);
+
+    // Handle both array and object responses
+    let documents = Array.isArray(data) ? data : (data?.documents || data?.data || []);
+    
+    if (!documents || documents.length === 0) {
+        resultsDiv.innerHTML = '<div class="report-container"><h3>Transaction Report</h3><div class="report-empty"><p>No transactions found for the selected criteria.</p></div></div>';
+        return;
+    }
+
+    let html = `
+        <div class="report-container">
+            <div class="report-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <h3 style="margin: 0;">Transaction Report</h3>
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="exportCurrentReportAsExcel()" class="btn-primary" style="padding: 8px 16px;">📥 Export to Excel</button>
+                    <button onclick="exportCurrentReportAsCSV()" class="btn-secondary" style="padding: 8px 16px;">📄 Export to CSV</button>
+                </div>
+            </div>
+    `;
+    html += '<table class="report-table"><thead><tr><th>Document ID</th><th>Type</th><th>Status</th><th>Date</th><th>Items</th><th>Customer</th></tr></thead><tbody>';
+
+    let importCount = 0, exportCount = 0, transferCount = 0, saleCount = 0;
+    let draftCount = 0, postedCount = 0;
+
+    documents.forEach(doc => {
+        const docType = (doc.doc_type || 'UNKNOWN').toString().toLowerCase();
+        const status = (doc.status || 'UNKNOWN').toString().toUpperCase();
+        
+        if (docType === 'import') {
+            importCount++;
+        } else if (docType === 'export') {
+            exportCount++;
+        } else if (docType === 'transfer') {
+            transferCount++;
+        } else if (docType === 'sale') {
+            saleCount++;
+        }
+        if (status === 'DRAFT') draftCount++;
+        if (status === 'POSTED') postedCount++;
+
+        const statusClass = status === 'POSTED' ? 'status-posted' : 'status-draft';
+        const date = doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-US') : '—';
+        
+        html += '<tr>';
+        html += `<td>#${doc.document_id}</td>`;
+        html += `<td>${docType.charAt(0).toUpperCase() + docType.slice(1)}</td>`;
+        html += `<td><span class="${statusClass}">${status}</span></td>`;
+        html += `<td>${date}</td>`;
+        html += `<td>${doc.item_count || 0}</td>`;
+        html += `<td>${doc.customer_id ? `C-${doc.customer_id}` : '—'}</td>`;
+        html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    html += `<div class="report-footer"><div class="report-summary"><div class="summary-grid"><div class="summary-item"><span class="label">Total Transactions:</span> <span class="value">${documents.length}</span></div><div class="summary-item"><span class="label">Imports:</span> <span class="value">${importCount}</span></div><div class="summary-item"><span class="label">Exports:</span> <span class="value">${exportCount}</span></div><div class="summary-item"><span class="label">Transfers:</span> <span class="value">${transferCount}</span></div><div class="summary-item"><span class="label">Sales:</span> <span class="value">${saleCount}</span></div><div class="summary-item"><span class="label">Posted:</span> <span class="value">${postedCount}</span></div><div class="summary-item"><span class="label">Draft:</span> <span class="value">${draftCount}</span></div></div></div></div>`;
+    html += '</div>';
+    resultsDiv.innerHTML = html;
+}
+
+function displayWarehouseReport(data) {
+    const resultsDiv = document.getElementById('report-results');
+
+    console.log('Warehouse report data:', data);
+
+    // Handle both array and object responses
+    let warehouses = Array.isArray(data) ? data : (data?.warehouses || data?.data || []);
+
+    if (!warehouses || warehouses.length === 0) {
+        resultsDiv.innerHTML = '<div class="report-container"><h3>Warehouse Report</h3><div class="report-empty"><p>No warehouse data available for the selected criteria.</p></div></div>';
+        return;
+    }
+
+    let html = `
+        <div class="report-container">
+            <div class="report-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <h3 style="margin: 0;">Warehouse Report</h3>
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="exportCurrentReportAsExcel()" class="btn-primary" style="padding: 8px 16px;">📥 Export to Excel</button>
+                    <button onclick="exportCurrentReportAsCSV()" class="btn-secondary" style="padding: 8px 16px;">📄 Export to CSV</button>
+                </div>
+            </div>
+    `;
+    html += '<table class="report-table"><thead><tr><th>Warehouse ID</th><th>Location</th></tr></thead><tbody>';
+
+    warehouses.forEach(warehouse => {
+        html += '<tr>';
+        html += `<td>W-${warehouse.warehouse_id}</td>`;
+        html += `<td>${warehouse.location || '—'}</td>`;
+        html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    html += `<div class="report-footer"><div class="report-summary"><p><strong>Total Warehouses:</strong> ${warehouses.length}</p></div></div>`;
+    html += '</div>';
     resultsDiv.innerHTML = html;
 }
 
@@ -687,35 +2427,607 @@ function showSuccess(message) {
     }, 3000);
 }
 
-// Placeholder functions for future implementation
-function editProduct(id) {
-    showError('Edit functionality coming soon!');
+function downloadCsv(filename, rows) {
+    const csv = rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 }
 
+function exportProductsCsv() {
+    if (!products || products.length === 0) {
+        showError('No products to export');
+        return;
+    }
+    const header = ['product_id','name','price','description'];
+    const rows = [header, ...products.map(p => [p.product_id, p.name, p.price, p.description || ''])];
+    downloadCsv('products.csv', rows);
+}
+
+function exportInventoryCsv() {
+    if (!inventory || inventory.length === 0) {
+        showError('No inventory to export');
+        return;
+    }
+    const header = ['warehouse_id','product_id','quantity'];
+    const rows = [header, ...inventory.map(i => [i.warehouse_id, i.product_id, i.quantity])];
+    downloadCsv('inventory.csv', rows);
+}
+
+function exportDocumentsCsv() {
+    if (!documents || documents.length === 0) {
+        showError('No documents to export');
+        return;
+    }
+    const header = ['document_id','doc_type','status','created_at'];
+    const rows = [header, ...documents.map(d => [d.document_id, d.doc_type, d.status, d.created_at])];
+    downloadCsv('documents.csv', rows);
+}
+
+// Excel Export Functions
+function exportReportToExcel(reportTitle, tableData) {
+    if (!tableData || tableData.length === 0) {
+        showError('No data to export');
+        return;
+    }
+
+    try {
+        if (typeof XLSX === 'undefined') {
+            console.warn('XLSX library not loaded, falling back to CSV');
+            // Fall back to CSV
+            downloadCsv(`${reportTitle}.csv`, tableData);
+            return;
+        }
+        // Create workbook
+        const workbook = XLSX.utils.book_new();
+        
+        // Create worksheet from data
+        const worksheet = XLSX.utils.aoa_to_sheet(tableData);
+        
+        // Set column widths
+        const columnWidths = tableData[0].map(() => 18);
+        worksheet['!cols'] = columnWidths.map(w => ({ wch: w }));
+        
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(workbook, worksheet, reportTitle.replace(/\s+/g, '_'));
+        
+        // Generate filename with timestamp
+        const timestamp = new Date().toISOString().slice(0, 10);
+        const filename = `${reportTitle.replace(/\s+/g, '_')}_${timestamp}.xlsx`;
+        
+        // Write file
+        XLSX.writeFile(workbook, filename);
+        console.log(`Report exported as ${filename}`);
+        showSuccess(`Report exported as ${filename}`);
+    } catch (error) {
+        console.error('Excel export error:', error);
+        showError('Failed to export report to Excel: ' + error.message);
+    }
+}
+
+function exportReportToCSV(reportTitle, tableData) {
+    if (!tableData || tableData.length === 0) {
+        // If no table data provided, try to extract from report results
+        const resultsDiv = document.getElementById('report-results');
+        if (!resultsDiv) {
+            showError('No report data found to export');
+            return;
+        }
+        tableData = extractTableData(resultsDiv);
+    }
+    
+    if (!tableData || tableData.length === 0) {
+        showError('No data to export');
+        return;
+    }
+
+    try {
+        const timestamp = new Date().toISOString().slice(0, 10);
+        const filename = `${reportTitle.replace(/\s+/g, '_')}_${timestamp}.csv`;
+        downloadCsv(filename, tableData);
+        showSuccess(`Report exported as ${filename}`);
+    } catch (error) {
+        console.error('CSV export error:', error);
+        showError('Failed to export report to CSV: ' + error.message);
+    }
+}
+
+function extractTableData(tableElement) {
+    const rows = [];
+    const table = tableElement.querySelector('table');
+    
+    if (!table) return rows;
+    
+    // Extract headers
+    const headers = [];
+    table.querySelectorAll('thead th').forEach(th => {
+        headers.push(th.textContent.trim());
+    });
+    if (headers.length > 0) rows.push(headers);
+    
+    // Extract body rows
+    table.querySelectorAll('tbody tr').forEach(tr => {
+        const row = [];
+        tr.querySelectorAll('td').forEach(td => {
+            row.push(td.textContent.trim());
+        });
+        if (row.length > 0) rows.push(row);
+    });
+    
+    return rows;
+}
+
+function exportCurrentReport() {
+    const resultsDiv = document.getElementById('report-results');
+    // Look for h2, h3, or h1 title
+    let titleElement = resultsDiv.querySelector('h2') || resultsDiv.querySelector('h3') || resultsDiv.querySelector('h1');
+    const title = titleElement ? titleElement.textContent.trim().replace(/[^a-zA-Z0-9 ]/g, '') : 'Report';
+    
+    console.log('Exporting report with title:', title);
+    
+    const tableData = extractTableData(resultsDiv);
+    
+    if (tableData.length === 0) {
+        showError('No data to export');
+        return;
+    }
+    
+    console.log('Table data extracted:', tableData.length, 'rows');
+    exportReportToExcel(title, tableData);
+}
+
+// Add new export functions for Excel and CSV
+function exportCurrentReportAsExcel() {
+    const resultsDiv = document.getElementById('report-results');
+    let titleElement = resultsDiv.querySelector('h2') || resultsDiv.querySelector('h3') || resultsDiv.querySelector('h1');
+    const title = titleElement ? titleElement.textContent.trim().replace(/[^a-zA-Z0-9 ]/g, '') : 'Report';
+    
+    console.log('Exporting report as Excel with title:', title);
+    
+    const tableData = extractTableData(resultsDiv);
+    
+    if (tableData.length === 0) {
+        showError('No data to export');
+        return;
+    }
+    
+    console.log('Table data extracted:', tableData.length, 'rows');
+    exportReportToExcel(title, tableData);
+}
+
+function exportCurrentReportAsCSV() {
+    const resultsDiv = document.getElementById('report-results');
+    let titleElement = resultsDiv.querySelector('h2') || resultsDiv.querySelector('h3') || resultsDiv.querySelector('h1');
+    const title = titleElement ? titleElement.textContent.trim().replace(/[^a-zA-Z0-9 ]/g, '') : 'Report';
+    
+    console.log('Exporting report as CSV with title:', title);
+    
+    const tableData = extractTableData(resultsDiv);
+    
+    if (tableData.length === 0) {
+        showError('No data to export');
+        return;
+    }
+    
+    exportReportToCSV(title, tableData);
+}
+
+// Delete confirmation state
+let deleteConfirmData = {
+    type: null,
+    id: null
+};
+
+// Edit Product Functions
+async function editProduct(id) {
+    const product = products.find(p => p.product_id === id);
+    if (!product) {
+        showError('Product not found');
+        return;
+    }
+
+    document.getElementById('edit-product-name').value = product.name;
+    document.getElementById('edit-product-price').value = product.price;
+    document.getElementById('edit-product-description').value = product.description || '';
+
+    // Store the product ID for the form handler
+    document.getElementById('edit-product-form').dataset.productId = id;
+    document.getElementById('edit-product-modal').style.display = 'block';
+}
+
+async function handleEditProduct(event) {
+    event.preventDefault();
+
+    const productId = event.target.dataset.productId;
+    const updatedData = {
+        name: document.getElementById('edit-product-name').value,
+        price: parseFloat(document.getElementById('edit-product-price').value),
+        description: document.getElementById('edit-product-description').value
+    };
+
+    try {
+        await apiRequest(`/api/products/${productId}`, {
+            method: 'PUT',
+            body: JSON.stringify(updatedData)
+        });
+
+        showSuccess('Product updated successfully!');
+        closeModal('edit-product-modal');
+        event.target.reset();
+        products = []; // Reset cache
+        loadProducts();
+        loadDashboardData();
+    } catch (error) {
+        showError('Failed to update product');
+    }
+}
+
+// Delete Product Functions
 function deleteProduct(id) {
-    showError('Delete functionality coming soon!');
+    deleteConfirmData.type = 'product';
+    deleteConfirmData.id = id;
+    const product = products.find(p => p.product_id === id);
+    document.getElementById('delete-confirmation-message').textContent = 
+        `Are you sure you want to delete the product "${product.name}"? This action cannot be undone.`;
+    document.getElementById('delete-confirmation-modal').style.display = 'block';
 }
 
-function editWarehouse(id) {
-    showError('Edit warehouse functionality coming soon!');
+async function importProductsCsv(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const res = await fetch(`${API_BASE}/api/products/import-csv`, {
+            method: 'POST',
+            headers: accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {},
+            body: formData
+        });
+        if (!res.ok) throw new Error('Import failed');
+        showSuccess('Products imported');
+        products = [];
+        loadProducts();
+        loadDashboardData();
+    } catch (e) {
+        showError('Failed to import products');
+    } finally {
+        event.target.value = '';
+    }
 }
 
-function viewWarehouseInventory(id) {
-    showError('Warehouse inventory view coming soon!');
+async function deleteProductConfirmed(id) {
+    try {
+        await apiRequest(`/api/products/${id}`, {
+            method: 'DELETE'
+        });
+
+        showSuccess('Product deleted successfully!');
+        products = []; // Reset cache
+        loadProducts();
+        loadDashboardData();
+    } catch (error) {
+        showError('Failed to delete product');
+    }
 }
 
-function viewDocument(id) {
-    showError('Document view functionality coming soon!');
+// Edit Warehouse Functions
+async function editWarehouse(id) {
+    const warehouse = warehouses.find(w => w.warehouse_id === id);
+    if (!warehouse) {
+        showError('Warehouse not found');
+        return;
+    }
+
+    document.getElementById('edit-warehouse-location').value = warehouse.location;
+    document.getElementById('edit-warehouse-form').dataset.warehouseId = id;
+    document.getElementById('edit-warehouse-modal').style.display = 'block';
 }
 
+async function handleEditWarehouse(event) {
+    event.preventDefault();
+
+    const warehouseId = event.target.dataset.warehouseId;
+    const updatedData = {
+        location: document.getElementById('edit-warehouse-location').value
+    };
+
+    try {
+        await apiRequest(`/api/warehouses/${warehouseId}`, {
+            method: 'PUT',
+            body: JSON.stringify(updatedData)
+        });
+
+        showSuccess('Warehouse updated successfully!');
+        closeModal('edit-warehouse-modal');
+        event.target.reset();
+        warehouses = []; // Reset cache
+        loadWarehouses();
+        loadDashboardData();
+    } catch (error) {
+        showError('Failed to update warehouse');
+    }
+}
+
+// Delete Warehouse Functions
+function deleteWarehouse(id) {
+    deleteConfirmData.type = 'warehouse';
+    deleteConfirmData.id = id;
+    const warehouse = warehouses.find(w => w.warehouse_id === id);
+    document.getElementById('delete-confirmation-message').textContent = 
+        `Are you sure you want to delete the warehouse "${warehouse.location}"? This action cannot be undone.`;
+    document.getElementById('delete-confirmation-modal').style.display = 'block';
+}
+
+async function deleteWarehouseConfirmed(id) {
+    try {
+        await apiRequest(`/api/warehouses/${id}`, {
+            method: 'DELETE'
+        });
+
+        showSuccess('Warehouse deleted successfully!');
+        warehouses = []; // Reset cache
+        loadWarehouses();
+        loadDashboardData();
+    } catch (error) {
+        showError('Failed to delete warehouse');
+    }
+}
+
+// View Warehouse Inventory
+async function viewWarehouseInventory(warehouseId) {
+    try {
+        const inventoryDiv = document.getElementById('warehouse-inventory-content');
+        inventoryDiv.innerHTML = '<p>Loading warehouse inventory...</p>';
+
+        // Get inventory for this specific warehouse
+        const warehouseItems = inventory.filter(item => item.warehouse_id === warehouseId);
+        const warehouse = warehouses.find(w => w.warehouse_id === warehouseId);
+
+        if (warehouseItems.length === 0) {
+            inventoryDiv.innerHTML = '<p>No items in this warehouse</p>';
+            document.getElementById('warehouse-inventory-modal').style.display = 'block';
+            return;
+        }
+
+        let totalValue = 0;
+        let totalItems = 0;
+
+        const tableHTML = `
+            <div class="warehouse-info">
+                <h3>Warehouse ${warehouseId}</h3>
+                <p>${warehouse ? warehouse.location : 'Unknown Location'}</p>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Product ID</th>
+                        <th>Product Name</th>
+                        <th>Quantity</th>
+                        <th>Unit Price</th>
+                        <th>Total Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${warehouseItems.map(item => {
+                        const product = products.find(p => p.product_id === item.product_id);
+                        const itemValue = (product ? product.price : 0) * item.quantity;
+                        totalValue += itemValue;
+                        totalItems += item.quantity;
+                        return `
+                            <tr>
+                                <td>${item.product_id}</td>
+                                <td>${product ? product.name : 'Unknown Product'}</td>
+                                <td>${item.quantity}</td>
+                                <td>$${product ? product.price.toFixed(2) : '0.00'}</td>
+                                <td>$${itemValue.toFixed(2)}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+            <div class="inventory-summary" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+                <h4>Summary</h4>
+                <p><strong>Total Items:</strong> ${totalItems}</p>
+                <p><strong>Total Value:</strong> $${totalValue.toFixed(2)}</p>
+            </div>
+        `;
+
+        inventoryDiv.innerHTML = tableHTML;
+        document.getElementById('warehouse-inventory-modal').style.display = 'block';
+    } catch (error) {
+        showError('Failed to load warehouse inventory');
+    }
+}
+
+// View Document Functions
+async function viewDocument(documentId) {
+    try {
+        const detailsDiv = document.getElementById('document-details-content');
+        detailsDiv.innerHTML = '<p>Loading document details...</p>';
+
+        // Try to load document from API if not cached
+        let document_data = documents.find(d => d.document_id === documentId);
+        
+        if (!document_data) {
+            try {
+                document_data = await apiRequest(`/api/documents/${documentId}`);
+            } catch (error) {
+                // If API fails, use cached data
+                if (!document_data) {
+                    showError('Document not found');
+                    return;
+                }
+            }
+        }
+
+        // Get items for this document
+        let items = [];
+        if (document_data.items) {
+            items = document_data.items;
+        }
+
+        let totalValue = 0;
+        const itemsHTML = items.map(item => {
+            const product = products.find(p => p.product_id === item.product_id);
+            const itemValue = item.unit_price * item.quantity;
+            totalValue += itemValue;
+            return `
+                <tr>
+                    <td>${item.product_id}</td>
+                    <td>${product ? product.name : 'Unknown Product'}</td>
+                    <td>${item.quantity}</td>
+                    <td>$${item.unit_price.toFixed(2)}</td>
+                    <td>$${itemValue.toFixed(2)}</td>
+                </tr>
+            `;
+        }).join('');
+
+        const sourceWH = warehouses.find(w => w.warehouse_id === document_data.source_warehouse_id);
+        const destWH = warehouses.find(w => w.warehouse_id === document_data.destination_warehouse_id);
+
+        let warehouseInfo = '';
+        if (document_data.doc_type === 'import') {
+            warehouseInfo = `<p><strong>Destination Warehouse:</strong> ${destWH ? `${destWH.warehouse_id} - ${destWH.location}` : 'Unknown'}</p>`;
+        } else if (document_data.doc_type === 'export') {
+            warehouseInfo = `<p><strong>Source Warehouse:</strong> ${sourceWH ? `${sourceWH.warehouse_id} - ${sourceWH.location}` : 'Unknown'}</p>`;
+        } else if (document_data.doc_type === 'transfer') {
+            warehouseInfo = `
+                <p><strong>Source Warehouse:</strong> ${sourceWH ? `${sourceWH.warehouse_id} - ${sourceWH.location}` : 'Unknown'}</p>
+                <p><strong>Destination Warehouse:</strong> ${destWH ? `${destWH.warehouse_id} - ${destWH.location}` : 'Unknown'}</p>
+            `;
+        }
+
+        const detailsHTML = `
+            <div class="document-header">
+                <div>
+                    <h3>Document #${document_data.document_id}</h3>
+                    <p><strong>Type:</strong> ${document_data.doc_type.toUpperCase()}</p>
+                    <p><strong>Status:</strong> <span class="status-badge" style="background: ${document_data.status === 'posted' ? '#28a745' : '#ffc107'};">${document_data.status.toUpperCase()}</span></p>
+                    <p><strong>Created:</strong> ${new Date(document_data.created_at).toLocaleString()}</p>
+                    ${warehouseInfo}
+                </div>
+            </div>
+            <h4 style="margin-top: 20px;">Items</h4>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Product ID</th>
+                        <th>Product Name</th>
+                        <th>Quantity</th>
+                        <th>Unit Price</th>
+                        <th>Total Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${itemsHTML}
+                </tbody>
+            </table>
+            <div class="document-summary" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+                <h4>Summary</h4>
+                <p><strong>Total Items:</strong> ${items.reduce((sum, item) => sum + item.quantity, 0)}</p>
+                <p><strong>Total Value:</strong> $${totalValue.toFixed(2)}</p>
+            </div>
+        `;
+
+        detailsDiv.innerHTML = detailsHTML;
+        document.getElementById('view-document-modal').style.display = 'block';
+    } catch (error) {
+        showError('Failed to load document details');
+    }
+}
+
+// Post Document
 async function postDocument(id) {
     try {
-        await apiRequest(`/api/documents/${id}/post`, { method: 'POST' });
+        if (!currentUser || !currentUser.email) {
+            showError('Unable to post document: user not logged in');
+            return;
+        }
+        
+        await apiRequest(`/api/documents/${id}/post`, { 
+            method: 'POST',
+            body: JSON.stringify({ approved_by: currentUser.email })
+        });
         showSuccess('Document posted successfully!');
         documents = []; // Reset cache
         loadDocuments();
         loadDashboardData();
     } catch (error) {
-        showError('Failed to post document');
+        console.error('Post document error:', error);
+        showError(error.detail || 'Failed to post document');
     }
 }
+
+async function deleteDocument(id) {
+    deleteConfirmData.type = 'document';
+    deleteConfirmData.id = id;
+    const doc = documents.find(d => d.document_id === id);
+    document.getElementById('delete-confirmation-message').textContent = 
+        `Are you sure you want to delete Document #${id}? This action cannot be undone.`;
+    document.getElementById('delete-confirmation-modal').style.display = 'block';
+}
+
+async function deleteDocumentConfirmed(id) {
+    try {
+        await apiRequest(`/api/documents/${id}`, {
+            method: 'DELETE'
+        });
+
+        showSuccess('Document deleted successfully!');
+        documents = []; // Reset cache
+        loadDocuments();
+        loadDashboardData();
+    } catch (error) {
+        console.error('Delete document error:', error);
+        showError(error.detail || 'Failed to delete document');
+    }
+}
+
+function toggleRealtime(enabled) {
+    const settingsStatus = document.getElementById('settings-status');
+    if (realtimeHandle) {
+        clearInterval(realtimeHandle);
+        realtimeHandle = null;
+    }
+    if (enabled) {
+        realtimeHandle = setInterval(() => {
+            loadDashboardData();
+            loadDocuments();
+        }, 15000);
+        if (settingsStatus) settingsStatus.textContent = 'Realtime updates ON';
+    } else {
+        if (settingsStatus) settingsStatus.textContent = 'Realtime updates OFF';
+    }
+}
+
+// Confirm delete function
+function confirmDelete() {
+    if (deleteConfirmData.type === 'product') {
+        deleteProductConfirmed(deleteConfirmData.id);
+    } else if (deleteConfirmData.type === 'document') {
+        deleteDocumentConfirmed(deleteConfirmData.id);
+    } else if (deleteConfirmData.type === 'warehouse') {
+        deleteWarehouseConfirmed(deleteConfirmData.id);
+    }
+    closeModal('delete-confirmation-modal');
+}
+
+// Setup event listeners for edit forms
+document.addEventListener('DOMContentLoaded', function() {
+    const editProductForm = document.getElementById('edit-product-form');
+    const editWarehouseForm = document.getElementById('edit-warehouse-form');
+    
+    if (editProductForm) {
+        editProductForm.addEventListener('submit', handleEditProduct);
+    }
+    
+    if (editWarehouseForm) {
+        editWarehouseForm.addEventListener('submit', handleEditWarehouse);
+    }
+});

@@ -128,3 +128,25 @@ async def reset_user_password(
     )
     service.user_repo.save(updated)
     return {"status": "ok", "message": "Password reset successfully"}
+
+
+@router.delete(
+    "/{user_id}",
+    dependencies=[Depends(require_permissions(Permission.MANAGE_USERS))],
+    status_code=204,
+)
+async def delete_user(
+    user_id: int,
+    current_user=Depends(get_current_user),
+    service: UserService = Depends(get_user_service),
+):
+    """Delete a user account. Admin only."""
+    # Prevent self-deletion
+    if current_user.user_id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own account"
+        )
+    
+    service.delete_user(user_id)
+    return None
