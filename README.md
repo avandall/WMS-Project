@@ -7,36 +7,58 @@ A comprehensive Warehouse Management System built with Python, FastAPI, and Clea
 ### **Run the API Server**
 ```bash
 cd WMS
-./run_server.sh
+
+# First Project
+
+A collection of utilities, a small dashboard, and test examples used to demonstrate API and frontend integration patterns.
+
+## Overview
+
+This repository contains scripts and a lightweight dashboard used for prototyping APIs and integration tests. It is organized to make it easy to run the backend checks and view a simple frontend dashboard locally.
+
+## Structure
+
+- `check_db.py` — simple database connection/check utility
+- `test_api.py` — project-level integration test examples
+- `dashboard/` — static dashboard assets and demo pages
+- `tests/` — automated tests
+
+## Quick Start
+
+1. Create and activate a virtual environment:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 ```
 
-The API will be available at: **http://localhost:8000**
+2. Install dependencies (if provided):
 
-### **Run the Web Dashboard**
-```bash
+```powershell
+pip install -r requirements.txt
+```
+
+3. Run the demo dashboard (static server):
+
+```powershell
 cd dashboard
-python3 -m http.server 8080
+python -m http.server 8080
 ```
 
-The dashboard will be available at: **http://localhost:8080**
+Open http://127.0.0.1:8080 in your browser.
 
-## 📁 Project Structure
+## Tests
 
-- **`WMS/`** - Main API application (FastAPI)
-- **`dashboard/`** - Web dashboard (HTML/CSS/JavaScript)
-- **`WMS/diagrams/`** - System architecture diagrams
+Run tests with:
 
-## 🛠️ Development
+```powershell
+pytest
+```
 
-This is a learning project for Python development, implementing:
-- Clean Architecture
-- Domain-Driven Design
-- REST API with FastAPI
-- PostgreSQL database
-- Comprehensive testing
+## Contributing
 
-## 📚 Documentation
+Please open issues or PRs for improvements, bug fixes, or documentation updates.
 
-- [API Documentation](WMS/README.md) - Detailed API docs
-- [Dashboard Guide](dashboard/README.md) - Web dashboard usage
-- [Architecture Diagrams](WMS/diagrams/README.md) - System design
+## Contact
+
+Add contact info or link to your GitHub profile here.
