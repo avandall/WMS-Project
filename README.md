@@ -2,45 +2,40 @@
 
 A comprehensive Warehouse Management System built with Python, FastAPI, and Clean Architecture.
 
-## 🚀 Quick Start
+## Repository Structure
 
-### **Run the API Server**
+- `WMS/` — the main FastAPI WMS application (this is the project you run)
+- `dashboard/` — static dashboard assets (demo)
+- `check_db.py`, `test_api.py` — small utilities / integration checks
+
+## 🚀 Quick Start (API)
+
+From the repo root:
+
 ```bash
 cd WMS
-
-# First Project
-
-A collection of utilities, a small dashboard, and test examples used to demonstrate API and frontend integration patterns.
-
-## Overview
-
-This repository contains scripts and a lightweight dashboard used for prototyping APIs and integration tests. It is organized to make it easy to run the backend checks and view a simple frontend dashboard locally.
-
-## Structure
-
-- `check_db.py` — simple database connection/check utility
-- `test_api.py` — project-level integration test examples
-- `dashboard/` — static dashboard assets and demo pages
-- `tests/` — automated tests
-
-## Quick Start
-
-1. Create and activate a virtual environment:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
 ```
 
-2. Install dependencies (if provided):
+Install dependencies:
 
-```powershell
+```bash
+uv sync
+# or, without uv:
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-3. Run the demo dashboard (static server):
+Run the server:
 
-```powershell
+```bash
+uv run python src/main.py
+# or:
+python src/main.py
+```
+
+## 🌐 Dashboard (Demo)
+
+```bash
 cd dashboard
 python -m http.server 8080
 ```
@@ -49,16 +44,8 @@ Open http://127.0.0.1:8080 in your browser.
 
 ## Tests
 
-Run tests with:
+From `WMS/`:
 
 ```powershell
 pytest
 ```
-
-## Contributing
-
-Please open issues or PRs for improvements, bug fixes, or documentation updates.
-
-## Contact
-
-Add contact info or link to your GitHub profile here.
