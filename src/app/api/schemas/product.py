@@ -14,9 +14,9 @@ class ProductCreate(BaseModel):
     )
     name: str = Field(..., min_length=1, max_length=100, description="Product name")
     price: float = Field(
-        ...,
+        0.0,
         ge=0,
-        description="Catalog/list price. Transaction pricing is defined per document item unit_price.",
+        description="Optional catalog/list price (defaults to 0). Transaction pricing is defined per document item unit_price.",
     )
     description: Optional[str] = Field(
         None, max_length=500, description="Product description"

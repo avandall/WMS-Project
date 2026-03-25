@@ -15,15 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Python deps
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-
-# App code
-COPY src/app ./app
-COPY src/main.py ./main.py
+# App (src-layout) + deps
 COPY pyproject.toml ./pyproject.toml
+COPY README.md ./README.md
 COPY uv.lock ./uv.lock
+COPY src ./src
+RUN pip install --no-cache-dir .
 
 EXPOSE 8000
 

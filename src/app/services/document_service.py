@@ -21,10 +21,14 @@ from app.repositories.interfaces.interfaces import (
     IProductRepo,
     IInventoryRepo,
     ICustomerRepo,
+    IPositionRepo,
+    IAuditEventRepo,
 )
 from app.utils.infrastructure import document_id_generator
 from app.core.logging import get_logger
 from sqlalchemy.orm import Session
+from sqlalchemy import select
+from app.repositories.sql.models import WarehouseInventoryModel
 
 logger = get_logger(__name__)
 
@@ -42,6 +46,8 @@ class DocumentService:
         product_repo: IProductRepo,
         inventory_repo: IInventoryRepo,
         customer_repo: Optional[ICustomerRepo] = None,
+        position_repo: Optional[IPositionRepo] = None,
+        audit_event_repo: Optional[IAuditEventRepo] = None,
         session: Optional[Session] = None,
     ):
         self.document_repo = document_repo
@@ -49,6 +55,8 @@ class DocumentService:
         self.product_repo = product_repo
         self.inventory_repo = inventory_repo
         self.customer_repo = customer_repo
+        self.position_repo = position_repo
+        self.audit_event_repo = audit_event_repo
         self.session = session
         logger.info("DocumentService initialized")
         self._doc_id_generator = document_id_generator()
@@ -265,6 +273,29 @@ class DocumentService:
             document.approved_by = approved_by
             document.posted_at = datetime.now()
             self.document_repo.save(document)
+
+            if self.audit_event_repo:
+                self.audit_event_repo.create_event(
+                    action="DOCUMENT_POSTED",
+                    entity_type="document",
+                    entity_id=str(document.document_id),
+                    warehouse_id=document.from_warehouse_id or document.to_warehouse_id,
+                    payload={
+                        "document_id": document.document_id,
+                        "doc_type": document.doc_type.value,
+                        "from_warehouse_id": document.from_warehouse_id,
+                        "to_warehouse_id": document.to_warehouse_id,
+                        "approved_by": approved_by,
+                        "items": [
+                            {
+                                "product_id": item.product_id,
+                                "quantity": item.quantity,
+                                "unit_price": item.unit_price,
+                            }
+                            for item in document.items
+                        ],
+                    },
+                )
             
             # Commit all changes atomically
             self.session.commit()
@@ -310,7 +341,13 @@ class DocumentService:
     
     def _set_repos_auto_commit(self, enabled: bool) -> None:
         """Control auto-commit behavior on all repositories."""
-        for repo in [self.warehouse_repo, self.inventory_repo, self.document_repo]:
+        for repo in [
+            self.warehouse_repo,
+            self.inventory_repo,
+            self.document_repo,
+            self.position_repo,
+            self.audit_event_repo,
+        ]:
             if hasattr(repo, 'set_auto_commit'):
                 repo.set_auto_commit(enabled)
 
@@ -481,6 +518,17 @@ class DocumentService:
             )
 
         for item in document.items:
+            if self.position_repo:
+                self._ensure_positions_balanced(document.to_warehouse_id, item.product_id)
+                receiving = self.position_repo.get_position_model(
+                    document.to_warehouse_id, "RECEIVING"
+                )
+                self.position_repo.adjust_position_stock(
+                    position_id=receiving.id,
+                    product_id=item.product_id,
+                    delta=item.quantity,
+                )
+
             # Add to warehouse first; if this fails, do not alter total inventory
             self.warehouse_repo.add_product_to_warehouse(
                 document.to_warehouse_id, item.product_id, item.quantity
@@ -516,6 +564,21 @@ class DocumentService:
                     f"Insufficient stock for product {item.product_id}: requested {item.quantity}, available {available}"
                 )
 
+            if self.position_repo:
+                self._ensure_positions_balanced(document.from_warehouse_id, item.product_id)
+                self.position_repo.allocate_and_remove(
+                    warehouse_id=document.from_warehouse_id,
+                    product_id=item.product_id,
+                    quantity=item.quantity,
+                    preferred_position_codes=[
+                        "SHIPPING",
+                        "STAGING",
+                        "STORAGE",
+                        "UNASSIGNED",
+                        "RECEIVING",
+                    ],
+                )
+
             # Remove from warehouse
             self.warehouse_repo.remove_product_from_warehouse(
                 document.from_warehouse_id, item.product_id, item.quantity
@@ -543,6 +606,32 @@ class DocumentService:
             )
 
         for item in document.items:
+            if self.position_repo:
+                self._ensure_positions_balanced(document.from_warehouse_id, item.product_id)
+                self._ensure_positions_balanced(document.to_warehouse_id, item.product_id)
+
+                self.position_repo.allocate_and_remove(
+                    warehouse_id=document.from_warehouse_id,
+                    product_id=item.product_id,
+                    quantity=item.quantity,
+                    preferred_position_codes=[
+                        "SHIPPING",
+                        "STAGING",
+                        "STORAGE",
+                        "UNASSIGNED",
+                        "RECEIVING",
+                    ],
+                )
+
+                receiving = self.position_repo.get_position_model(
+                    document.to_warehouse_id, "RECEIVING"
+                )
+                self.position_repo.adjust_position_stock(
+                    position_id=receiving.id,
+                    product_id=item.product_id,
+                    delta=item.quantity,
+                )
+
             # Remove from source
             self.warehouse_repo.remove_product_from_warehouse(
                 document.from_warehouse_id, item.product_id, item.quantity
@@ -551,3 +640,42 @@ class DocumentService:
             self.warehouse_repo.add_product_to_warehouse(
                 document.to_warehouse_id, item.product_id, item.quantity
             )
+
+    def _get_warehouse_product_quantity(self, warehouse_id: int, product_id: int) -> int:
+        if not self.session:
+            items = self.warehouse_repo.get_warehouse_inventory(warehouse_id)
+            for row in items:
+                if row.product_id == product_id:
+                    return int(row.quantity)
+            return 0
+
+        qty = self.session.execute(
+            select(WarehouseInventoryModel.quantity).where(
+                WarehouseInventoryModel.warehouse_id == warehouse_id,
+                WarehouseInventoryModel.product_id == product_id,
+            )
+        ).scalar_one_or_none()
+        return int(qty or 0)
+
+    def _ensure_positions_balanced(self, warehouse_id: int, product_id: int) -> None:
+        """
+        Ensure that sum(position_inventory) for (warehouse_id, product_id)
+        matches warehouse_inventory quantity by reconciling UNASSIGNED.
+        """
+        if not self.position_repo:
+            return
+
+        self.position_repo.ensure_default_positions(warehouse_id)
+        wh_qty = self._get_warehouse_product_quantity(warehouse_id, product_id)
+        pos_total = self.position_repo.get_total_quantity_for_product(warehouse_id, product_id)
+        diff = wh_qty - pos_total
+        if diff == 0:
+            return
+
+        unassigned = self.position_repo.get_position_model(warehouse_id, "UNASSIGNED")
+        self.position_repo.adjust_position_stock(
+            position_id=unassigned.id, product_id=product_id, delta=diff
+        )
+        logger.warning(
+            f"Reconciled UNASSIGNED for warehouse_id={warehouse_id} product_id={product_id} diff={diff}"
+        )

@@ -8,24 +8,30 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_session
 from app.application.ports import (
+    IAuditEventRepo,
     IDocumentRepo,
     IInventoryRepo,
+    IPositionRepo,
     IProductRepo,
     IWarehouseRepo,
     ICustomerRepo,
 )
 from app.infrastructure.persistence.sql import (
+    AuditEventRepo,
     CustomerRepo,
     DocumentRepo,
     InventoryRepo,
+    PositionRepo,
     ProductRepo,
     WarehouseRepo,
 )
 from app.application.services import (
     DocumentService,
     InventoryService,
+    PositionService,
     ProductService,
     ReportService,
+    StockMovementService,
     WarehouseOperationsService,
     WarehouseService,
 )
@@ -54,6 +60,15 @@ def get_document_repo(db: Session = Depends(get_session)) -> IDocumentRepo:
 def get_customer_repo(db: Session = Depends(get_session)) -> ICustomerRepo:
     """Provide a customer repository bound to the current DB session."""
     return CustomerRepo(db)
+
+def get_position_repo(db: Session = Depends(get_session)) -> IPositionRepo:
+    """Provide a position repository bound to the current DB session."""
+    return PositionRepo(db)
+
+
+def get_audit_event_repo(db: Session = Depends(get_session)) -> IAuditEventRepo:
+    """Provide an audit event repository bound to the current DB session."""
+    return AuditEventRepo(db)
 
 
 def get_product_service(db: Session = Depends(get_session)) -> ProductService:
@@ -90,13 +105,35 @@ def get_document_service(db: Session = Depends(get_session)) -> DocumentService:
     product_repo = ProductRepo(db)
     inventory_repo = InventoryRepo(db)
     customer_repo = CustomerRepo(db)
+    position_repo = PositionRepo(db)
+    audit_event_repo = AuditEventRepo(db)
     return DocumentService(
         document_repo=document_repo,
         warehouse_repo=warehouse_repo,
         product_repo=product_repo,
         inventory_repo=inventory_repo,
         customer_repo=customer_repo,
+        position_repo=position_repo,
+        audit_event_repo=audit_event_repo,
         session=db,  # Pass session for transaction management
+    )
+
+
+def get_position_service(db: Session = Depends(get_session)) -> PositionService:
+    position_repo = PositionRepo(db)
+    audit_event_repo = AuditEventRepo(db)
+    return PositionService(position_repo=position_repo, audit_event_repo=audit_event_repo)
+
+
+def get_stock_movement_service(db: Session = Depends(get_session)) -> StockMovementService:
+    position_repo = PositionRepo(db)
+    warehouse_repo = WarehouseRepo(db)
+    audit_event_repo = AuditEventRepo(db)
+    return StockMovementService(
+        position_repo=position_repo,
+        warehouse_repo=warehouse_repo,
+        session=db,
+        audit_event_repo=audit_event_repo,
     )
 
 

@@ -12,6 +12,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    JSON,
     String,
     UniqueConstraint,
     Index,
@@ -67,6 +68,11 @@ class WarehouseModel(Base):
 
     inventory_items = relationship(
         "WarehouseInventoryModel",
+        back_populates="warehouse",
+        cascade="all, delete-orphan",
+    )
+    positions = relationship(
+        "PositionModel",
         back_populates="warehouse",
         cascade="all, delete-orphan",
     )
@@ -197,4 +203,78 @@ class AuditLogModel(Base):
     __table_args__ = (
         Index("ix_audit_logs_user_path", "user_id", "path"),
         Index("ix_audit_logs_created", "created_at"),
+    )
+
+
+class PositionModel(Base):
+    __tablename__ = "positions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    warehouse_id = Column(
+        Integer, ForeignKey("warehouses.warehouse_id"), nullable=False, index=True
+    )
+    code = Column(String(50), nullable=False)
+    type = Column(String(20), nullable=False, default="STORAGE", index=True)
+    description = Column(String(255))
+    is_active = Column(Integer, nullable=False, default=1, index=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("warehouse_id", "code", name="uq_position_warehouse_code"),
+        Index("ix_positions_warehouse_code", "warehouse_id", "code"),
+        Index("ix_positions_warehouse_type", "warehouse_id", "type"),
+    )
+
+    warehouse = relationship("WarehouseModel", back_populates="positions")
+    inventory_items = relationship(
+        "PositionInventoryModel",
+        back_populates="position",
+        cascade="all, delete-orphan",
+    )
+
+
+class PositionInventoryModel(Base):
+    __tablename__ = "position_inventory"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    position_id = Column(
+        Integer, ForeignKey("positions.id"), nullable=False, index=True
+    )
+    product_id = Column(
+        BigInteger, ForeignKey("products.product_id"), nullable=False, index=True
+    )
+    quantity = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("position_id", "product_id", name="uq_position_product"),
+        CheckConstraint(
+            "quantity >= 0", name="check_position_inventory_quantity_positive"
+        ),
+        Index("ix_position_inventory_position_product", "position_id", "product_id"),
+    )
+
+    position = relationship("PositionModel", back_populates="inventory_items")
+    product = relationship("ProductModel")
+
+
+class AuditEventModel(Base):
+    __tablename__ = "audit_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    request_id = Column(String(100), index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True, index=True)
+    action = Column(String(80), nullable=False, index=True)
+    entity_type = Column(String(80), index=True)
+    entity_id = Column(String(120), index=True)
+    warehouse_id = Column(Integer, index=True)
+    payload = Column(JSON)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    user = relationship("UserModel")
+
+    __table_args__ = (
+        Index("ix_audit_events_action_created", "action", "created_at"),
+        Index("ix_audit_events_user_created", "user_id", "created_at"),
+        Index("ix_audit_events_request_created", "request_id", "created_at"),
     )

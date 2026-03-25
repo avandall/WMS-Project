@@ -111,12 +111,30 @@ class WarehouseRepo(TransactionalRepository, IWarehouseRepo):
         ).scalars()
         return [InventoryItem(row.product_id, row.quantity) for row in inventory_rows]
 
+    def _get_pending_inventory_row(
+        self, warehouse_id: int, product_id: int
+    ) -> Optional[WarehouseInventoryModel]:
+        # Session uses `autoflush=False`, so repeated operations in the same
+        # transaction can create duplicate pending rows unless we check `session.new`.
+        for obj in list(self.session.new) + list(self.session.dirty):
+            if not isinstance(obj, WarehouseInventoryModel):
+                continue
+            if obj.warehouse_id == warehouse_id and obj.product_id == product_id:
+                return obj
+        return None
+
     def add_product_to_warehouse(
         self, warehouse_id: int, product_id: int, quantity: int
     ) -> None:
         warehouse = self.session.get(WarehouseModel, warehouse_id)
         if not warehouse:
             raise WarehouseNotFoundError(f"Warehouse {warehouse_id} not found")
+
+        pending = self._get_pending_inventory_row(warehouse_id, product_id)
+        if pending:
+            pending.quantity += quantity
+            self._commit_if_auto()
+            return
 
         row = self.session.execute(
             select(WarehouseInventoryModel).where(
@@ -141,6 +159,19 @@ class WarehouseRepo(TransactionalRepository, IWarehouseRepo):
         warehouse = self.session.get(WarehouseModel, warehouse_id)
         if not warehouse:
             raise WarehouseNotFoundError(f"Warehouse {warehouse_id} not found")
+
+        pending = self._get_pending_inventory_row(warehouse_id, product_id)
+        if pending:
+            if pending.quantity < quantity:
+                raise InsufficientStockError(
+                    f"Warehouse {warehouse_id} does not have enough product {product_id}"
+                )
+            pending.quantity -= quantity
+            if pending.quantity == 0:
+                # Not flushed yet; just remove pending row from the session.
+                self.session.expunge(pending)
+            self._commit_if_auto()
+            return
 
         row = self.session.execute(
             select(WarehouseInventoryModel).where(

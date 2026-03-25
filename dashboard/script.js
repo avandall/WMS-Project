@@ -1070,7 +1070,6 @@ async function handleCreateProduct(event) {
     const productData = {
         product_id: Date.now(), // Simple ID generation
         name: document.getElementById('product-name').value,
-        price: parseFloat(document.getElementById('product-price').value),
         description: document.getElementById('product-description').value
     };
 
@@ -1116,7 +1115,7 @@ async function handleCreateWarehouse(event) {
 }
 
 function openCustomerModal() {
-    document.getElementById('customer-modal').style.display = 'block';
+    openModal('customer-modal');
 }
 
 async function handleCreateCustomer(event) {
@@ -1178,7 +1177,7 @@ async function viewCustomer(customerId) {
             <h4>Purchase History</h4>
             ${purchasesHTML}
         `;
-        document.getElementById('customer-detail-modal').style.display = 'block';
+        openModal('customer-detail-modal');
     } catch (error) {
         showError(error.detail || 'Failed to load customer');
     }
@@ -1238,8 +1237,7 @@ async function handleCreateDocument(event) {
                 quantity: parseInt(quantityInput.value)
             };
             if (docType === 'import') {
-                if (!priceInput.value) return; // skip row without required price
-                item.unit_price = parseFloat(priceInput.value);
+                item.unit_price = priceInput.value ? parseFloat(priceInput.value) : 0;
             } else if (docType === 'export' || docType === 'sale') {
                 item.unit_price = priceInput.value ? parseFloat(priceInput.value) : 0;
             } else if (docType === 'transfer') {
@@ -1489,11 +1487,11 @@ async function deleteUserConfirm(userId, userEmail) {
 
 // Modal functions
 function showCreateProductModal() {
-    document.getElementById('product-modal').style.display = 'block';
+    openModal('product-modal');
 }
 
 function showCreateWarehouseModal() {
-    document.getElementById('warehouse-modal').style.display = 'block';
+    openModal('warehouse-modal');
 }
 
 function showCreateDocumentModal() {
@@ -1502,11 +1500,37 @@ function showCreateDocumentModal() {
     // Load products for item selection
     updateProductDropdowns();
     loadCustomers();
-    document.getElementById('document-modal').style.display = 'block';
+    resetDocumentForm();
+    openModal('document-modal');
 }
 
 function openUserModal() {
-    document.getElementById('user-modal').style.display = 'block';
+    openModal('user-modal');
+}
+
+function resetDocumentForm() {
+    const form = document.getElementById('document-form');
+    if (form) form.reset();
+
+    const itemsContainer = document.getElementById('document-items');
+    if (itemsContainer) {
+        const rows = itemsContainer.querySelectorAll('.item-row');
+        rows.forEach((row, idx) => {
+            if (idx === 0) {
+                const productSelect = row.querySelector('.product-select');
+                const quantityInput = row.querySelector('.quantity-input');
+                const priceInput = row.querySelector('.price-input');
+                if (productSelect) productSelect.value = '';
+                if (quantityInput) quantityInput.value = '';
+                if (priceInput) priceInput.value = '';
+            } else {
+                row.remove();
+            }
+        });
+    }
+
+    updateProductDropdowns();
+    updateDocumentForm();
 }
 
 async function openManageUserModal(preselectUserId) {
@@ -1689,7 +1713,7 @@ function updateDocumentForm() {
     if (docType === 'import') {
         sourceGroup.style.display = 'none';
         destGroup.style.display = 'block';
-        priceInputs.forEach(inp => { inp.required = true; inp.style.display = ''; });
+        priceInputs.forEach(inp => { inp.required = false; inp.style.display = ''; });
         if (customerGroup) customerGroup.style.display = 'none';
     } else if (docType === 'export') {
         sourceGroup.style.display = 'block';

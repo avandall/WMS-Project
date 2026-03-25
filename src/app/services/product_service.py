@@ -51,7 +51,7 @@ class ProductService:
         if name is None:
             raise ValidationError("Product name cannot be empty")
         if price is None:
-            raise ValidationError("Product price is required")
+            price = 0.0
 
         # Auto-generate product_id if not provided
         if product_id is None:

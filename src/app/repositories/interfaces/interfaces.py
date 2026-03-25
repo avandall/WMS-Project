@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from app.models.product_domain import Product
 from app.models.warehouse_domain import Warehouse
 from app.models.inventory_domain import InventoryItem
 from app.models.document_domain import Document, DocumentStatus
 from app.models.user_domain import User
 from app.models import document_domain
+from app.models.position_domain import Position, PositionInventoryItem
 
 
 class IProductRepo(ABC):
@@ -157,4 +158,76 @@ class ICustomerRepo(ABC):
 
     @abstractmethod
     def list_purchases(self, customer_id: int) -> List[dict]:
+        pass
+
+
+class IPositionRepo(ABC):
+    @abstractmethod
+    def ensure_default_positions(self, warehouse_id: int) -> None:
+        pass
+
+    @abstractmethod
+    def create_position(
+        self,
+        *,
+        warehouse_id: int,
+        code: str,
+        type: str = "STORAGE",
+        description: Optional[str] = None,
+    ) -> Position:
+        pass
+
+    @abstractmethod
+    def list_positions(
+        self, warehouse_id: int, *, include_inactive: bool = False
+    ) -> List[Position]:
+        pass
+
+    @abstractmethod
+    def get_position(self, warehouse_id: int, code: str) -> Position:
+        pass
+
+    @abstractmethod
+    def list_position_inventory(
+        self, warehouse_id: int, code: str
+    ) -> List[PositionInventoryItem]:
+        pass
+
+    @abstractmethod
+    def get_position_model(self, warehouse_id: int, code: str):
+        """Internal helper for services needing DB identity (position id)."""
+        pass
+
+    @abstractmethod
+    def get_total_quantity_for_product(self, warehouse_id: int, product_id: int) -> int:
+        pass
+
+    @abstractmethod
+    def adjust_position_stock(self, *, position_id: int, product_id: int, delta: int) -> None:
+        pass
+
+    @abstractmethod
+    def allocate_and_remove(
+        self,
+        *,
+        warehouse_id: int,
+        product_id: int,
+        quantity: int,
+        preferred_position_codes: Optional[List[str]] = None,
+    ):
+        pass
+
+
+class IAuditEventRepo(ABC):
+    @abstractmethod
+    def create_event(
+        self,
+        *,
+        action: str,
+        entity_type: Optional[str] = None,
+        entity_id: Optional[str] = None,
+        warehouse_id: Optional[int] = None,
+        payload: Optional[dict[str, Any]] = None,
+        user_id: Optional[int] = None,
+    ) -> int:
         pass
