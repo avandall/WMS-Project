@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Optional
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger, request_id_ctx
@@ -43,3 +45,51 @@ class AuditEventRepo(TransactionalRepository):
         )
         return event.id
 
+    def get(self, event_id: int) -> Optional[AuditEventModel]:
+        return self.session.get(AuditEventModel, event_id)
+
+    def list_events(
+        self,
+        *,
+        request_id: Optional[str] = None,
+        user_id: Optional[int] = None,
+        action: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        entity_id: Optional[str] = None,
+        warehouse_id: Optional[int] = None,
+        created_from: Optional[datetime] = None,
+        created_to: Optional[datetime] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[AuditEventModel]:
+        limit = max(1, min(int(limit), 500))
+        offset = max(0, int(offset))
+
+        stmt = select(AuditEventModel)
+        if request_id:
+            stmt = stmt.where(AuditEventModel.request_id == request_id)
+        if user_id is not None:
+            stmt = stmt.where(AuditEventModel.user_id == user_id)
+        if action:
+            stmt = stmt.where(AuditEventModel.action == action)
+        if entity_type:
+            stmt = stmt.where(AuditEventModel.entity_type == entity_type)
+        if entity_id:
+            stmt = stmt.where(AuditEventModel.entity_id == entity_id)
+        if warehouse_id is not None:
+            stmt = stmt.where(AuditEventModel.warehouse_id == warehouse_id)
+        if created_from is not None:
+            stmt = stmt.where(AuditEventModel.created_at >= created_from)
+        if created_to is not None:
+            stmt = stmt.where(AuditEventModel.created_at <= created_to)
+
+        rows = (
+            self.session.execute(
+                stmt.order_by(AuditEventModel.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+            )
+            .scalars()
+            .all()
+        )
+        return list(rows)

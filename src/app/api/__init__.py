@@ -18,6 +18,8 @@ from .routers.customers import router as customers_router
 from .routers.auth import router as auth_router
 from .routers.users import router as users_router
 from .routers.positions import router as positions_router
+from .routers.audit_events import router as audit_events_router
+from .routers.ai import router as ai_router
 from .warehouse_operations import router as warehouse_operations_router
 from .middleware import audit_middleware, rate_limit_middleware
 from ..exceptions.business_exceptions import (
@@ -197,8 +199,10 @@ app.include_router(documents_router, prefix="/api/documents", tags=["documents"]
 app.include_router(reports_router, prefix="/api/reports", tags=["reports"])
 app.include_router(customers_router, prefix="/api/customers", tags=["customers"])
 app.include_router(positions_router, prefix="/api", tags=["positions"])
+app.include_router(audit_events_router, prefix="/api", tags=["audit-events"])
 app.include_router(
     warehouse_operations_router, prefix="/api", tags=["warehouse-operations"]
 )
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(users_router, prefix="/api/users", tags=["users"])
+app.include_router(ai_router, prefix="/api", tags=["ai"])

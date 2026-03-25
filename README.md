@@ -53,6 +53,33 @@ docker compose logs -f tunnel
 
 See `cloudflare/README.md` for named-tunnel (custom domain) setup.
 
+## 🤖 AI (LangChain) – Chat DB
+
+This project exposes a read-only DB chat endpoint backed by LangChain.
+
+1) Configure `.env` (see `.env.example`) with `DATABASE_URL`, `AI_PROVIDER`, `AI_MODEL`, and your provider API key.
+
+2) Run the server (see Quick Start).
+
+3) Call the endpoint:
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/ai/chat-db \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <YOUR_JWT>' \
+  -d '{"message": "How many products do we have?"}'
+```
+
+Direct python usage (no HTTP):
+
+```python
+from app.ai_engine import handle_customer_chat_with_db
+
+result = handle_customer_chat_with_db("List 10 newest documents")
+print(result["answer"])
+print(result["sql"])
+```
+
 ## Tests
 
 From `WMS/`:
