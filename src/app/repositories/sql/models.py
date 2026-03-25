@@ -6,6 +6,7 @@ Includes production-grade indexes and constraints.
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Column,
     DateTime,
     Float,
@@ -38,7 +39,7 @@ class UserModel(Base):
 class ProductModel(Base):
     __tablename__ = "products"
 
-    product_id = Column(Integer, primary_key=True)
+    product_id = Column(BigInteger, primary_key=True)
     name = Column(String(100), nullable=False)  # Index defined in __table_args__
     description = Column(String(500))
     price = Column(Float, nullable=False, default=0.0)
@@ -74,7 +75,7 @@ class WarehouseModel(Base):
 class InventoryModel(Base):
     __tablename__ = "inventory"
 
-    product_id = Column(Integer, ForeignKey("products.product_id"), primary_key=True)
+    product_id = Column(BigInteger, ForeignKey("products.product_id"), primary_key=True)
     quantity = Column(Integer, nullable=False, default=0)
     
     __table_args__ = (
@@ -91,7 +92,7 @@ class WarehouseInventoryModel(Base):
     warehouse_id = Column(
         Integer, ForeignKey("warehouses.warehouse_id"), nullable=False, index=True
     )
-    product_id = Column(Integer, ForeignKey("products.product_id"), nullable=False, index=True)
+    product_id = Column(BigInteger, ForeignKey("products.product_id"), nullable=False, index=True)
     quantity = Column(Integer, nullable=False, default=0)
 
     __table_args__ = (
@@ -144,7 +145,7 @@ class DocumentItemModel(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     document_id = Column(Integer, ForeignKey("documents.document_id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.product_id"), nullable=False)
+    product_id = Column(BigInteger, ForeignKey("products.product_id"), nullable=False)
     quantity = Column(Integer, nullable=False)
     unit_price = Column(Float, nullable=False)
 

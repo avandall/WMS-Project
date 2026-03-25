@@ -3,7 +3,7 @@ Database configuration for PMKT Warehouse Management System.
 Provides SQLAlchemy engine, session factory, and base class.
 """
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
 import time
@@ -75,7 +75,36 @@ def init_db() -> None:
         # Import models to ensure they are registered with SQLAlchemy metadata
         from app.repositories.sql import models  # noqa: F401
 
-        Base.metadata.create_all(bind=engine)
+        # Gunicorn (multi-worker) can import the app in parallel; serialize schema creation
+        # to avoid DDL races on fresh Postgres databases.
+        if engine.dialect.name == "postgresql":
+            lock_id = 471999  # arbitrary, but stable within this project
+            with engine.connect() as conn:
+                conn.execute(
+                    text("SELECT pg_advisory_lock(:lock_id)"), {"lock_id": lock_id}
+                )
+                try:
+                    Base.metadata.create_all(bind=conn)
+                    conn.commit()
+                except Exception:
+                    # If any DDL fails, Postgres marks the transaction as aborted; rollback
+                    # so we can reliably release the advisory lock.
+                    conn.rollback()
+                    raise
+                finally:
+                    try:
+                        conn.execute(
+                            text("SELECT pg_advisory_unlock(:lock_id)"),
+                            {"lock_id": lock_id},
+                        )
+                    except Exception:
+                        conn.rollback()
+                        conn.execute(
+                            text("SELECT pg_advisory_unlock(:lock_id)"),
+                            {"lock_id": lock_id},
+                        )
+        else:
+            Base.metadata.create_all(bind=engine)
         logger.info("Database tables initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {str(e)}")

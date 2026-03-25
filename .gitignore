@@ -120,3 +120,7 @@ Thumbs.db
 
 # Local databases
 *.db
+
+# Cloudflare Tunnel credentials
+cloudflare/cert.json
+cloudflare/*.json

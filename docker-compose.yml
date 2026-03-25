@@ -34,5 +34,15 @@ services:
     depends_on:
       - api
 
+  # Cloudflare Tunnel (free / quick tunnel)
+  # Enable with: docker compose --profile tunnel up -d
+  tunnel:
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:latest
+    restart: always
+    command: tunnel --no-autoupdate --url http://api:8000
+    depends_on:
+      - api
+
 volumes:
   postgres_data:

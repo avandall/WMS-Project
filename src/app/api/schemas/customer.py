@@ -1,11 +1,11 @@
 from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class CustomerCreate(BaseModel):
     name: str = Field(..., min_length=1)
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
     phone: Optional[str] = None
     address: Optional[str] = None
 
@@ -13,7 +13,7 @@ class CustomerCreate(BaseModel):
 class CustomerResponse(BaseModel):
     customer_id: int
     name: str
-    email: Optional[str]
+    email: Optional[EmailStr]
     phone: Optional[str]
     address: Optional[str]
     debt_balance: float

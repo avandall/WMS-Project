@@ -42,6 +42,17 @@ python -m http.server 8080
 
 Open http://127.0.0.1:8080 in your browser.
 
+## 🌍 Cloudflare Tunnel (Optional)
+
+This repo includes a `cloudflared` service in `docker-compose.yml` under the `tunnel` profile.
+
+```bash
+docker compose --profile tunnel up -d --build
+docker compose logs -f tunnel
+```
+
+See `cloudflare/README.md` for named-tunnel (custom domain) setup.
+
 ## Tests
 
 From `WMS/`:
