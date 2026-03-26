@@ -7,6 +7,8 @@ let accessToken = localStorage.getItem('accessToken') || '';
 let refreshToken = localStorage.getItem('refreshToken') || '';
 let currentUser = null;
 let realtimeHandle = null;
+let selectedDocumentId = null;
+let documentAutoRefreshHandle = null;
 
 // Global state
 let products = [];
@@ -90,6 +92,17 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         openLoginModal();
     }
+
+    // Auto-refresh settings: keep on by default unless explicitly disabled
+    const realtimeToggle = document.getElementById('realtime-toggle');
+    const savedRealtime = localStorage.getItem('realtime_updates');
+    const realtimeEnabled = savedRealtime === null ? true : savedRealtime === 'true';
+    if (realtimeToggle) {
+        realtimeToggle.checked = realtimeEnabled;
+    }
+    if (realtimeEnabled) {
+        toggleRealtime(true);
+    }
 });
 
 // Update current time
@@ -139,6 +152,22 @@ function setupEventListeners() {
     if (customerForm) {
         customerForm.addEventListener('submit', handleCreateCustomer);
     }
+
+    const editCustomerForm = document.getElementById('edit-customer-form');
+    if (editCustomerForm) {
+        editCustomerForm.addEventListener('submit', handleUpdateCustomer);
+    }
+
+    // AI chat
+    const aiMessage = document.getElementById('ai-message');
+    if (aiMessage) {
+        aiMessage.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                sendAiMessage();
+            }
+        });
+    }
 }
 
 // Navigation
@@ -182,6 +211,13 @@ function showSection(sectionName) {
             break;
         case 'settings':
             // no-op; settings uses toggles/inputs
+            break;
+        case 'ai':
+            // focus input for quick chat
+            setTimeout(() => {
+                const el = document.getElementById('ai-message');
+                if (el) el.focus();
+            }, 0);
             break;
     }
 }
@@ -517,6 +553,13 @@ async function loadProducts() {
                             <th>Description</th>
                             <th>Actions</th>
                         </tr>
+                        <tr class="filter-row">
+                            <th><input type="text" class="filter-input" data-column="product_id" placeholder="Filter ID" onkeyup="applyProductFilters()"></th>
+                            <th><input type="text" class="filter-input" data-column="name" placeholder="Filter Name" onkeyup="applyProductFilters()"></th>
+                            <th><input type="text" class="filter-input" data-column="price" placeholder="Filter Price" onkeyup="applyProductFilters()"></th>
+                            <th><input type="text" class="filter-input" data-column="description" placeholder="Filter Description" onkeyup="applyProductFilters()"></th>
+                            <th></th>
+                        </tr>
                     </thead>
                     <tbody>
                         ${products.map(product => `
@@ -622,15 +665,20 @@ async function loadWarehouses() {
                     <thead>
                         <tr>
                             <th>ID</th>
-                            <th>Location</th>
+                            <th>Name</th>
                             <th>Actions</th>
+                        </tr>
+                        <tr class="filter-row">
+                            <th><input type="text" class="filter-input" data-column="warehouse_id" placeholder="Filter ID" onkeyup="applyWarehouseFilters()"></th>
+                            <th><input type="text" class="filter-input" data-column="name" placeholder="Filter Name" onkeyup="applyWarehouseFilters()"></th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         ${warehouses.map(warehouse => `
                             <tr>
                                 <td>${warehouse.warehouse_id}</td>
-                                <td>${warehouse.location}</td>
+                                <td>${warehouse.name || warehouse.location}</td>
                                 <td>
                                     <button class="btn-secondary" onclick="viewWarehouseInventory(${warehouse.warehouse_id})">View Inventory</button>
                                     <button class="btn-secondary" onclick="editWarehouse(${warehouse.warehouse_id})">Edit</button>
@@ -658,7 +706,7 @@ async function loadWarehouses() {
 function filterWarehouses() {
     const term = document.getElementById('warehouse-search').value.toLowerCase();
     const filtered = warehouses.filter(w =>
-        w.location.toLowerCase().includes(term) || String(w.warehouse_id).includes(term)
+        (w.name || w.location).toLowerCase().includes(term) || String(w.warehouse_id).includes(term)
     );
     const warehousesList = document.getElementById('warehouses-list');
     warehousesList.innerHTML = filtered.length === 0 ? '<p>No matching warehouses</p>' : `
@@ -666,7 +714,7 @@ function filterWarehouses() {
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>Location</th>
+                    <th>Name</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -674,7 +722,7 @@ function filterWarehouses() {
                 ${filtered.map(warehouse => `
                     <tr>
                         <td>${warehouse.warehouse_id}</td>
-                        <td>${warehouse.location}</td>
+                        <td>${warehouse.name || warehouse.location}</td>
                         <td>
                             <button class="btn-secondary" onclick="viewWarehouseInventory(${warehouse.warehouse_id})">View Inventory</button>
                             <button class="btn-secondary" onclick="editWarehouse(${warehouse.warehouse_id})">Edit</button>
@@ -687,30 +735,152 @@ function filterWarehouses() {
     `;
 }
 
+function filterUsers() {
+    const term = document.getElementById('users-search')?.value.toLowerCase() || '';
+    const usersList = document.getElementById('users-list');
+    if (!usersList) return;
+    const rows = Array.from(usersList.querySelectorAll('tbody tr'));
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(term) ? '' : 'none';
+    });
+}
+
+// Column-based filter functions
+function applyProductFilters() {
+    const table = document.querySelector('#products-list table');
+    if (!table) return;
+    const filters = {};
+    table.querySelectorAll('.filter-row input').forEach(input => {
+        filters[input.dataset.column] = input.value.toLowerCase();
+    });
+    table.querySelectorAll('tbody tr').forEach(row => {
+        const cells = row.querySelectorAll('td');
+        let match = true;
+        const columns = ['product_id', 'name', 'price', 'description'];
+        columns.forEach((col, idx) => {
+            if (filters[col] && !cells[idx]?.textContent.toLowerCase().includes(filters[col])) {
+                match = false;
+            }
+        });
+        row.style.display = match ? '' : 'none';
+    });
+}
+
+function applyWarehouseFilters() {
+    const table = document.querySelector('#warehouses-list table');
+    if (!table) return;
+    const filters = {};
+    table.querySelectorAll('.filter-row input').forEach(input => {
+        filters[input.dataset.column] = input.value.toLowerCase();
+    });
+    table.querySelectorAll('tbody tr').forEach(row => {
+        const cells = row.querySelectorAll('td');
+        let match = true;
+        const columns = ['warehouse_id', 'name'];
+        columns.forEach((col, idx) => {
+            if (filters[col] && !cells[idx]?.textContent.toLowerCase().includes(filters[col])) {
+                match = false;
+            }
+        });
+        row.style.display = match ? '' : 'none';
+    });
+}
+
+function applyDocumentFilters() {
+    const table = document.querySelector('#documents-list table');
+    if (!table) return;
+    const filters = {};
+    table.querySelectorAll('.filter-row input').forEach(input => {
+        filters[input.dataset.column] = input.value.toLowerCase();
+    });
+    table.querySelectorAll('tbody tr').forEach(row => {
+        const cells = row.querySelectorAll('td');
+        let match = true;
+        const columns = ['document_id', 'doc_type', 'status', 'created_by', 'date'];
+        columns.forEach((col, idx) => {
+            if (filters[col] && !cells[idx]?.textContent.toLowerCase().includes(filters[col])) {
+                match = false;
+            }
+        });
+        row.style.display = match ? '' : 'none';
+    });
+}
+
+function applyCustomerFilters() {
+    const table = document.querySelector('#customers-list table');
+    if (!table) return;
+    const filters = {};
+    table.querySelectorAll('.filter-row input').forEach(input => {
+        filters[input.dataset.column] = input.value.toLowerCase();
+    });
+    table.querySelectorAll('tbody tr').forEach(row => {
+        const cells = row.querySelectorAll('td');
+        let match = true;
+        // Check name, contact (email/phone), debt, purchases, total
+        if (filters['name'] && !cells[0]?.textContent.toLowerCase().includes(filters['name'])) match = false;
+        if (filters['contact'] && !cells[1]?.textContent.toLowerCase().includes(filters['contact'])) match = false;
+        if (filters['debt'] && !cells[2]?.textContent.toLowerCase().includes(filters['debt'])) match = false;
+        if (filters['purchases'] && !cells[3]?.textContent.toLowerCase().includes(filters['purchases'])) match = false;
+        if (filters['total'] && !cells[4]?.textContent.toLowerCase().includes(filters['total'])) match = false;
+        row.style.display = match ? '' : 'none';
+    });
+}
+
+function applyInventoryFilters() {
+    const table = document.querySelector('#inventory-list table');
+    if (!table) return;
+    const filters = {};
+    table.querySelectorAll('.filter-row input').forEach(input => {
+        filters[input.dataset.column] = input.value.toLowerCase();
+    });
+    table.querySelectorAll('tbody tr').forEach(row => {
+        const cells = row.querySelectorAll('td');
+        let match = true;
+        const columns = ['product', 'warehouse', 'quantity', 'price', 'value'];
+        columns.forEach((col, idx) => {
+            if (filters[col] && !cells[idx]?.textContent.toLowerCase().includes(filters[col])) {
+                match = false;
+            }
+        });
+        row.style.display = match ? '' : 'none';
+    });
+}
+
+function applyUserFilters() {
+    const table = document.querySelector('#users-list table');
+    if (!table) return;
+    const filters = {};
+    table.querySelectorAll('.filter-row input').forEach(input => {
+        filters[input.dataset.column] = input.value.toLowerCase();
+    });
+    table.querySelectorAll('tbody tr').forEach(row => {
+        const cells = row.querySelectorAll('td');
+        let match = true;
+        const columns = ['user_id', 'email', 'role', 'status'];
+        columns.forEach((col, idx) => {
+            if (filters[col] && !cells[idx]?.textContent.toLowerCase().includes(filters[col])) {
+                match = false;
+            }
+        });
+        row.style.display = match ? '' : 'none';
+    });
+}
+
 // Load inventory
 async function loadInventory() {
-    const endpoint = '/api/inventory';
+    const endpoint = '/api/inventory/by-warehouse';
     RequestManager.debounce(endpoint, async () => {
         try {
             const inventoryDiv = document.getElementById('inventory-list');
             if (RequestManager.isCancelled(endpoint)) return;
-            
+
             inventoryDiv.innerHTML = '<p>Loading inventory data...</p>';
 
-            if (inventory.length === 0) {
-                try {
-                    const response = await apiRequest(endpoint);
-                    if (response === null || RequestManager.isCancelled(endpoint)) return;
-                    inventory = response || [];
-                } catch (error) {
-                    if (error.message && error.message.includes('Request cancelled')) return;
-                    if (error.isNetworkError) {
-                        inventoryDiv.innerHTML = `<p style="color: red;">❌ ${error.message}</p>`;
-                        return;
-                    }
-                    throw error;
-                }
-            }
+            // Always refresh the per-warehouse inventory for correctness
+            const response = await apiRequest(endpoint);
+            if (response === null || RequestManager.isCancelled(endpoint)) return;
+            inventory = response || [];
 
             if (RequestManager.isCancelled(endpoint)) return;
 
@@ -720,36 +890,43 @@ async function loadInventory() {
                 return;
             }
 
-        // Create table with inventory items
-        const tableHTML = `
-            <table>
-                <thead>
-                    <tr>
-                        <th>Product</th>
-                        <th>Warehouse</th>
-                        <th>Quantity</th>
-                        <th>Unit Price</th>
-                        <th>Total Value</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${inventory.map(item => {
-                        const product = products.find(p => p.product_id === item.product_id);
-                        const warehouse = warehouses.find(w => w.warehouse_id === item.warehouse_id);
-                        const totalValue = (product?.price || 0) * item.quantity;
-                        return `
-                            <tr>
-                                <td>${product ? product.name : `Product ${item.product_id}`}</td>
-                                <td>${warehouse ? warehouse.location : `Warehouse ${item.warehouse_id}`}</td>
-                                <td>${item.quantity}</td>
-                                <td>$${((product?.price || 0).toFixed(2))}</td>
-                                <td>$${totalValue.toFixed(2)}</td>
-                            </tr>
-                        `;
-                    }).join('')}
-                </tbody>
-            </table>
-        `;
+            const tableHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Warehouse Name</th>
+                            <th>Quantity</th>
+                            <th>Unit Price</th>
+                            <th>Total Value</th>
+                        </tr>
+                        <tr class="filter-row">
+                            <th><input type="text" class="filter-input" data-column="product" placeholder="Filter Product" onkeyup="applyInventoryFilters()"></th>
+                            <th><input type="text" class="filter-input" data-column="warehouse" placeholder="Filter Warehouse" onkeyup="applyInventoryFilters()"></th>
+                            <th><input type="text" class="filter-input" data-column="quantity" placeholder="Filter Qty" onkeyup="applyInventoryFilters()"></th>
+                            <th><input type="text" class="filter-input" data-column="price" placeholder="Filter Price" onkeyup="applyInventoryFilters()"></th>
+                            <th><input type="text" class="filter-input" data-column="value" placeholder="Filter Value" onkeyup="applyInventoryFilters()"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${inventory.map(item => {
+                            const product = products.find(p => p.product_id === item.product_id);
+                            const wh = warehouses.find(w => w.warehouse_id === item.warehouse_id);
+                            const warehouseName = item.warehouse_name || wh?.name || wh?.location || `Warehouse ${item.warehouse_id}`;
+                            const totalValue = (product?.price || 0) * item.quantity;
+                            return `
+                                <tr>
+                                    <td>${product ? product.name : `Product ${item.product_id}`}</td>
+                                    <td>${warehouseName}</td>
+                                    <td>${item.quantity}</td>
+                                    <td>$${((product?.price || 0).toFixed(2))}</td>
+                                    <td>$${totalValue.toFixed(2)}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
 
             if (RequestManager.isCancelled(endpoint)) return;
             inventoryDiv.innerHTML = tableHTML;
@@ -758,7 +935,7 @@ async function loadInventory() {
             if (!error.message.includes('Request cancelled')) {
                 const inventoryDiv = document.getElementById('inventory-list');
                 if (inventoryDiv) {
-                    inventoryDiv.innerHTML = '<p class="error">Failed to load inventory: ' + (error.message || 'Unknown error') + '</p>';
+                    inventoryDiv.innerHTML = '<p class="error">Failed to load inventory: ' + (error.detail || error.message || 'Unknown error') + '</p>';
                 }
             }
         }
@@ -779,7 +956,9 @@ function loadInventorySummary() {
         });
 
         const inventoryHTML = Object.entries(warehouseInventory).map(([warehouseId, items]) => {
-            const warehouse = warehouses.find(w => w.warehouse_id == warehouseId);
+            const wh = warehouses.find(w => w.warehouse_id == warehouseId);
+            const name = items[0]?.warehouse_name || wh?.name || wh?.location || `Warehouse ${warehouseId}`;
+
             const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
             const totalValue = items.reduce((sum, item) => {
                 const product = products.find(p => p.product_id === item.product_id);
@@ -788,7 +967,7 @@ function loadInventorySummary() {
 
             return `
                 <div class="inventory-item">
-                    <h3>Warehouse ${warehouseId} ${warehouse ? `- ${warehouse.location}` : ''}</h3>
+                    <h3>${name}</h3>
                     <div class="inventory-stats">
                         <div class="stat-item">
                             <span class="number">${items.length}</span>
@@ -857,6 +1036,14 @@ async function loadDocuments() {
                         <th>Created</th>
                         <th>Actions</th>
                     </tr>
+                    <tr class="filter-row">
+                        <th><input type="text" class="filter-input" data-column="document_id" placeholder="Filter ID" onkeyup="applyDocumentFilters()"></th>
+                        <th><input type="text" class="filter-input" data-column="doc_type" placeholder="Filter Type" onkeyup="applyDocumentFilters()"></th>
+                        <th><input type="text" class="filter-input" data-column="status" placeholder="Filter Status" onkeyup="applyDocumentFilters()"></th>
+                        <th><input type="text" class="filter-input" data-column="created_by" placeholder="Filter User" onkeyup="applyDocumentFilters()"></th>
+                        <th><input type="text" class="filter-input" data-column="date" placeholder="Filter Date" onkeyup="applyDocumentFilters()"></th>
+                        <th></th>
+                    </tr>
                 </thead>
                 <tbody>
                     ${documents.slice(0, 20).map(doc => `
@@ -921,6 +1108,31 @@ async function loadUsers() {
                 headerRow.appendChild(th);
             });
             thead.appendChild(headerRow);
+
+            // Create filter row
+            const filterRow = document.createElement('tr');
+            filterRow.className = 'filter-row';
+            const filterColumns = [
+                { label: 'Filter ID', data: 'user_id' },
+                { label: 'Filter Email', data: 'email' },
+                { label: 'Filter Role', data: 'role' },
+                { label: 'Filter Status', data: 'status' },
+                { label: '', data: '' }
+            ];
+            filterColumns.forEach(col => {
+                const th = document.createElement('th');
+                if (col.data) {
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'filter-input';
+                    input.dataset.column = col.data;
+                    input.placeholder = col.label;
+                    input.onkeyup = () => applyUserFilters();
+                    th.appendChild(input);
+                }
+                filterRow.appendChild(th);
+            });
+            thead.appendChild(filterRow);
             table.appendChild(thead);
             
             // Create body
@@ -1031,6 +1243,14 @@ async function loadCustomers() {
                         <th>Total Spent</th>
                         <th>Actions</th>
                     </tr>
+                    <tr class="filter-row">
+                        <th><input type="text" class="filter-input" data-column="name" placeholder="Filter Name" onkeyup="applyCustomerFilters()"></th>
+                        <th><input type="text" class="filter-input" data-column="contact" placeholder="Filter Contact" onkeyup="applyCustomerFilters()"></th>
+                        <th><input type="text" class="filter-input" data-column="debt" placeholder="Filter Debt" onkeyup="applyCustomerFilters()"></th>
+                        <th><input type="text" class="filter-input" data-column="purchases" placeholder="Filter Count" onkeyup="applyCustomerFilters()"></th>
+                        <th><input type="text" class="filter-input" data-column="total" placeholder="Filter Total" onkeyup="applyCustomerFilters()"></th>
+                        <th></th>
+                    </tr>
                 </thead>
                 <tbody>
                     ${customers.map(c => `
@@ -1042,6 +1262,7 @@ async function loadCustomers() {
                             <td>$${(c.total_purchased || 0).toFixed(2)}</td>
                             <td>
                                 <button class="btn-secondary" style="padding:4px 8px;font-size:0.9em" onclick="viewCustomer(${c.customer_id})">View</button>
+                                <button class="btn-secondary" style="padding:4px 8px;font-size:0.9em;margin-left:4px" onclick="openEditCustomerModal(${c.customer_id})">Edit</button>
                             </td>
                         </tr>
                     `).join('')}
@@ -1094,7 +1315,7 @@ async function handleCreateWarehouse(event) {
     event.preventDefault();
 
     const warehouseData = {
-        location: document.getElementById('warehouse-location').value
+        name: document.getElementById('warehouse-location').value
     };
 
     try {
@@ -1116,6 +1337,53 @@ async function handleCreateWarehouse(event) {
 
 function openCustomerModal() {
     openModal('customer-modal');
+}
+
+function openEditCustomerModal(customerId) {
+    const customer = customers.find(c => c.customer_id === customerId);
+    if (!customer) {
+        showError('Customer data not found. Refreshing list.');
+        customers = [];
+        loadCustomers();
+        return;
+    }
+    document.getElementById('edit-customer-id').value = customer.customer_id;
+    document.getElementById('edit-customer-name').value = customer.name || '';
+    document.getElementById('edit-customer-email').value = customer.email || '';
+    document.getElementById('edit-customer-phone').value = customer.phone || '';
+    document.getElementById('edit-customer-address').value = customer.address || '';
+    openModal('edit-customer-modal');
+}
+
+async function handleUpdateCustomer(event) {
+    event.preventDefault();
+    const customerId = parseInt(document.getElementById('edit-customer-id').value, 10);
+    if (!customerId) {
+        showError('Invalid customer selected');
+        return;
+    }
+
+    const payload = {
+        name: document.getElementById('edit-customer-name').value,
+        email: document.getElementById('edit-customer-email').value || null,
+        phone: document.getElementById('edit-customer-phone').value || null,
+        address: document.getElementById('edit-customer-address').value || null,
+    };
+
+    try {
+        await apiRequest(`/api/customers/${customerId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload)
+        });
+
+        showSuccess('Customer updated');
+        closeModal('edit-customer-modal');
+        customers = [];
+        loadCustomers();
+        loadDashboardData();
+    } catch (error) {
+        showError(error.detail || 'Failed to update customer');
+    }
 }
 
 async function handleCreateCustomer(event) {
@@ -1494,10 +1762,19 @@ function showCreateWarehouseModal() {
     openModal('warehouse-modal');
 }
 
-function showCreateDocumentModal() {
-    // Load warehouses for dropdowns
+async function refreshProductsCache() {
+    const res = await apiRequest('/api/products');
+    products = res || [];
+}
+
+async function refreshWarehousesCache() {
+    const res = await apiRequest('/api/warehouses');
+    warehouses = res || [];
+}
+
+async function showCreateDocumentModal() {
+    await Promise.all([refreshWarehousesCache(), refreshProductsCache()]);
     updateWarehouseDropdowns();
-    // Load products for item selection
     updateProductDropdowns();
     loadCustomers();
     resetDocumentForm();
@@ -1679,6 +1956,12 @@ function closeModal(modalId) {
             modal.style.opacity = '0';
             modal.style.pointerEvents = 'none';
             modal.setAttribute('aria-hidden', 'true');
+
+            if (modalId === 'view-document-modal' && documentAutoRefreshHandle) {
+                clearInterval(documentAutoRefreshHandle);
+                documentAutoRefreshHandle = null;
+            }
+
             console.log(`Modal hidden`);
         } else {
             console.warn(`Modal not found: ${modalId}`);
@@ -1743,7 +2026,7 @@ function updateWarehouseDropdowns() {
         warehouses.forEach(warehouse => {
             const option = document.createElement('option');
             option.value = warehouse.warehouse_id;
-            option.textContent = `${warehouse.warehouse_id} - ${warehouse.location}`;
+            option.textContent = `${warehouse.warehouse_id} - ${(warehouse.name || warehouse.location)}`;
             select.appendChild(option);
         });
     });
@@ -1848,7 +2131,7 @@ function populateWarehouseFilter(selectId) {
     warehouses.forEach(warehouse => {
         const option = document.createElement('option');
         option.value = warehouse.warehouse_id;
-        option.textContent = `${warehouse.warehouse_id} - ${warehouse.location}`;
+        option.textContent = `${warehouse.warehouse_id} - ${(warehouse.name || warehouse.location)}`;
         select.appendChild(option);
     });
 }
@@ -2286,7 +2569,7 @@ function displayInventoryReport(data) {
                 </div>
             </div>
     `;
-    html += '<table class="report-table"><thead><tr><th>Product ID</th><th>Warehouse ID</th><th>Quantity</th><th>Status</th></tr></thead><tbody>';
+    html += '<table class="report-table"><thead><tr><th>Product ID</th><th>Warehouse Name</th><th>Quantity</th><th>Status</th></tr></thead><tbody>';
 
     let totalQuantity = 0;
 
@@ -2295,7 +2578,9 @@ function displayInventoryReport(data) {
         const status = item.quantity < 10 ? '<span class="warning">Low Stock</span>' : '<span class="success">In Stock</span>';
         html += '<tr>';
         html += `<td>#${item.product_id}</td>`;
-        html += `<td>W-${item.warehouse_id}</td>`;
+        const wh = warehouses.find(w => w.warehouse_id === item.warehouse_id);
+        const warehouseName = item.warehouse_name || wh?.name || wh?.location || `Warehouse ${item.warehouse_id}`;
+        html += `<td>${warehouseName}</td>`;
         html += `<td>${item.quantity}</td>`;
         html += `<td>${status}</td>`;
         html += '</tr>';
@@ -2394,12 +2679,13 @@ function displayWarehouseReport(data) {
                 </div>
             </div>
     `;
-    html += '<table class="report-table"><thead><tr><th>Warehouse ID</th><th>Location</th></tr></thead><tbody>';
+    html += '<table class="report-table"><thead><tr><th>Warehouse Name</th><th>ID</th></tr></thead><tbody>';
 
     warehouses.forEach(warehouse => {
         html += '<tr>';
-        html += `<td>W-${warehouse.warehouse_id}</td>`;
-        html += `<td>${warehouse.location || '—'}</td>`;
+        const name = warehouse.name || warehouse.location || '—';
+        html += `<td>${name}</td>`;
+        html += `<td>${warehouse.warehouse_id}</td>`;
         html += '</tr>';
     });
 
@@ -2479,8 +2765,8 @@ function exportInventoryCsv() {
         showError('No inventory to export');
         return;
     }
-    const header = ['warehouse_id','product_id','quantity'];
-    const rows = [header, ...inventory.map(i => [i.warehouse_id, i.product_id, i.quantity])];
+    const header = ['warehouse_id','warehouse_name','product_id','quantity'];
+    const rows = [header, ...inventory.map(i => [i.warehouse_id, (i.warehouse_name || ''), i.product_id, i.quantity])];
     downloadCsv('inventory.csv', rows);
 }
 
@@ -2748,7 +3034,7 @@ async function editWarehouse(id) {
         return;
     }
 
-    document.getElementById('edit-warehouse-location').value = warehouse.location;
+    document.getElementById('edit-warehouse-location').value = (warehouse.name || warehouse.location);
     document.getElementById('edit-warehouse-form').dataset.warehouseId = id;
     document.getElementById('edit-warehouse-modal').style.display = 'block';
 }
@@ -2784,7 +3070,7 @@ function deleteWarehouse(id) {
     deleteConfirmData.id = id;
     const warehouse = warehouses.find(w => w.warehouse_id === id);
     document.getElementById('delete-confirmation-message').textContent = 
-        `Are you sure you want to delete the warehouse "${warehouse.location}"? This action cannot be undone.`;
+        `Are you sure you want to delete the warehouse "${warehouse.name || warehouse.location}"? This action cannot be undone.`;
     document.getElementById('delete-confirmation-modal').style.display = 'block';
 }
 
@@ -2824,8 +3110,8 @@ async function viewWarehouseInventory(warehouseId) {
 
         const tableHTML = `
             <div class="warehouse-info">
-                <h3>Warehouse ${warehouseId}</h3>
-                <p>${warehouse ? warehouse.location : 'Unknown Location'}</p>
+                <h3>${warehouse ? (warehouse.name || warehouse.location) : `Warehouse ${warehouseId}`}</h3>
+                <p>${warehouse ? (warehouse.name || warehouse.location) : 'Unknown Warehouse'}</p>
             </div>
             <table>
                 <thead>
@@ -2870,33 +3156,28 @@ async function viewWarehouseInventory(warehouseId) {
 }
 
 // View Document Functions
-async function viewDocument(documentId) {
+async function loadDocumentDetails(documentId, silent = false) {
     try {
         const detailsDiv = document.getElementById('document-details-content');
-        detailsDiv.innerHTML = '<p>Loading document details...</p>';
+        if (detailsDiv) detailsDiv.innerHTML = '<p>Loading document details...</p>';
 
-        // Try to load document from API if not cached
-        let document_data = documents.find(d => d.document_id === documentId);
-        
+        let document_data;
+        try {
+            document_data = await apiRequest(`/api/documents/${documentId}`);
+        } catch (error) {
+            if (!silent) showError('Document not found');
+            return;
+        }
+
         if (!document_data) {
-            try {
-                document_data = await apiRequest(`/api/documents/${documentId}`);
-            } catch (error) {
-                // If API fails, use cached data
-                if (!document_data) {
-                    showError('Document not found');
-                    return;
-                }
-            }
+            if (!silent) showError('Document not found');
+            return;
         }
 
         // Get items for this document
-        let items = [];
-        if (document_data.items) {
-            items = document_data.items;
-        }
-
+        const items = document_data.items || [];
         let totalValue = 0;
+
         const itemsHTML = items.map(item => {
             const product = products.find(p => p.product_id === item.product_id);
             const itemValue = item.unit_price * item.quantity;
@@ -2959,11 +3240,32 @@ async function viewDocument(documentId) {
             </div>
         `;
 
-        detailsDiv.innerHTML = detailsHTML;
-        document.getElementById('view-document-modal').style.display = 'block';
+        if (detailsDiv) detailsDiv.innerHTML = detailsHTML;
     } catch (error) {
-        showError('Failed to load document details');
+        if (!silent) showError('Failed to load document details');
     }
+}
+
+async function viewDocument(documentId) {
+    selectedDocumentId = documentId;
+    clearInterval(documentAutoRefreshHandle);
+    await loadDocumentDetails(documentId);
+    document.getElementById('view-document-modal').style.display = 'block';
+
+    documentAutoRefreshHandle = setInterval(() => {
+        if (!document.getElementById('view-document-modal')) {
+            clearInterval(documentAutoRefreshHandle);
+            documentAutoRefreshHandle = null;
+            return;
+        }
+        const modal = document.getElementById('view-document-modal');
+        if (!modal || modal.style.display === 'none' || modal.style.visibility === 'hidden') {
+            clearInterval(documentAutoRefreshHandle);
+            documentAutoRefreshHandle = null;
+            return;
+        }
+        loadDocumentDetails(documentId, true);
+    }, 15000);
 }
 
 // Post Document
@@ -3015,6 +3317,7 @@ async function deleteDocumentConfirmed(id) {
 
 function toggleRealtime(enabled) {
     const settingsStatus = document.getElementById('settings-status');
+    localStorage.setItem('realtime_updates', enabled ? 'true' : 'false');
     if (realtimeHandle) {
         clearInterval(realtimeHandle);
         realtimeHandle = null;
@@ -3023,6 +3326,8 @@ function toggleRealtime(enabled) {
         realtimeHandle = setInterval(() => {
             loadDashboardData();
             loadDocuments();
+            loadCustomers();
+            loadInventory();
         }, 15000);
         if (settingsStatus) settingsStatus.textContent = 'Realtime updates ON';
     } else {
@@ -3055,3 +3360,65 @@ document.addEventListener('DOMContentLoaded', function() {
         editWarehouseForm.addEventListener('submit', handleEditWarehouse);
     }
 });
+
+
+// --- AI Chat (LangChain) ---
+function appendAiMessage(kind, text) {
+    const log = document.getElementById('ai-chat-log');
+    if (!log) return;
+    const div = document.createElement('div');
+    div.className = `ai-msg ai-msg--${kind}`;
+    div.textContent = text;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+}
+
+function clearAiChat() {
+    const log = document.getElementById('ai-chat-log');
+    if (log) {
+        log.innerHTML = '<div class="ai-msg ai-msg--system">Ask questions about products, inventory, documents, customers… (read-only). Tip: press Ctrl+Enter to send.</div>';
+    }
+    const sql = document.getElementById('ai-sql');
+    const rows = document.getElementById('ai-rows');
+    if (sql) sql.textContent = '';
+    if (rows) rows.textContent = '';
+}
+
+async function sendAiMessage() {
+    const input = document.getElementById('ai-message');
+    const btn = document.getElementById('ai-send-btn');
+    const includeRows = document.getElementById('ai-include-rows');
+
+    if (!input) return;
+    const message = input.value.trim();
+    if (!message) return;
+
+    input.value = '';
+    appendAiMessage('user', message);
+
+    if (btn) btn.disabled = true;
+
+    try {
+        const payload = {
+            message,
+            include_rows: Boolean(includeRows && includeRows.checked),
+        };
+
+        const res = await apiRequest('/api/ai/chat-db', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+
+        // apiRequest returns parsed json for 2xx
+        appendAiMessage('assistant', res.answer || '(no answer)');
+
+        const sqlEl = document.getElementById('ai-sql');
+        const rowsEl = document.getElementById('ai-rows');
+        if (sqlEl) sqlEl.textContent = res.sql || '';
+        if (rowsEl) rowsEl.textContent = res.rows ? JSON.stringify(res.rows, null, 2) : '';
+    } catch (e) {
+        appendAiMessage('assistant', `Error: ${e && e.message ? e.message : String(e)}`);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}

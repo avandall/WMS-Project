@@ -32,15 +32,29 @@ async def get_inventory_list(
     warehouse_repo=Depends(get_warehouse_repo),
 ):
     """Return flat inventory list for UI table export."""
-    from app.repositories.sql.models import WarehouseInventoryModel
+    from app.repositories.sql.models import WarehouseInventoryModel, WarehouseModel
     from sqlalchemy import select
-    
-    # Get all warehouse inventory items directly from the table
+
     session = warehouse_repo.session
-    rows = session.execute(select(WarehouseInventoryModel)).scalars().all()
-    
+    rows = session.execute(
+        select(
+            WarehouseInventoryModel.product_id,
+            WarehouseInventoryModel.warehouse_id,
+            WarehouseModel.location.label("warehouse_name"),
+            WarehouseInventoryModel.quantity,
+        ).join(
+            WarehouseModel,
+            WarehouseInventoryModel.warehouse_id == WarehouseModel.warehouse_id,
+        )
+    ).all()
+
     return [
-        {"product_id": row.product_id, "warehouse_id": row.warehouse_id, "quantity": row.quantity}
+        {
+            "product_id": row.product_id,
+            "warehouse_id": row.warehouse_id,
+            "warehouse_name": row.warehouse_name,
+            "quantity": row.quantity,
+        }
         for row in rows
     ]
 

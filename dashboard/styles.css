@@ -200,6 +200,33 @@ body {
     background: #f8f9fa;
 }
 
+/* Filter Row */
+.filter-row th {
+    background: #e8eef7 !important;
+    padding: 0.6rem !important;
+}
+
+.filter-input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    transition: border-color 0.2s ease;
+}
+
+.filter-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 4px rgba(102, 126, 234, 0.2);
+}
+
+.filter-input::placeholder {
+    color: #999;
+    font-size: 0.85rem;
+}
+
 /* Buttons */
 .btn-primary {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -928,4 +955,95 @@ body {
 
 .text-warning {
     color: #ff9800 !important;
+}
+
+/* AI Chat */
+.ai-chat {
+    display: grid;
+    gap: 12px;
+}
+
+.ai-chat-log {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 12px;
+    min-height: 240px;
+    max-height: 420px;
+    overflow: auto;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    color: #111827;
+}
+
+.ai-msg {
+    padding: 10px 12px;
+    border-radius: 12px;
+    margin: 10px 0;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    border: 1px solid transparent;
+}
+
+.ai-msg--user {
+    background: #e0f2fe;
+    border-color: #7dd3fc;
+    color: #0c4a6e;
+}
+
+.ai-msg--assistant {
+    background: #dcfce7;
+    border-color: #86efac;
+    color: #14532d;
+}
+
+.ai-msg--system {
+    background: #f3f4f6;
+    border: 1px dashed #d1d5db;
+    color: #374151;
+}
+
+.ai-chat-input {
+    display: grid;
+    gap: 10px;
+}
+
+#ai-message {
+    width: 100%;
+    resize: vertical;
+    border-radius: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    background: #fff;
+    color: #111;
+}
+
+#ai-message::placeholder {
+    color: #6b7280;
+}
+
+.ai-debug {
+    margin-top: 10px;
+}
+
+.ai-debug-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-top: 10px;
+}
+
+@media (min-width: 900px) {
+    .ai-debug-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.ai-pre {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 12px;
+    overflow: auto;
+    min-height: 120px;
+    color: #111827;
 }

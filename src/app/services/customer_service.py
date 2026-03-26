@@ -47,6 +47,9 @@ class CustomerService:
     def update_debt(self, customer_id: int, delta: float):
         self.customer_repo.update_debt(customer_id, delta)
 
+    def update(self, customer_id: int, data: dict):
+        self.customer_repo.update(customer_id, data)
+
     def record_purchase(self, customer_id: int, document_id: int, total_value: float):
         self.customer_repo.record_purchase(customer_id, document_id, total_value)
 

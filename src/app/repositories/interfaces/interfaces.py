@@ -160,6 +160,10 @@ class ICustomerRepo(ABC):
     def list_purchases(self, customer_id: int) -> List[dict]:
         pass
 
+    @abstractmethod
+    def update(self, customer_id: int, data: dict) -> None:
+        pass
+
 
 class IPositionRepo(ABC):
     @abstractmethod

@@ -27,4 +27,8 @@ async def chat_db(payload: ChatDBRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI engine error: {type(e).__name__}")
+        detail = str(e) or type(e).__name__
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI engine error ({type(e).__name__}): {detail}",
+        )

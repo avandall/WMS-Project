@@ -26,6 +26,13 @@ class DebtUpdate(BaseModel):
     amount: float = Field(..., description="Positive to increase debt, negative to reduce (payment)")
 
 
+class CustomerUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+
+
 class PurchaseResponse(BaseModel):
     document_id: int
     total_value: float

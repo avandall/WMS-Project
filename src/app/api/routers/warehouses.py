@@ -28,6 +28,7 @@ async def get_all_warehouses(service: WarehouseService = Depends(get_warehouse_s
         inventory = service.get_warehouse_inventory(warehouse.warehouse_id)
         result.append(WarehouseResponse(
             warehouse_id=warehouse.warehouse_id,
+            name=warehouse.location,
             location=warehouse.location,
             inventory=[InventoryItemResponse.from_domain(item) for item in inventory],
         ))
@@ -44,7 +45,7 @@ async def create_warehouse(
     service: WarehouseService = Depends(get_warehouse_service),
 ):
     """Create a new warehouse."""
-    created_warehouse = service.create_warehouse(warehouse.location)
+    created_warehouse = service.create_warehouse(warehouse.name)
     return WarehouseResponse.from_domain(created_warehouse)
 
 
@@ -57,6 +58,7 @@ async def get_warehouse(
     inventory = service.get_warehouse_inventory(warehouse_id)
     return WarehouseResponse(
         warehouse_id=warehouse.warehouse_id,
+        name=warehouse.location,
         location=warehouse.location,
         inventory=[InventoryItemResponse.from_domain(item) for item in inventory],
     )

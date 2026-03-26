@@ -32,6 +32,7 @@
             <button class="nav-btn" onclick="showSection('reports')">Reports</button>
             <button class="nav-btn" onclick="showSection('customers')">Customers</button>
             <button class="nav-btn" onclick="showSection('users')">Users</button>
+            <button class="nav-btn" onclick="showSection('ai')">AI</button>
             <button class="nav-btn" onclick="showSection('settings')">Settings</button>
         </nav>
 
@@ -103,6 +104,9 @@
             <section id="inventory-section" class="section">
                 <div class="section-header">
                     <h2>Inventory Management</h2>
+                    <div class="section-actions">
+                        <input type="text" id="inventory-search" placeholder="Search inventory" oninput="filterInventory()">
+                    </div>
                 </div>
                 <div id="inventory-list" class="data-table">
                     <p>Loading inventory data...</p>
@@ -116,7 +120,10 @@
             <section id="documents-section" class="section">
                 <div class="section-header">
                     <h2>Document Management</h2>
-                    <button class="btn-primary" onclick="showCreateDocumentModal()">+ New Document</button>
+                    <div class="section-actions">
+                        <input type="text" id="documents-search" placeholder="Search documents" oninput="filterDocuments()">
+                        <button class="btn-primary" onclick="showCreateDocumentModal()">+ New Document</button>
+                    </div>
                 </div>
                 <div id="documents-list" class="data-table">
                     <p>Loading documents...</p>
@@ -157,7 +164,10 @@
             <section id="users-section" class="section">
                 <div class="section-header">
                     <h2>User Management</h2>
-                    <button class="btn-primary" onclick="openUserModal()">+ Add User</button>
+                    <div class="section-actions">
+                        <input type="text" id="users-search" placeholder="Search users" oninput="filterUsers()">
+                        <button class="btn-primary" onclick="openUserModal()">+ Add User</button>
+                    </div>
                 </div>
                 <div id="users-list" class="data-table">
                     <p>Loading users...</p>
@@ -173,6 +183,7 @@
                 <div class="section-header">
                     <h2>Customers</h2>
                     <div class="section-actions">
+                        <input type="text" id="customer-search" placeholder="Search customers" oninput="filterCustomers()">
                         <button class="btn-secondary" onclick="openCustomerModal()">+ Add Customer</button>
                     </div>
                 </div>
@@ -180,6 +191,51 @@
                     <p>Loading customers...</p>
                 </div>
                 <div id="customer-detail" class="data-table" style="margin-top:16px; display:none;"></div>
+            </section>
+
+
+
+            <!-- AI Section -->
+            <section id="ai-section" class="section">
+                <div class="section-header">
+                    <h2>AI – Chat Database</h2>
+                    <div class="section-actions">
+                        <label class="toggle">
+                            <input type="checkbox" id="ai-include-rows">
+                            <span>Include rows</span>
+                        </label>
+                        <button class="btn-secondary" onclick="clearAiChat()">Clear</button>
+                    </div>
+                </div>
+
+                <div class="ai-chat">
+                    <div id="ai-chat-log" class="ai-chat-log">
+                        <div class="ai-msg ai-msg--system">
+                            Ask questions about products, inventory, documents, customers… (read-only).
+                            Tip: press Ctrl+Enter to send.
+                        </div>
+                    </div>
+
+                    <div class="ai-chat-input">
+                        <textarea id="ai-message" rows="3" placeholder="e.g. How many products do we have?
+Or: SQL: select count(*) from products"></textarea>
+                        <button class="btn-primary" id="ai-send-btn" onclick="sendAiMessage()">Send</button>
+                    </div>
+                </div>
+
+                <details class="ai-debug">
+                    <summary>Debug (SQL / Rows)</summary>
+                    <div class="ai-debug-grid">
+                        <div>
+                            <h3>SQL</h3>
+                            <pre id="ai-sql" class="ai-pre"></pre>
+                        </div>
+                        <div>
+                            <h3>Rows</h3>
+                            <pre id="ai-rows" class="ai-pre"></pre>
+                        </div>
+                    </div>
+                </details>
             </section>
 
             <!-- Settings Section -->
@@ -237,7 +293,7 @@
             <h2>Create New Warehouse</h2>
             <form id="warehouse-form">
                 <div class="form-group">
-                    <label for="warehouse-location">Location:</label>
+                    <label for="warehouse-location">Name:</label>
                     <input type="text" id="warehouse-location" required>
                 </div>
                 <button type="submit" class="btn-primary">Create Warehouse</button>
@@ -323,7 +379,7 @@
             <h2>Edit Warehouse</h2>
             <form id="edit-warehouse-form">
                 <div class="form-group">
-                    <label for="edit-warehouse-location">Location:</label>
+                    <label for="edit-warehouse-location">Name:</label>
                     <input type="text" id="edit-warehouse-location" required>
                 </div>
                 <button type="submit" class="btn-primary">Update Warehouse</button>
@@ -444,6 +500,34 @@
             <span class="close" onclick="closeModal('customer-detail-modal')">&times;</span>
             <h2>Customer Detail</h2>
             <div id="customer-detail-content"><p>Loading...</p></div>
+        </div>
+    </div>
+
+    <!-- Edit Customer Modal -->
+    <div id="edit-customer-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('edit-customer-modal')">&times;</span>
+            <h2>Edit Customer</h2>
+            <form id="edit-customer-form">
+                <input type="hidden" id="edit-customer-id">
+                <div class="form-group">
+                    <label for="edit-customer-name">Name</label>
+                    <input type="text" id="edit-customer-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-customer-email">Email</label>
+                    <input type="email" id="edit-customer-email">
+                </div>
+                <div class="form-group">
+                    <label for="edit-customer-phone">Phone</label>
+                    <input type="text" id="edit-customer-phone">
+                </div>
+                <div class="form-group">
+                    <label for="edit-customer-address">Address</label>
+                    <input type="text" id="edit-customer-address">
+                </div>
+                <button type="submit" class="btn-primary">Save Customer</button>
+            </form>
         </div>
     </div>
 

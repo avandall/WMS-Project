@@ -3,7 +3,7 @@ Pydantic models for API requests and responses.
 """
 
 from typing import List, Optional
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, AliasChoices
 from datetime import datetime
 
 
@@ -61,26 +61,39 @@ class InventoryItemResponse(BaseModel):
 
 # Warehouse models
 class WarehouseCreate(BaseModel):
-    location: str = Field(
-        ..., min_length=1, max_length=200, description="Warehouse location"
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="Warehouse name",
+        validation_alias=AliasChoices("name", "location"),
     )
 
 
 class WarehouseResponse(BaseModel):
     warehouse_id: int
-    location: str
+    name: str
+    # Backward compatibility for older dashboard/code that still expects `location`
+    location: Optional[str] = None
     inventory: List[InventoryItemResponse]
 
     @classmethod
     def from_domain(cls, warehouse):
         return cls(
             warehouse_id=warehouse.warehouse_id,
+            name=warehouse.location,
             location=warehouse.location,
             inventory=[
                 InventoryItemResponse.from_domain(item) for item in warehouse.inventory
             ],
         )
 
+
+class WarehouseInventoryRowResponse(BaseModel):
+    product_id: int
+    warehouse_id: int
+    warehouse_name: str
+    quantity: int
 
 class ProductMovement(BaseModel):
     product_id: int = Field(..., gt=0, description="Product identifier")

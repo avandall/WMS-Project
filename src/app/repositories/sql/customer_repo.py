@@ -70,3 +70,14 @@ class CustomerRepo(ICustomerRepo):
             }
             for p in purchases
         ]
+
+    def update(self, customer_id: int, data: dict) -> None:
+        customer = self.session.get(CustomerModel, customer_id)
+        if not customer:
+            return
+        for field, value in data.items():
+            if hasattr(customer, field) and value is not None:
+                setattr(customer, field, value)
+        self._commit_if_auto()
+        if customer in self.session:
+            self.session.refresh(customer)
