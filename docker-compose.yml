@@ -32,7 +32,8 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      - api
+      api:
+        condition: service_started # Hoặc service_healthy nếu bạn muốn đợi API sẵn sàng hoàn toàn
 
   # Cloudflare Tunnel (free / quick tunnel)
   # Enable with: docker compose --profile tunnel up -d
