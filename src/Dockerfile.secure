@@ -1,0 +1,66 @@
+# Secure Dockerfile for WMS API with SQL hardening
+FROM python:3.11-slim
+
+# Security: Create non-root user
+RUN groupadd -r wmsuser && useradd -r -g wmsuser wmsuser
+
+# Set working directory
+WORKDIR /app
+
+# Install security and monitoring tools
+RUN apt-get update && apt-get install -y \
+    curl \
+    jq \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir /tmp/pip \
+    --require-hashes \
+    -r requirements.txt \
+    && pip install --no-cache-dir /tmp/pip \
+    gunicorn \
+    && rm -rf /tmp/pip
+
+# Copy application code
+COPY . .
+
+# Security: Create directories with proper permissions
+RUN mkdir -p /app/logs /app/audit /app/monitor \
+    && chown -R wmsuser:wmsuser /app
+
+# Security: Remove unnecessary packages
+RUN apt-get purge -y \
+    curl \
+    jq \
+    postgresql-client \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# Switch to non-root user
+USER wmsuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Expose port
+EXPOSE 8000
+
+# Security: Run with limited resources
+CMD ["gunicorn", \
+     "--bind", "0.0.0.0:8000", \
+     "--workers", "2", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--worker-connections", "10", \
+     "--max-requests", "100", \
+     "--timeout", "30", \
+     "--limit-request-line", "4096", \
+     "--limit-request-fields", "100", \
+     "--limit-request-line", "8190", \
+     "--access-logfile", "/app/logs/access.log", \
+     "--error-logfile", "/app/logs/error.log", \
+     "--log-level", "info", \
+     "--capture-output", \
+     "app.main:app"]

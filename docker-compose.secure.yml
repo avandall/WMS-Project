@@ -1,0 +1,171 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database with Security Hardening
+  db:
+    image: postgres:16-alpine
+    container_name: wms-db-secure
+    environment:
+      POSTGRES_DB: warehouse_db
+      POSTGRES_USER: wms_admin
+      POSTGRES_PASSWORD: admin_password
+      # Security settings
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+      # Performance settings
+      POSTGRES_SHARED_PRELOAD_LIBRARIES: "pg_stat_statements"
+      POSTGRES_MAX_CONNECTIONS: "100"
+      POSTGRES_SHARED_BUFFERS: "256MB"
+      POSTGRES_EFFECTIVE_CACHE_SIZE: "1GB"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/setup_secure_users.sql:/docker-entrypoint-initdb.d/01-setup.sql
+    ports:
+      - "5433:5432"
+    networks:
+      - wms-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wms_admin -d warehouse_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c log_statement=all
+      -c log_min_duration_statement=1000
+      -c log_checkpoints=on
+      -c log_connections=on
+      -c log_disconnections=on
+      -c log_lock_waits=on
+      -c max_connections=100
+      -c statement_timeout=5000
+      -c idle_in_transaction_session_timeout=300000
+      -c lock_timeout=3000
+
+  # WMS API with Security Hardening
+  api:
+    build:
+      context: ./src
+      dockerfile: Dockerfile.secure
+    container_name: wms-api-secure
+    environment:
+      # Database configuration
+      DATABASE_URL: postgresql://wms_restricted:restricted_password@db:5432/warehouse_db
+      READONLY_DATABASE_URL: postgresql://wms_readonly:readonly_password@db:5432/warehouse_db
+      ADMIN_DATABASE_URL: postgresql://wms_admin:admin_password@db:5432/warehouse_db
+      
+      # Security settings
+      ENVIRONMENT: production
+      DEBUG: "false"
+      SECRET_KEY: ${JWT_SECRET_KEY}
+      
+      # Rate limiting
+      RATE_LIMIT_PER_MINUTE: "60"
+      
+      # Request timeouts
+      REQUEST_TIMEOUT: "30"
+      
+      # SQL hardening
+      ENABLE_QUERY_VALIDATION: "true"
+      ENABLE_AUDIT_LOGGING: "true"
+      MAX_QUERY_TIME: "5000"
+      
+      # Connection limits
+      MAX_DB_CONNECTIONS: "10"
+      DB_POOL_SIZE: "5"
+      DB_POOL_TIMEOUT: "5"
+    ports:
+      - "8000:8000"
+    networks:
+      - wms-network
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Dashboard (unchanged)
+  dashboard:
+    image: nginx:alpine
+    container_name: wms-dashboard-secure
+    ports:
+      - "8080:80"
+    volumes:
+      - ./dashboard:/usr/share/nginx/html
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - wms-network
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # Database monitoring and security
+  db-monitor:
+    image: postgres:16-alpine
+    container_name: wms-db-monitor
+    environment:
+      PGPASSWORD: admin_password
+      PGUSER: wms_admin
+      PGDATABASE: warehouse_db
+      PGHOST: db
+      PGPORT: 5432
+    networks:
+      - wms-network
+    depends_on:
+      - db
+    command: >
+      sh -c "
+      while true; do
+        echo '=== Database Security Monitor ==='
+        echo 'Active Connections:'
+        psql -h db -U wms_admin -d warehouse_db -c 'SELECT count(*) FROM pg_stat_activity WHERE state = \\'active\\';'
+        
+        echo 'Recent Slow Queries:'
+        psql -h db -U wms_admin -d warehouse_db -c 'SELECT query, mean_time, calls FROM pg_stat_statements WHERE mean_time > 1000 ORDER BY mean_time DESC LIMIT 5;'
+        
+        echo 'Recent Failed Logins:'
+        psql -h db -U wms_admin -d warehouse_db -c 'SELECT logtime, usename, application_name FROM pg_stat_activity WHERE state = \\'failed\\' ORDER BY logtime DESC LIMIT 5;'
+        
+        echo 'Lock Waits:'
+        psql -h db -U wms_admin -d warehouse_db -c 'SELECT relation, mode, granted FROM pg_locks;'
+        
+        sleep 30
+      done
+      "
+    restart: unless-stopped
+
+  # Security audit log processor
+  audit-processor:
+    build:
+      context: ./src
+      dockerfile: Dockerfile.audit
+    container_name: wms-audit-processor
+    environment:
+      DATABASE_URL: postgresql://wms_readonly:readonly_password@db:5432/warehouse_db
+      LOG_RETENTION_DAYS: "90"
+      ALERT_THRESHOLD_FAILED_LOGINS: "10"
+      ALERT_THRESHOLD_SLOW_QUERIES: "5"
+    networks:
+      - wms-network
+    depends_on:
+      - db
+    command: >
+      python -m app.audit.processor
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  wms-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

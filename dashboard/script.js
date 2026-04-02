@@ -251,6 +251,66 @@ function showSection(sectionName) {
     }
 }
 
+// Centralized error handling system
+const ErrorHandler = {
+    // Log detailed errors for debugging
+    logError: function(error, context = '') {
+        const timestamp = new Date().toISOString();
+        const errorInfo = {
+            timestamp,
+            context,
+            message: error.message,
+            status: error.status,
+            detail: error.detail,
+            stack: error.stack
+        };
+        
+        // Log detailed error to console for debugging
+        console.error(`[ERROR] ${context}:`, errorInfo);
+        
+        // Optionally send to external logging service in production
+        // this.sendToLoggingService(errorInfo);
+    },
+    
+    // Get user-friendly generic message
+    getUserMessage: function(error) {
+        // Log the actual error for debugging
+        this.logError(error, 'API Request');
+        
+        // Return generic message to user
+        if (error.isNetworkError) {
+            return 'Network connection failed. Please check your internet connection and try again.';
+        }
+        
+        if (error.isCorsError) {
+            return 'Server connection error. Please try again later.';
+        }
+        
+        if (error.isRateLimit) {
+            return 'Too many requests. Please wait a moment and try again.';
+        }
+        
+        if (error.status === 401) {
+            return 'Authentication required. Please log in again.';
+        }
+        
+        if (error.status === 403) {
+            return 'Access denied. You do not have permission for this action.';
+        }
+        
+        if (error.status === 404) {
+            return 'The requested resource was not found.';
+        }
+        
+        if (error.status === 500) {
+            return 'Server error occurred. Please try again later.';
+        }
+        
+        // Generic fallback message
+        return 'An error occurred. Please try again.';
+    }
+};
+
 // API helper functions
 async function apiRequest(endpoint, options = {}) {
     const headers = {
@@ -311,8 +371,7 @@ async function apiRequest(endpoint, options = {}) {
             
             // Handle rate limit errors specially
             if (response.status === 429) {
-                console.warn('Rate limit exceeded - slowing down requests');
-                const rateLimitError = new Error('Too many requests. Please slow down your navigation.');
+                const rateLimitError = new Error('Rate limit exceeded');
                 rateLimitError.status = 429;
                 rateLimitError.isRateLimit = true;
                 throw rateLimitError;
@@ -337,24 +396,25 @@ async function apiRequest(endpoint, options = {}) {
             return null; // Return null instead of throwing
         }
         
-        // Handle network errors with better error messages
+        // Handle network errors
         if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.isNetworkError) {
-            console.error('Network error - is the server running?', error);
-            const netError = new Error('Server connection failed. Please check if the server is running.');
+            const netError = new Error('Network connection failed');
             netError.isNetworkError = true;
             throw netError;
         }
         
-        // Handle CORS errors specifically
+        // Handle CORS errors
         if (error.message.includes('CORS') || error.message.includes('Cross-Origin')) {
-            console.error('CORS error - server configuration issue', error);
-            const corsError = new Error('Server configuration error. Please contact administrator.');
+            const corsError = new Error('CORS error');
             corsError.isCorsError = true;
             throw corsError;
         }
         
-        console.error('API request failed:', error);
-        throw error;
+        // For all other errors, create generic error
+        const genericError = new Error('Request failed');
+        genericError.status = error.status;
+        genericError.detail = error.detail;
+        throw genericError;
     }
 }
 
@@ -1346,13 +1406,7 @@ async function handleCreateProduct(event) {
         loadDashboardData();
     } catch (error) {
         // Button state is automatically reset by apiRequestWithButton
-        if (error.isNetworkError) {
-            showError('Server connection failed. Please check your network connection.');
-        } else if (error.isCorsError) {
-            showError('Server configuration error. Please contact administrator.');
-        } else {
-            showError('Failed to create product: ' + (error.message || 'Unknown error'));
-        }
+        showError(ErrorHandler.getUserMessage(error));
     }
 }
 
@@ -1378,13 +1432,7 @@ async function handleCreateWarehouse(event) {
         loadDashboardData();
     } catch (error) {
         // Button state is automatically reset by apiRequestWithButton
-        if (error.isNetworkError) {
-            showError('Server connection failed. Please check your network connection.');
-        } else if (error.isCorsError) {
-            showError('Server configuration error. Please contact administrator.');
-        } else {
-            showError('Failed to create warehouse: ' + (error.message || 'Unknown error'));
-        }
+        showError(ErrorHandler.getUserMessage(error));
     }
 }
 
@@ -2886,6 +2934,9 @@ function updateConnectionStatus(connected) {
 }
 
 function showError(message) {
+    // Log the error for debugging
+    ErrorHandler.logError(new Error(message), 'User Interface');
+    
     const errorDiv = document.createElement('div');
     errorDiv.className = 'error';
     errorDiv.textContent = message;
