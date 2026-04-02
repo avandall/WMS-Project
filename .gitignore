@@ -90,6 +90,9 @@ ENV/
 env.bak/
 venv.bak/
 .env.docker
+.env.dev
+.env.prod
+*.env
 
 # Spyder project settings
 .spyderproject
@@ -125,3 +128,4 @@ Thumbs.db
 # Cloudflare Tunnel credentials
 cloudflare/cert.json
 cloudflare/*.json
+

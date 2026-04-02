@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     description: str = "A FastAPI application for warehouse management"
 
     host: str = "0.0.0.0"
-    port: int = 8080
+    port: int = 8000
 
     rate_limit_per_minute: int = 300
     secret_key: str = "your-secret-key-here"

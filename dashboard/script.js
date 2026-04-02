@@ -1,6 +1,6 @@
 // WMS Dashboard JavaScript
 // Version: 2026-01-28 - Customer Sales Report Feature
-let API_BASE = 'http://127.0.0.1:8000';
+let API_BASE = 'http://localhost:8000';
 
 // Auth state
 let accessToken = localStorage.getItem('accessToken') || '';
@@ -351,7 +351,7 @@ async function handleLogin(event) {
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
     try {
-        const res = await fetch(`${API_BASE}/auth/login`, {
+        const res = await fetch('http://localhost:8000/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
