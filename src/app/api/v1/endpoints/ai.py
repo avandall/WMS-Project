@@ -6,6 +6,7 @@ from app.api.auth_deps import get_current_user, require_permissions
 from app.application.dtos.ai import ChatDBRequest, ChatDBResponse
 from app.core.permissions import Permission
 from app.infrastructure.ai import handle_customer_chat_with_db
+from fastapi.concurrency import run_in_threadpool
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -17,7 +18,7 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 )
 async def chat_db(payload: ChatDBRequest):
     try:
-        result = handle_customer_chat_with_db(payload.message)
+        result = await run_in_threadpool(handle_customer_chat_with_db, payload.message)
         if not payload.include_rows:
             result["rows"] = None
         return ChatDBResponse(**result)
