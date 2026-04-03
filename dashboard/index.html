@@ -32,7 +32,6 @@
             <button class="nav-btn" onclick="showSection('reports')">Reports</button>
             <button class="nav-btn" onclick="showSection('customers')">Customers</button>
             <button class="nav-btn" onclick="showSection('users')">Users</button>
-            <button class="nav-btn" onclick="showSection('ai')">AI</button>
             <button class="nav-btn" onclick="showSection('settings')">Settings</button>
         </nav>
 
@@ -195,49 +194,6 @@
 
 
 
-            <!-- AI Section -->
-            <section id="ai-section" class="section">
-                <div class="section-header">
-                    <h2>AI – Chat Database</h2>
-                    <div class="section-actions">
-                        <label class="toggle">
-                            <input type="checkbox" id="ai-include-rows">
-                            <span>Include rows</span>
-                        </label>
-                        <button class="btn-secondary" onclick="clearAiChat()">Clear</button>
-                    </div>
-                </div>
-
-                <div class="ai-chat">
-                    <div id="ai-chat-log" class="ai-chat-log">
-                        <div class="ai-msg ai-msg--system">
-                            Ask questions about products, inventory, documents, customers… (read-only).
-                            Tip: press Ctrl+Enter to send.
-                        </div>
-                    </div>
-
-                    <div class="ai-chat-input">
-                        <textarea id="ai-message" rows="3" placeholder="e.g. How many products do we have?
-Or: SQL: select count(*) from products"></textarea>
-                        <button class="btn-primary" id="ai-send-btn" onclick="sendAiMessage()">Send</button>
-                    </div>
-                </div>
-
-                <details class="ai-debug">
-                    <summary>Debug (SQL / Rows)</summary>
-                    <div class="ai-debug-grid">
-                        <div>
-                            <h3>SQL</h3>
-                            <pre id="ai-sql" class="ai-pre"></pre>
-                        </div>
-                        <div>
-                            <h3>Rows</h3>
-                            <pre id="ai-rows" class="ai-pre"></pre>
-                        </div>
-                    </div>
-                </details>
-            </section>
-
             <!-- Settings Section -->
             <section id="settings-section" class="section">
                 <div class="section-header">
@@ -266,6 +222,27 @@ Or: SQL: select count(*) from products"></textarea>
                 </div>
             </section>
         </main>
+    </div>
+
+    <!-- Persistent AI Chat Box -->
+    <div id="persistent-ai-chat" class="persistent-ai-chat">
+        <div class="ai-chat-header">
+            <span>🤖 AI Assistant</span>
+            <div class="ai-chat-controls">
+                <button id="ai-minimize-btn" onclick="toggleAiChat()" title="Minimize">−</button>
+                <button id="ai-close-btn" onclick="closeAiChat()" title="Close">×</button>
+            </div>
+        </div>
+        <div class="ai-chat-messages" id="ai-chat-messages">
+            <div class="ai-msg ai-msg--system">
+                🤖 AI Assistant ready! Ask me about products, inventory, warehouses, or customers.
+            </div>
+        </div>
+        <div class="ai-chat-input">
+            <textarea id="persistent-ai-message" placeholder="Ask about warehouse data..." rows="2"></textarea>
+            <button id="persistent-ai-send" onclick="sendPersistentAiMessage()">Send</button>
+        </div>
+        <div class="ai-chat-status" id="ai-chat-status">Ready</div>
     </div>
 
     <!-- Modals -->

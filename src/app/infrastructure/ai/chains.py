@@ -89,21 +89,64 @@ def is_relevant_query(question: str) -> bool:
     except Exception as exc:  # pragma: no cover
         raise RuntimeError("Missing dependency: `langchain-core`.") from exc
 
+    # First, check for obvious WMS-related keywords
+    wms_keywords = [
+        'product', 'inventory', 'warehouse', 'stock', 'item', 'goods',
+        'customer', 'client', 'order', 'document', 'transaction',
+        'import', 'export', 'transfer', 'sale', 'purchase',
+        'quantity', 'price', 'cost', 'supplier', 'vendor',
+        'location', 'storage', 'shelf', 'rack', 'bin',
+        'shipment', 'delivery', 'receiving', 'dispatch',
+        'database', 'data', 'record', 'table', 'query',
+        'how many', 'count', 'list', 'show', 'find', 'search',
+        # Vietnamese keywords
+        'sản phẩm', 'hàng tồn kho', 'kho hàng', 'khách hàng', 'đơn hàng',
+        'số lượng', 'giá', 'vị trí', 'danh sách', 'hiển thị', 'tìm kiếm',
+        'bao nhiêu', 'cái', 'chiếc', 'món', 'hàng'
+    ]
+    
+    question_lower = question.lower()
+    
+    # If any WMS keywords are found, consider it relevant
+    if any(keyword in question_lower for keyword in wms_keywords):
+        return True
+    
+    # If it's a short question (1-3 words), be more lenient and let LLM decide
+    if len(question_lower.split()) <= 3:
+        pass  # Continue to LLM evaluation
+    else:
+        # Additional check for business/financial context that might be WMS-related
+        business_keywords = ['market', 'analysis', 'report', 'business', 'financial']
+        if any(keyword in question_lower for keyword in business_keywords):
+            # For business keywords, be more careful - use LLM to decide
+            pass
+        else:
+            # If no relevant keywords at all, likely irrelevant
+            return False
+    
+    # If no keywords found, use LLM for more nuanced判断
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                "You are a security filter for a Warehouse Management System (WMS). "
-                "Return ONLY True or False. True if the question is about inventory, products, documents/orders, customers, or warehouse data.",
+                "You are a relevance filter for a Warehouse Management System (WMS). "
+                "Determine if the question is related to warehouse operations, inventory management, "
+                "products, customers, orders, or business data analysis. "
+                "Be lenient - if the question could reasonably be about warehouse data, mark it relevant. "
+                "Return ONLY 'true' or 'false' (lowercase). "
+                "Examples of relevant: 'how many items', 'show me products', 'customer orders', 'inventory levels' "
+                "Examples of irrelevant: 'weather today', 'sports scores', 'political news', 'personal advice'."
             ),
             ("human", "Question: {question}"),
         ]
     )
 
-    llm = get_chat_model(temperature=0)
+    llm = get_chat_model(temperature=0.1)  # Slightly higher temperature for more flexibility
     chain = prompt | llm | StrOutputParser()
     result = (chain.invoke({"question": question}) or "").strip().lower()
-    return result.startswith("true")
+    
+    # More lenient check - accept various true responses
+    return result.startswith("true") or result == "yes" or result == "relevant"
 
 
 def handle_customer_chat_with_db(message: str) -> dict[str, Any]:

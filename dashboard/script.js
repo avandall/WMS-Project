@@ -3589,3 +3589,207 @@ async function sendAiMessage() {
         if (btn) btn.disabled = false;
     }
 }
+
+// Persistent AI Chat Box Functions
+let aiChatState = {
+    isOpen: true,
+    isMinimized: false,
+    messageCount: 0
+};
+
+function toggleAiChat() {
+    const chatBox = document.getElementById('persistent-ai-chat');
+    const minimizeBtn = document.getElementById('ai-minimize-btn');
+    
+    if (!chatBox) return;
+    
+    aiChatState.isMinimized = !aiChatState.isMinimized;
+    
+    if (aiChatState.isMinimized) {
+        chatBox.classList.add('minimized');
+        minimizeBtn.textContent = '+';
+        minimizeBtn.title = 'Maximize';
+    } else {
+        chatBox.classList.remove('minimized');
+        minimizeBtn.textContent = '−';
+        minimizeBtn.title = 'Minimize';
+        // Focus input when maximizing
+        const input = document.getElementById('persistent-ai-message');
+        if (input) input.focus();
+    }
+}
+
+function closeAiChat() {
+    const chatBox = document.getElementById('persistent-ai-chat');
+    if (!chatBox) return;
+    
+    aiChatState.isOpen = false;
+    chatBox.classList.add('closed');
+    
+    // Show a small indicator to re-open chat
+    setTimeout(() => {
+        if (!aiChatState.isOpen) {
+            showAiChatIndicator();
+        }
+    }, 1000);
+}
+
+function showAiChatIndicator() {
+    // Create a small floating button to re-open chat
+    const existing = document.getElementById('ai-chat-indicator');
+    if (existing) return;
+    
+    const indicator = document.createElement('div');
+    indicator.id = 'ai-chat-indicator';
+    indicator.innerHTML = '🤖';
+    indicator.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 50px;
+        height: 50px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        cursor: pointer;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        z-index: 9999;
+        transition: all 0.3s ease;
+    `;
+    
+    indicator.onclick = openAiChat;
+    indicator.onmouseover = () => indicator.style.transform = 'scale(1.1)';
+    indicator.onmouseout = () => indicator.style.transform = 'scale(1)';
+    
+    document.body.appendChild(indicator);
+}
+
+function openAiChat() {
+    const chatBox = document.getElementById('persistent-ai-chat');
+    const indicator = document.getElementById('ai-chat-indicator');
+    
+    if (!chatBox) return;
+    
+    aiChatState.isOpen = true;
+    aiChatState.isMinimized = false;
+    
+    chatBox.classList.remove('closed', 'minimized');
+    
+    if (indicator) {
+        indicator.remove();
+    }
+    
+    // Focus input
+    const input = document.getElementById('persistent-ai-message');
+    if (input) input.focus();
+}
+
+function addPersistentAiMessage(role, message) {
+    const messagesContainer = document.getElementById('ai-chat-messages');
+    if (!messagesContainer) return;
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `ai-msg ai-msg--${role}`;
+    messageDiv.textContent = message;
+    
+    messagesContainer.appendChild(messageDiv);
+    
+    // Scroll to bottom
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+    aiChatState.messageCount++;
+    
+    // Update status
+    updateAiChatStatus('Message sent');
+}
+
+function updateAiChatStatus(status) {
+    const statusEl = document.getElementById('ai-chat-status');
+    if (statusEl) {
+        statusEl.textContent = status;
+        
+        // Clear status after 3 seconds
+        setTimeout(() => {
+            if (statusEl.textContent === status) {
+                statusEl.textContent = 'Ready';
+            }
+        }, 3000);
+    }
+}
+
+async function sendPersistentAiMessage() {
+    const input = document.getElementById('persistent-ai-message');
+    const sendBtn = document.getElementById('persistent-ai-send');
+    
+    if (!input || !sendBtn) return;
+    
+    const message = input.value.trim();
+    if (!message) return;
+    
+    // Clear input and disable send button
+    input.value = '';
+    sendBtn.disabled = true;
+    
+    // Add user message
+    addPersistentAiMessage('user', message);
+    updateAiChatStatus('Thinking...');
+    
+    try {
+        const payload = {
+            message,
+            include_rows: false  // Default to not include rows for cleaner chat
+        };
+        
+        const res = await apiRequest('/api/ai/chat-db', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        
+        // Add AI response
+        const response = res.answer || 'I apologize, but I couldn\'t process your request.';
+        addPersistentAiMessage('assistant', response);
+        updateAiChatStatus('Response received');
+        
+    } catch (error) {
+        const errorMsg = error && error.message ? error.message : 'Unknown error occurred';
+        addPersistentAiMessage('assistant', `Error: ${errorMsg}`);
+        updateAiChatStatus('Error occurred');
+    } finally {
+        sendBtn.disabled = false;
+        // Re-focus input
+        input.focus();
+    }
+}
+
+// Initialize persistent AI chat when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Setup Enter key handler for persistent chat
+    const persistentInput = document.getElementById('persistent-ai-message');
+    if (persistentInput) {
+        persistentInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendPersistentAiMessage();
+            }
+        });
+    }
+    
+    // Auto-resize textarea
+    if (persistentInput) {
+        persistentInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 80) + 'px';
+        });
+    }
+    
+    // Initialize chat state
+    const chatBox = document.getElementById('persistent-ai-chat');
+    if (chatBox) {
+        aiChatState.isOpen = true;
+        aiChatState.isMinimized = false;
+    }
+});
