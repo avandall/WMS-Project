@@ -7,7 +7,7 @@ A comprehensive Warehouse Management System built with Python, FastAPI, and Clea
 ### Development Environment (Recommended)
 ```bash
 # Start with rich sample data
-./quick_start.sh dev
+./start.sh dev
 
 # Access dashboard
 # http://localhost:8080
@@ -17,7 +17,7 @@ A comprehensive Warehouse Management System built with Python, FastAPI, and Clea
 ### Production Environment
 ```bash
 # Start with minimal data
-./quick_start.sh prod
+./start.sh prod
 ```
 
 ### Manual Data Loading
