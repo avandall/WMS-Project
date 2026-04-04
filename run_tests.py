@@ -83,7 +83,7 @@ def main():
         args.unit = args.sql = args.smoke = args.security = args.ai = True
     
     # Base pytest command
-    pytest_cmd = ["python", "-m", "pytest"]
+    pytest_cmd = ["python3", "-m", "pytest"]
     
     # Add options
     if args.verbose:
@@ -125,12 +125,12 @@ def main():
     # Run additional tests
     if args.all or args.security:
         print("\n🔒 Running SQL Security Tests...")
-        success = run_command(["python", "run_sql_exec_tests.py"], "SQL Security Tests")
+        success = run_command(["python3", "scripts/run_sql_exec_tests.py"], "SQL Security Tests")
         results.append(("SQL Security Tests", success))
     
     if args.all or args.ai:
         print("\n🤖 Running AI Relevance Filter Tests...")
-        success = run_command(["python", "test_relevance_filter.py"], "AI Relevance Filter Tests")
+        success = run_command(["python3", "tests/test_relevance_filter.py"], "AI Relevance Filter Tests")
         results.append(("AI Relevance Filter Tests", success))
     
     # Summary

@@ -67,8 +67,8 @@ python -m pytest tests/ -v
 | Unit Tests | `python -m pytest tests/unit/ -v` | 225 | Working |
 | SQL Tests | `python -m pytest tests/sql/ -v` | 83 | Working |
 | Smoke Tests | `python -m pytest tests/test_smoke.py -v` | 6 | Working |
-| Security Tests | `python run_sql_exec_tests.py` | 15 | Working |
-| AI Tests | `python test_relevance_filter.py` | 46 | Working |
+| Security Tests | `python scripts/run_sql_exec_tests.py` | 15 | Working |
+| AI Tests | `python tests/test_relevance_filter.py` | 46 | Working |
 
 ## 🔧 **Development Workflow**
 

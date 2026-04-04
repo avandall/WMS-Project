@@ -32,11 +32,11 @@ The `seed_data/` folder contains JSON files with sample data for:
 ### Usage
 
 ```python
-from app.data.logs import load_json_file
+from data.logs import load_json_file
 from pathlib import Path
 
 # Load seed data
-seed_dir = Path('src/app/data/seed_data')
+seed_dir = Path('src/data/seed_data')
 users = load_json_file(seed_dir / 'users.json')
 products = load_json_file(seed_dir / 'products.json')
 ```
@@ -61,7 +61,7 @@ The `logs/` folder handles system logging with automatic cleanup.
 ### Usage
 
 ```python
-from app.data.logs import setup_logging_with_cleanup
+from data.logs import setup_logging_with_cleanup
 
 # Setup logging with automatic cleanup
 setup_logging_with_cleanup()

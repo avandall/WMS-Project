@@ -40,7 +40,7 @@ case $MODE in
         echo "🌐 Dashboard:   http://localhost:8080"
         echo "🌐 Adminer:     http://localhost:8090"
         echo ""
-        echo "🔧 If no data appears, run: ./fix_seed_data.sh"
+        echo "🔧 If no data appears, run: ./scripts/fix_seed_data.sh"
         ;;
         
     "prod"|"production")

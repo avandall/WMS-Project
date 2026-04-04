@@ -13,19 +13,19 @@ if ! docker compose ps | grep -q "Up"; then
 fi
 
 echo "📊 Creating login users..."
-docker compose exec api python /app/src/app/data/seed_data/create_login_users.py
+docker compose exec api python /app/src/data/seed_data/create_login_users.py
 
 echo ""
 echo "📦 Loading basic data..."
-docker compose exec api python /app/src/app/data/seed_data/load_basic_data.py || echo "⚠️  Basic data may already exist"
+docker compose exec api python /app/src/data/seed_data/load_basic_data.py || echo "⚠️  Basic data may already exist"
 
 echo ""
 echo "📦 Loading warehouse inventory..."
-docker compose exec api python /app/src/app/data/seed_data/load_inventory.py
+docker compose exec api python /app/src/data/seed_data/load_inventory.py
 
 echo ""
 echo "🌱 Generating additional development data..."
-docker compose exec api python /app/src/app/data/seed_data/generate_dev_data.py || echo "⚠️  Dev data generation skipped"
+docker compose exec api python /app/src/data/seed_data/generate_dev_data.py || echo "⚠️  Dev data generation skipped"
 
 echo ""
 echo "✅ Seed data fix complete!"

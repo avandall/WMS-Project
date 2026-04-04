@@ -42,10 +42,10 @@ services:
         echo \" Debug: ENVIRONMENT=[$ENVIRONMENT], AUTO_SEED_DATA=[$AUTO_SEED_DATA]\"
         if [ 'x$ENVIRONMENT' = 'xdevelopment' ] && [ 'x$AUTO_SEED_DATA' = 'xtrue' ]; then
           echo ' Running seed data generation...'
-          python /app/src/app/data/seed_data/create_login_users.py
-          python /app/src/app/data/seed_data/load_basic_data.py || echo ' Basic data may already exist'
-          python /app/src/app/data/seed_data/load_inventory.py
-          python /app/src/app/data/seed_data/generate_dev_data.py || echo ' Dev data generation skipped'
+          python /app/src/data/seed_data/create_login_users.py
+          python /app/src/data/seed_data/load_basic_data.py || echo ' Basic data may already exist'
+          python /app/src/data/seed_data/load_inventory.py
+          python /app/src/data/seed_data/generate_dev_data.py || echo ' Dev data generation skipped'
           echo ' Seed data generation complete!'
           echo '✅ Seed data generation complete!'
         else
