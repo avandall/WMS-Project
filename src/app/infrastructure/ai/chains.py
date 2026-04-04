@@ -98,11 +98,11 @@ def is_relevant_query(question: str) -> bool:
         'location', 'storage', 'shelf', 'rack', 'bin',
         'shipment', 'delivery', 'receiving', 'dispatch',
         'database', 'data', 'record', 'table', 'query',
-        'how many', 'count', 'list', 'show', 'find', 'search',
+        'how many', 'count', 'list', 'show', 'find', 'search', 'report',
         # Vietnamese keywords
         'sản phẩm', 'hàng tồn kho', 'kho hàng', 'khách hàng', 'đơn hàng',
         'số lượng', 'giá', 'vị trí', 'danh sách', 'hiển thị', 'tìm kiếm',
-        'bao nhiêu', 'cái', 'chiếc', 'món', 'hàng'
+        'bao nhiêu', 'cái', 'chiếc', 'món', 'hàng', 'kiểm tra', 'tồn kho'
     ]
     
     question_lower = question.lower()
@@ -116,7 +116,7 @@ def is_relevant_query(question: str) -> bool:
         pass  # Continue to LLM evaluation
     else:
         # Additional check for business/financial context that might be WMS-related
-        business_keywords = ['market', 'analysis', 'report', 'business', 'financial']
+        business_keywords = ['market', 'analysis', 'report', 'business', 'financial', 'database', 'optimization', 'api', 'design', 'patterns']
         if any(keyword in question_lower for keyword in business_keywords):
             # For business keywords, be more careful - use LLM to decide
             pass

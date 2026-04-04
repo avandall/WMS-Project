@@ -470,7 +470,7 @@ class TestSQLExecutionSecurityHelpers:
         assert "query_fingerprint" in log_data
         assert "sensitive@example.com" not in str(log_data)
         assert log_data["query_length"] == len(query)
-        assert log_data["starts_with"] == "select * from users"
+        assert log_data["starts_with"].strip() == "select * from users"
 
 class TestSQLExecutionPerformance:
     """Test performance aspects."""

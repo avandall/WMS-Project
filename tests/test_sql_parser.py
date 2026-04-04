@@ -174,7 +174,7 @@ class TestSQLParserValidator:
         for input_sql, expected in test_cases:
             result = SQLParserValidator._remove_comments_and_strings(input_sql)
             # Check that the expected pattern is in result
-            assert expected.replace(' ', '') in result.replace(' ','), f"String removal failed for: {input_sql}"
+            assert expected.replace(' ', '') in result.replace(' ',''), f"String removal failed for: {input_sql}"
     
     def test_dangerous_function_detection(self):
         """Test dangerous function detection."""
