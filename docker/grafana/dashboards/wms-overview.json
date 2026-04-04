@@ -1,0 +1,197 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "WMS System Overview",
+    "tags": ["wms", "overview"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "API Response Time",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m]), 1))",
+            "legendFormat": "{{__name__}}"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12
+        },
+        "width": 6,
+        "height": 4,
+        "options": {
+          "displayMode": "list",
+          "statModes": ["current"],
+          "unit": "s"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "unit": "short",
+              "max": 1,
+              "min": 0
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Request Rate",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total[5m]), 1)",
+            "legendFormat": "{{__name__}}"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 13
+        },
+        "width": 6,
+        "height": 4,
+        "options": {
+          "displayMode": "list",
+          "statModes": ["current"],
+          "unit": "req/s"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "max": 1000,
+              "min": 0
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Error Rate",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m]), 1)",
+            "legendFormat": "{{__name__}}"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 14
+        },
+        "width": 6,
+        "height": 4,
+        "options": {
+          "displayMode": "list",
+          "statModes": ["current"],
+          "unit": "errors/s"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "max": 100,
+              "min": 0
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Database Connections",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "db_connections_active",
+            "legendFormat": "{{__name__}}"
+          }
+        ],
+        "gridPos": {
+          "h": 9,
+          "w": 12
+        },
+        "width": 6,
+        "height": 4,
+        "options": {
+          "displayMode": "list",
+          "statModes": ["current"],
+          "unit": "connections"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "max": 100,
+              "min": 0
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "System CPU Usage",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "100 * (1 - avg(rate(node_cpu_seconds_total[5m])))",
+            "legendFormat": "{{__name__}}"
+          }
+        ],
+        "gridPos": {
+          "h": 9,
+          "w": 13
+        },
+        "width": 6,
+        "height": 4,
+        "options": {
+          "displayMode": "list",
+          "statModes": ["current"],
+          "unit": "percent"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "max": 100,
+              "min": 0
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "System Memory Usage",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+            "legendFormat": "{{__name__}}"
+          }
+        ],
+        "gridPos": {
+          "h": 9,
+          "w": 14
+        },
+        "width": 6,
+        "height": 4,
+        "options": {
+          "displayMode": "list",
+          "statModes": ["current"],
+          "unit": "percent"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "max": 100,
+              "min": 0
+            }
+          }
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  },
+  "overwrite": true
+}

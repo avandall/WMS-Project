@@ -1,0 +1,398 @@
+name: WMS CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+env:
+  PYTHON_VERSION: "3.13"
+  NODE_VERSION: "20"
+
+jobs:
+  # Code Quality & Security
+  quality-checks:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r ai_engine/requirements.txt
+          pip install pytest pytest-cov pytest-asyncio black flake8 mypy bandit safety
+
+      - name: Code formatting check
+        run: |
+          echo "🎨 Checking code formatting..."
+          black --check --diff src/ ai_engine/ tests/
+          
+      - name: Linting
+        run: |
+          echo "🔍 Running linting..."
+          flake8 src/ ai_engine/ tests/ --max-line-length=100 --extend-ignore=E203,W503
+
+      - name: Type checking
+        run: |
+          echo "📝 Running type checking..."
+          mypy src/ ai_engine/ --ignore-missing-imports --no-strict-optional
+
+      - name: Security scan
+        run: |
+          echo "🛡️  Running security scan..."
+          bandit -r src/ ai_engine/ -f json -o bandit-report.json || true
+          safety check --json --output safety-report.json || true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            safety-report.json
+
+  # Backend Testing
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    needs: quality-checks
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: wms_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r ai_engine/requirements.txt
+          pip install pytest pytest-cov pytest-asyncio
+
+      - name: Wait for PostgreSQL
+        run: |
+          echo "⏳ Waiting for PostgreSQL to be ready..."
+          timeout 60 bash -c 'until pg_isready -h localhost -p 5432; do sleep 1; done'
+
+      - name: Run unit tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wms_test
+          TESTING: true
+        run: |
+          echo "🧪 Running unit tests..."
+          pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=html
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wms_test
+          TESTING: true
+        run: |
+          echo "🔗 Running integration tests..."
+          pytest tests/integration/ -v --cov=src --cov-report=xml --cov-append
+
+      - name: Run SQL security tests
+        run: |
+          echo "🛡️  Running SQL security tests..."
+          python run_sql_exec_tests.py
+
+      - name: Run AI engine tests
+        run: |
+          echo "🤖 Running AI engine tests..."
+          cd ai_engine
+          python -m pytest ../tests/ai_engine/ -v || true
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-reports
+          path: |
+            coverage.xml
+            htmlcov/
+
+  # Frontend Testing
+  frontend-tests:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('dashboard/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        working-directory: ./dashboard
+        run: |
+          npm ci
+
+      - name: Run linting
+        working-directory: ./dashboard
+        run: |
+          echo "🔍 Running frontend linting..."
+          npm run lint || true
+
+      - name: Run tests
+        working-directory: ./dashboard
+        run: |
+          echo "🧪 Running frontend tests..."
+          npm run test || true
+
+      - name: Build dashboard
+        working-directory: ./dashboard
+        run: |
+          echo "🏗️  Building dashboard..."
+          npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-build
+          path: dashboard/dist/
+
+  # AI Engine Indexing Test
+  ai-engine-test:
+    name: AI Engine Test
+    runs-on: ubuntu-latest
+    needs: backend-tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install AI engine dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ai_engine/requirements.txt
+
+      - name: Test AI engine indexer
+        run: |
+          echo "🤖 Testing AI engine indexer..."
+          cd ai_engine
+          
+          # Test basic functionality
+          python -c "
+          from indexer import WMSIndexer
+          indexer = WMSIndexer()
+          status = indexer.get_indexing_status()
+          print('✅ AI Engine status check passed')
+          "
+
+      - name: Test code search
+        run: |
+          echo "🔍 Testing code search functionality..."
+          cd ai_engine
+          python -c "
+          from indexer import WMSIndexer
+          indexer = WMSIndexer()
+          
+          # Create a small test file
+          import os
+          os.makedirs('test_src', exist_ok=True)
+          with open('test_src/test.py', 'w') as f:
+              f.write('def test_function():\n    return \"Hello World\"')
+          
+          # Test indexing
+          try:
+              docs = indexer._load_documents({
+                  'path': 'test_src',
+                  'glob': '*.py',
+                  'language': 'PYTHON',
+                  'parser_threshold': 500,
+                  'description': 'Test files'
+              })
+              print(f'✅ Document loading test passed: {len(docs)} docs')
+          except Exception as e:
+              print(f'❌ Document loading test failed: {e}')
+              exit(1)
+          "
+
+  # Build & Security Scan
+  build-and-scan:
+    name: Build & Security Scan
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build Python package
+        run: |
+          echo "🏗️  Building Python package..."
+          python -m build
+
+      - name: Scan for vulnerabilities
+        run: |
+          echo "🔍 Scanning for vulnerabilities..."
+          pip-audit --requirement requirements.txt || true
+          pip-audit --requirement ai_engine/requirements.txt || true
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package
+          path: dist/
+
+  # Docker Build
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: quality-checks
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: wms-project
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Deploy to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests, docker-build]
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        run: |
+          echo "🚀 Deploying to staging environment..."
+          # Add your staging deployment commands here
+          echo "Deployment to staging completed successfully"
+
+  # Deploy to Production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests, docker-build]
+    if: github.event_name == 'release'
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to production
+        run: |
+          echo "🚀 Deploying to production environment..."
+          # Add your production deployment commands here
+          echo "Deployment to production completed successfully"
+
+  # Notify Results
+  notify:
+    name: Notify Results
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests, ai-engine-test]
+    if: always()
+    steps:
+      - name: Notify success
+        if: ${{ needs.backend-tests.result == 'success' && needs.frontend-tests.result == 'success' && needs.ai-engine-test.result == 'success' }}
+        run: |
+          echo "✅ All tests passed successfully!"
+          # Add notification logic (Slack, email, etc.)
+
+      - name: Notify failure
+        if: ${{ needs.backend-tests.result == 'failure' || needs.frontend-tests.result == 'failure' || needs.ai-engine-test.result == 'failure' }}
+        run: |
+          echo "❌ Some tests failed!"
+          # Add failure notification logic

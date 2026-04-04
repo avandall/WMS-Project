@@ -1,85 +1,146 @@
+version: '3.8'
+
 services:
+  # PostgreSQL Database
   db:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
+    container_name: wms-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-wms_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wms_password}
       POSTGRES_DB: ${POSTGRES_DB:-warehouse_db}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wms_user} -d ${POSTGRES_DB:-warehouse_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      # Remove the automatic SQL initialization - we'll handle it in the app
-    ports:
-      - "5433:5432"
+    networks:
+      - wms-network
 
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: wms-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - wms-network
+    profiles:
+      - production
+      - development
+
+  # WMS Backend API
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: base
+    container_name: wms-backend
+    env_file:
+      - .env.docker  # Always use .env.docker (copied from .env.dev or .env.prod)
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wms_user}:${POSTGRES_PASSWORD:-wms_password}@db:5432/${POSTGRES_DB:-warehouse_db}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_password}@redis:6379/0
+      PYTHONPATH: /app
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      AI_MODEL: ${AI_MODEL:-llama-3.1-8b-instant}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+    volumes:
+      - ./src:/app/src
+      - ./ai_engine:/app/ai_engine
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+      - ./ai_engine/stores:/app/ai_engine/stores
+      - ./ai_engine/cache:/app/ai_engine/cache
+    ports:
+      - "${API_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
-    env_file:
-      - .env.docker  # Always use .env.docker (copied from .env.dev or .env.prod)
-    ports:
-      - "${API_PORT:-8000}:8000"
-    volumes:
-      - ./src:/app/src  # Mount source code for development hot-reload
-    # Auto-run dev data generation in development mode
-    command: >
-      sh -c "
-        echo ' Starting WMS API...'
-        python -m app.main &
-        API_PID=$$
-        
-        # Wait for API to start and create tables
-        echo ' Waiting for API to initialize database...'
-        sleep 20
-        
-        # Check if we should run seed data
-        echo \" Debug: ENVIRONMENT=[$ENVIRONMENT], AUTO_SEED_DATA=[$AUTO_SEED_DATA]\"
-        if [ 'x$ENVIRONMENT' = 'xdevelopment' ] && [ 'x$AUTO_SEED_DATA' = 'xtrue' ]; then
-          echo ' Running seed data generation...'
-          python /app/src/app/data/seed_data/create_login_users.py
-          python /app/src/app/data/seed_data/load_basic_data.py || echo ' Basic data may already exist'
-          python /app/src/app/data/seed_data/load_inventory.py
-          python /app/src/app/data/seed_data/generate_dev_data.py || echo ' Dev data generation skipped'
-          echo ' Seed data generation complete!'
-          echo '✅ Seed data generation complete!'
-        else
-          echo 'ℹ️  Seed data generation skipped (ENVIRONMENT=$ENVIRONMENT, AUTO_SEED_DATA=$AUTO_SEED_DATA)'
-        fi
-        
-        # Wait for API process
-        wait $API_PID
-      "
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - wms-network
+    restart: unless-stopped
 
+  # Frontend Development Server
   dashboard:
-    image: nginx:alpine
+    image: node:20-alpine
+    container_name: wms-frontend
+    working_dir: /app
+    command: npm run dev
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
     volumes:
-      - ./dashboard:/usr/share/nginx/html:ro
+      - ./dashboard:/app
+      - /app/node_modules
     ports:
-      - "${DASHBOARD_PORT:-8080}:80"
+      - "${DASHBOARD_PORT:-3000}:3000"
     depends_on:
-      api:
-        condition: service_started # Hoặc service_healthy nếu bạn muốn đợi API sẵn sàng hoàn toàn
+      - api
+    networks:
+      - wms-network
+    restart: unless-stopped
 
-  # Development tools (only in development mode)
+  # Nginx Reverse Proxy (Production)
+  nginx:
+    image: nginx:alpine
+    container_name: wms-nginx
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./logs/nginx:/var/log/nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+      - dashboard
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - wms-network
+    profiles:
+      - production
+
+  # Development tools
   dev-tools:
     image: adminer:latest
+    container_name: wms-adminer
     ports:
       - "${ADMINER_PORT:-8090}:8080"
     depends_on:
       - db
     environment:
       ADMINER_DEFAULT_SERVER: db
-    # Only start in development mode
-    profiles: ["dev"]
+    profiles:
+      - development
 
   # Cloudflare Tunnel (free / quick tunnel)
-  # Enable with: docker compose --profile tunnel up -d
   tunnel:
     profiles: ["tunnel"]
     image: cloudflare/cloudflared:latest
@@ -87,6 +148,60 @@ services:
     command: tunnel --no-autoupdate --url http://api:8000
     depends_on:
       - api
+    networks:
+      - wms-network
+
+  # Monitoring with Prometheus (optional)
+  prometheus:
+    profiles: ["monitoring"]
+    image: prom/prometheus:latest
+    container_name: wms-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/web/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/web/consoles'
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - wms-network
+
+  # Grafana for dashboards (optional)
+  grafana:
+    profiles: ["monitoring"]
+    image: grafana/grafana:latest
+    container_name: wms-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - wms-network
 
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  wms-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
