@@ -7,7 +7,24 @@ Solves pytest I/O issues and provides convenient test running options.
 import sys
 import subprocess
 import argparse
+import os
 from pathlib import Path
+
+def load_test_env():
+    """Load test environment variables."""
+    env_file = Path(".env.test")
+    if env_file.exists():
+        print(f"🔧 Loading test environment from {env_file}")
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    os.environ[key] = value
+    else:
+        print("⚠️  No .env.test file found, using default test values")
+        os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
+        os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-only")
 
 def run_command(cmd, description):
     """Run a command and handle results."""
@@ -38,22 +55,32 @@ def run_command(cmd, description):
 def main():
     """Main test runner."""
     parser = argparse.ArgumentParser(description="WMS Test Runner")
-    parser.add_argument("--unit", action="store_true", help="Run unit tests only")
-    parser.add_argument("--sql", action="store_true", help="Run SQL tests only")
-    parser.add_argument("--smoke", action="store_true", help="Run smoke tests only")
-    parser.add_argument("--security", action="store_true", help="Run security tests only")
-    parser.add_argument("--ai", action="store_true", help="Run AI tests only")
-    parser.add_argument("--fast", action="store_true", help="Run fast tests only (unit + smoke)")
-    parser.add_argument("--coverage", action="store_true", help="Run with coverage report")
-    parser.add_argument("--parallel", action="store_true", help="Run tests in parallel")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
-    parser.add_argument("--all", action="store_true", help="Run all tests (default)")
+    parser.add_argument("--unit", action="store_true", help="Run unit tests")
+    parser.add_argument("--sql", action="store_true", help="Run SQL tests")
+    parser.add_argument("--smoke", action="store_true", help="Run smoke tests")
+    parser.add_argument("--security", action="store_true", help="Run security tests")
+    parser.add_argument("--ai", action="store_true", help="Run AI tests")
+    parser.add_argument("--all", action="store_true", help="Run all tests")
+    parser.add_argument("--fast", action="store_true", help="Run fast tests (unit + smoke)")
+    parser.add_argument("--verbose", action="store_true", help="Verbose output")
     
     args = parser.parse_args()
     
-    # Default to all tests if no specific option given
-    if not any([args.unit, args.sql, args.smoke, args.security, args.ai, args.fast]):
-        args.all = True
+    # Load test environment first
+    load_test_env()
+    
+    results = []
+    
+    # Determine which tests to run
+    if args.all:
+        args.unit = args.sql = args.smoke = args.security = args.ai = True
+    
+    if args.fast:
+        args.unit = args.smoke = True
+    
+    # If no arguments specified, run all tests
+    if not any([args.unit, args.sql, args.smoke, args.security, args.ai]):
+        args.unit = args.sql = args.smoke = args.security = args.ai = True
     
     # Base pytest command
     pytest_cmd = ["python", "-m", "pytest"]
@@ -61,10 +88,6 @@ def main():
     # Add options
     if args.verbose:
         pytest_cmd.append("-v")
-    if args.parallel:
-        pytest_cmd.extend(["-n", "auto"])
-    if args.coverage:
-        pytest_cmd.extend(["--cov=src", "--cov-report=term-missing"])
     
     # Test suites to run
     test_suites = []

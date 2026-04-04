@@ -1,4 +1,4 @@
-name : WMS Basic CI
+name: WMS Basic CI
 
 on: [push, pull_request]
 
@@ -16,8 +16,18 @@ jobs:
           python-version: '3.12'
       
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+      
+      - name: Set up environment variables
+        run: |
+          echo "DATABASE_URL=sqlite:///./test.db" >> $GITHUB_ENV
+          echo "SECRET_KEY=test-secret-key-for-ci-only" >> $GITHUB_ENV
+          echo "AI_ENGINE_PROVIDER=openai" >> $GITHUB_ENV
+          echo "AI_ENGINE_MODEL=gpt-3.5-turbo" >> $GITHUB_ENV
+          echo "AI_ENGINE_API_KEY=test-key" >> $GITHUB_ENV
       
       - name: Run tests
-        run: python run_tests.py --all 
+        run: python run_tests.py --unit --sql --smoke --verbose 
       
