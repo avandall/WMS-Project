@@ -5,73 +5,55 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
-import dotenv
-dotenv.load_dotenv()
 
-def ask_my_code_modern(question: str):
-    # 1. Khởi tạo tài nguyên
-    model_kwargs={"device": "cpu"}
-    encode_kwargs={"normalize_embeddings": True}
+def get_line_number(doc):
+    """Hàm phụ trợ để ước tính số dòng từ start_index"""
+    content = doc.page_content
+    # Đây là logic ước tính, thực tế LangChain sẽ lưu start_index trong metadata
+    return doc.metadata.get('start_index', 0) // 40 # Ước tính trung bình 40 ký tự/dòng
+
+def ask_my_code_v3(question: str):
+    # Khớp 100% với Indexer
     embeddings = HuggingFaceEmbeddings(
-        model_name="BAAI/bge-base-en-v1.5", 
-        model_kwargs=model_kwargs, 
-        encode_kwargs=encode_kwargs
+        model_name="BAAI/bge-base-en-v1.5",
+        model_kwargs={'device': 'cpu'}
     )
-    
-    # Load Vector DB đã index từ trước
+
+    # Load kho tri thức mới v3
     vector_db = FAISS.load_local(
-        "./src/ai_engine/stores/code_idx_v2", 
-        embeddings,
+        "./src/ai_engine/stores/code_idx_v3", 
+        embeddings, 
         allow_dangerous_deserialization=True
     )
+
+    # Chỉ lấy 5 đoạn code chất lượng nhất
+    retriever = vector_db.as_retriever(search_kwargs={"k": 5})
+
+    llm = ChatGroq(model_name="llama-3.1-8b-instant", temperature=0)
+
+    template = """
+    VAI TRÒ: Bạn là Senior Developer am hiểu dự án WMS này.
+    NGỮ CẢNH CODE:
+    {context}
     
-    # Tạo Retriever (Bộ truy xuất)
-    retriever = vector_db.as_retriever(search_kwargs={
-        "k": 15,
-        "filter": lambda metadata: all(word not in metadata["source"].lower() for word in ["seed", "load", "insert", "mock"])
-        })
-
-    # 2. Khởi tạo LLM (Groq - Llama 3)
-    llm = ChatGroq(
-        model_name="llama-3.1-8b-instant", 
-        groq_api_key=os.getenv("GROQ_API_KEY"),
-        temperature=0
-    )
-
-    # 3. Thiết kế Prompt hiện đại
-    template ="""
-        BẠN LÀ: Một AI Engineer chuyên trách Codebase WMS.
-        NHIỆM VỤ: Tìm LOGIC NGHIỆP VỤ (Business Logic).
-
-        NGỮ CẢNH:
-        {context}
-
-        CÂU HỎI: {question}
-
-        QUY TẮC PHẢN HỒI:
-        1. TUYỆT ĐỐI BỎ QUA các đoạn code chỉ làm nhiệm vụ Insert dữ liệu mẫu (Seed data/Load data).
-        2. TÌM KIẾM các hàm nằm trong thư mục 'services', 'crud', 'api' hoặc 'logic'.
-        3. Nếu các đoạn code được cung cấp đều là dữ liệu mẫu, hãy trả lời: "Tôi chỉ tìm thấy dữ liệu mẫu, không thấy logic nghiệp vụ liên quan. Hãy kiểm tra lại file index."
-        4. Trích dẫn chính xác tên file từ metadata.
-        """
+    CÂU HỎI: {question}
+    
+    YÊU CẦU:
+    1. Trả lời chính xác logic nằm ở file nào.
+    2. Trích dẫn đoạn code ngắn gọn liên quan.
+    3. Nếu không có trong code, hãy nói "Tôi không tìm thấy logic này trong src/".
+    """
+    
     prompt = ChatPromptTemplate.from_template(template)
-
-    # 4. THIẾT LẬP CHUỖI LCEL (ĐÂY LÀ ĐIỂM TỐI TÂN NHẤT)
-    # Dấu | kết nối các bước cực kỳ minh bạch
-    rag_chain = (
+    chain = (
         {"context": retriever, "question": RunnablePassthrough()}
-        | prompt
-        | llm
-        | StrOutputParser()
+        | prompt | llm | StrOutputParser()
     )
 
-    # 5. Thực thi
-    print(f"\n🔍 Đang truy vấn cấu trúc dự án...")
-    response = rag_chain.invoke(question)
-    
-    print("-" * 30)
-    print(f"🤖 AI ENGINEER:\n{response}")
+    print("\n" + "="*50)
+    print(f"🤖 AI ĐANG PHÂN TÍCH V3...")
+    print(chain.invoke(question))
 
 if __name__ == "__main__":
-    user_query = input("Hỏi về logic dự án WMS: ")
-    ask_my_code_modern(user_query)
+    query = input("Hỏi về logic WMS: ")
+    ask_my_code_v3(query)

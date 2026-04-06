@@ -1,55 +1,49 @@
 import os
-import torch
-from langchain_community.document_loaders.generic import GenericLoader
-from langchain_community.document_loaders.parsers import LanguageParser
-from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import TextLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 
-def build_index():
-    # Kiểm tra GPU và khả năng tương thích
-    device = "cpu"
-    print(f"🚀 Đang chạy Indexer trên: {device.upper()}")
-
-    # 1. Cấu hình Model Embedding (BGE-Base)
+def build_index_v3():
+    # Ép dùng CPU cho ổn định với GTX 1060
     embeddings = HuggingFaceEmbeddings(
         model_name="BAAI/bge-base-en-v1.5",
-        model_kwargs={'device': device},
-        encode_kwargs={'normalize_embeddings': True}
+        model_kwargs={'device': 'cpu'}
     )
 
-    # 2. Loader: SỬA LỖI TẠI ĐÂY - Dùng from_filesystem thay vì from_custom_extractors
-    # Chỉ quét thư mục src, bỏ qua các file rác
-    loader = GenericLoader.from_filesystem(
-        "./src",
-        glob="**/*.py",
-        suffixes=[".py"],
-        parser=LanguageParser(language=Language.PYTHON, parser_threshold=500)
+    all_docs = []
+    # Quét thủ công để lấy chính xác số dòng
+    source_dir = "./src/app"
+    for root, dirs, files in os.walk(source_dir):
+        # Bỏ qua các thư mục rác
+        if any(x in root for x in ['seed', 'data', '__pycache__', 'stores']):
+            continue
+            
+        for file in files:
+            if file.endswith(".py"):
+                file_path = os.path.join(root, file)
+                # Dùng TextLoader để nạp từng file
+                loader = TextLoader(file_path, encoding='utf-8')
+                file_docs = loader.load()
+                
+                # Thêm metadata về file cho từng doc
+                for doc in file_docs:
+                    doc.metadata["source"] = file_path
+                all_docs.extend(file_docs)
+
+    # Splitter thông minh hơn
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=100,
+        add_start_index=True # Lưu vị trí ký tự để sau này tính ra số dòng
     )
     
-    print("📂 Đang đọc mã nguồn và phân tích cấu trúc...")
-    docs = loader.load()
-
-    if not docs:
-        print("❌ Không tìm thấy file .py nào trong thư mục ./src")
-        return
-
-    # 3. Splitter: Cắt theo logic Python
-    splitter = RecursiveCharacterTextSplitter.from_language(
-        language=Language.PYTHON, 
-        chunk_size=1500, 
-        chunk_overlap=200
-    )
-    texts = splitter.split_documents(docs)
-    print(f"✂️ Đã chia thành {len(texts)} mảnh logic chuyên sâu.")
-
-    # 4. Lưu trữ vào FAISS
-    vector_db = FAISS.from_documents(texts, embeddings)
+    final_texts = splitter.split_documents(all_docs)
     
-    # Đảm bảo thư mục tồn tại
-    os.makedirs("./src/ai_engine/stores/code_idx_v2", exist_ok=True)
-    vector_db.save_local("./src/ai_engine/stores/code_idx_v2")
-    print("✅ Đã cập nhật 'Bộ nhớ thông minh' tại code_idx_v2")
+    # Lưu vào kho mới
+    vector_db = FAISS.from_documents(final_texts, embeddings)
+    vector_db.save_local("./src/ai_engine/stores/code_idx_v3")
+    print(f"✅ Đã index {len(final_texts)} đoạn code từ các file logic thực tế!")
 
 if __name__ == "__main__":
-    build_index()
+    build_index_v3()

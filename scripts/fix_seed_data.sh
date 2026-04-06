@@ -46,4 +46,8 @@ ORDER BY table_name;
 
 echo ""
 echo "🔑 Login Credentials:"
-python3 show_login_credentials.py
+echo "Admin: admin@wms.com / Admin123!"
+echo "Manager: manager@wms.com / Manager123!"
+echo "Staff: staff@wms.com / Staff123!"
+echo "User: user@wms.com / User123!"
+
