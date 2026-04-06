@@ -5,14 +5,22 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
+import dotenv
+dotenv.load_dotenv()
 
 def ask_my_code_modern(question: str):
     # 1. Khởi tạo tài nguyên
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    model_kwargs={"device": "cpu"}
+    encode_kwargs={"normalize_embeddings": True}
+    embeddings = HuggingFaceEmbeddings(
+        model_name="BAAI/bge-base-en-v1.5", 
+        model_kwargs=model_kwargs, 
+        encode_kwargs=encode_kwargs
+    )
     
     # Load Vector DB đã index từ trước
     vector_db = FAISS.load_local(
-        "./ai_engine/stores/code_idx", 
+        "./src/ai_engine/stores/code_idx_v2", 
         embeddings,
         allow_dangerous_deserialization=True
     )
@@ -20,7 +28,7 @@ def ask_my_code_modern(question: str):
     # Tạo Retriever (Bộ truy xuất)
     retriever = vector_db.as_retriever(search_kwargs={
         "k": 15,
-        "filter": lambda metadata: "seed" not in metadata["source"] and "test" not in metadata["source"]
+        "filter": lambda metadata: all(word not in metadata["source"].lower() for word in ["seed", "load", "insert", "mock"])
         })
 
     # 2. Khởi tạo LLM (Groq - Llama 3)
