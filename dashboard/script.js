@@ -3793,3 +3793,299 @@ document.addEventListener('DOMContentLoaded', function() {
         aiChatState.isMinimized = false;
     }
 });
+
+// AI Assistant Integration
+let aiEngineStats = {
+    totalQueries: 0,
+    totalResponseTime: 0,
+    successfulQueries: 0
+};
+
+// Initialize AI Assistant
+function initializeAIAssistant() {
+    loadAIEngineInfo();
+    setupAIEventListeners();
+    setInterval(loadAIEngineInfo, 30000); // Refresh every 30 seconds
+}
+
+// Setup AI Assistant event listeners
+function setupAIEventListeners() {
+    const input = document.getElementById('ai-question-input');
+    const sendBtn = document.getElementById('ai-send-btn');
+    
+    if (input && sendBtn) {
+        input.addEventListener('input', function() {
+            sendBtn.disabled = !this.value.trim();
+        });
+    }
+}
+
+// Handle Enter key in AI input
+function handleAIKeyPress(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendAIQuestion();
+    }
+}
+
+// Send question to AI engine
+async function sendAIQuestion() {
+    const input = document.getElementById('ai-question-input');
+    const question = input.value.trim();
+    
+    if (!question) return;
+    
+    const mode = document.getElementById('ai-mode-select').value;
+    const sendBtn = document.getElementById('ai-send-btn');
+    
+    // Disable input and button
+    input.disabled = true;
+    sendBtn.disabled = true;
+    sendBtn.innerHTML = '...';
+    
+    // Add user message to chat
+    addAIMessage('user', question);
+    input.value = '';
+    
+    // Show typing indicator
+    const typingId = addAIMessage('assistant', 'Thinking...', true);
+    
+    try {
+        const startTime = Date.now();
+        
+        const response = await makeRequest('/api/ai/query', 'POST', {
+            question: question,
+            mode: mode
+        });
+        
+        const responseTime = (Date.now() - startTime) / 1000;
+        
+        // Update stats
+        aiEngineStats.totalQueries++;
+        aiEngineStats.totalResponseTime += responseTime;
+        if (response.success) {
+            aiEngineStats.successfulQueries++;
+        }
+        updateAIStats();
+        
+        // Remove typing indicator and add actual response
+        removeAIMessage(typingId);
+        addAIMessage('assistant', response.response, false, {
+            mode: response.mode,
+            processingTime: response.processing_time,
+            success: response.success
+        });
+        
+    } catch (error) {
+        removeAIMessage(typingId);
+        addAIMessage('assistant', `Error: ${error.detail || error.message}`, false, { error: true });
+    } finally {
+        // Re-enable input and button
+        input.disabled = false;
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = 'Send';
+        input.focus();
+    }
+}
+
+// Add AI message to chat
+function addAIMessage(role, content, isTyping = false, metadata = {}) {
+    const messagesContainer = document.getElementById('ai-assistant-messages');
+    const messageId = 'ai-msg-' + Date.now();
+    
+    // Remove welcome message if it exists
+    const welcomeMsg = messagesContainer.querySelector('.ai-welcome-message');
+    if (welcomeMsg) {
+        welcomeMsg.remove();
+    }
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.id = messageId;
+    messageDiv.className = `ai-message ${role === 'user' ? 'user' : 'assistant'}`;
+    
+    const avatar = document.createElement('div');
+    avatar.className = 'ai-message-avatar';
+    avatar.textContent = role === 'user' ? '👤' : '🤖';
+    
+    const messageContent = document.createElement('div');
+    messageContent.className = 'ai-message-content';
+    
+    if (isTyping) {
+        messageContent.innerHTML = '<div class="typing-indicator">...</div>';
+    } else {
+        messageContent.innerHTML = `
+            <div class="ai-message-text">${content}</div>
+            ${metadata.mode ? `
+                <div class="ai-message-metadata">
+                    Mode: ${metadata.mode} | Time: ${(metadata.processingTime || 0).toFixed(2)}s
+                </div>
+            ` : ''}
+        `;
+    }
+    
+    messageDiv.appendChild(avatar);
+    messageDiv.appendChild(messageContent);
+    messagesContainer.appendChild(messageDiv);
+    
+    // Scroll to bottom
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+    return messageId;
+}
+
+// Remove AI message from chat
+function removeAIMessage(messageId) {
+    const message = document.getElementById(messageId);
+    if (message) {
+        message.remove();
+    }
+}
+
+// Clear AI chat
+function clearAIChat() {
+    const messagesContainer = document.getElementById('ai-assistant-messages');
+    messagesContainer.innerHTML = `
+        <div class="ai-welcome-message">
+            <div class="ai-welcome-icon">🤖</div>
+            <div class="ai-welcome-text">
+                <h3>WMS AI Assistant</h3>
+                <p>Ask me about warehouse management, inventory, products, orders, or any WMS-related questions.</p>
+                <div class="ai-quick-questions">
+                    <h4>Quick Questions:</h4>
+                    <button class="ai-quick-btn" onclick="askAIQuestion('What is a Warehouse Management System?')">What is a WMS?</button>
+                    <button class="ai-quick-btn" onclick="askAIQuestion('How does inventory tracking work?')">How does inventory tracking work?</button>
+                    <button class="ai-quick-btn" onclick="askAIQuestion('What is order fulfillment process?')">Order fulfillment process?</button>
+                    <button class="ai-quick-btn" onclick="askAIQuestion('Check inventory for SKU12345')">Check inventory SKU12345</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Ask sample AI question
+function askAIQuestion(question) {
+    const input = document.getElementById('ai-question-input');
+    input.value = question;
+    sendAIQuestion();
+}
+
+// Load AI sample data
+async function loadAISampleData() {
+    try {
+        const response = await makeRequest('/api/ai/documents/init-sample', 'POST');
+        
+        if (response.success) {
+            addAIMessage('assistant', 'Sample WMS data has been loaded successfully! You can now ask questions about warehouse management systems.');
+            loadAIEngineInfo();
+        } else {
+            addAIMessage('assistant', 'Failed to load sample data. Please try again.', false, { error: true });
+        }
+    } catch (error) {
+        addAIMessage('assistant', `Error loading sample data: ${error.detail || error.message}`, false, { error: true });
+    }
+}
+
+// Show AI document upload modal
+function showAIDocumentUpload() {
+    const modal = document.createElement('div');
+    modal.className = 'ai-upload-modal';
+    modal.innerHTML = `
+        <div class="ai-upload-content">
+            <div class="ai-upload-header">
+                <h3 class="ai-upload-title">Upload Document</h3>
+                <button class="ai-upload-close" onclick="this.closest('.ai-upload-modal').remove()">×</button>
+            </div>
+            <textarea 
+                class="ai-upload-textarea" 
+                placeholder="Paste your document content here..."
+                id="ai-upload-textarea"
+            ></textarea>
+            <div class="ai-upload-actions">
+                <button class="btn-secondary" onclick="this.closest('.ai-upload-modal').remove()">Cancel</button>
+                <button class="btn-primary" onclick="uploadAIDocument()">Upload</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+// Upload AI document
+async function uploadAIDocument() {
+    const content = document.getElementById('ai-upload-textarea').value.trim();
+    
+    if (!content) {
+        alert('Please enter document content');
+        return;
+    }
+    
+    try {
+        const response = await makeRequest('/api/ai/documents/upload', 'POST', [{
+            content: content,
+            metadata: {
+                upload_time: new Date().toISOString(),
+                source: 'web_upload'
+            }
+        }]);
+        
+        if (response.success) {
+            document.querySelector('.ai-upload-modal').remove();
+            addAIMessage('assistant', `Document uploaded successfully! ${response.documents_added} document(s) added to knowledge base.`);
+            loadAIEngineInfo();
+        } else {
+            addAIMessage('assistant', 'Failed to upload document. Please try again.', false, { error: true });
+        }
+    } catch (error) {
+        addAIMessage('assistant', `Error uploading document: ${error.detail || error.message}`, false, { error: true });
+    }
+}
+
+// Load AI engine information
+async function loadAIEngineInfo() {
+    try {
+        const [engineInfo, docStats] = await Promise.all([
+            makeRequest('/api/ai/engine/info', 'GET'),
+            makeRequest('/api/ai/documents/stats', 'GET')
+        ]);
+        
+        // Update engine info display
+        document.getElementById('ai-current-mode').textContent = engineInfo.mode || '-';
+        document.getElementById('ai-current-llm').textContent = engineInfo.llm_model || '-';
+        document.getElementById('ai-doc-count').textContent = docStats.total_documents || '0';
+        
+        // Update engine status
+        const statusElement = document.getElementById('ai-engine-status');
+        statusElement.textContent = 'Online';
+        statusElement.className = 'ai-status-value ai-status-online';
+        
+    } catch (error) {
+        // Update engine status to offline
+        const statusElement = document.getElementById('ai-engine-status');
+        statusElement.textContent = 'Offline';
+        statusElement.className = 'ai-status-value ai-status-offline';
+        
+        console.error('Error loading AI engine info:', error);
+    }
+}
+
+// Update AI statistics
+function updateAIStats() {
+    const avgTime = aiEngineStats.totalQueries > 0 
+        ? (aiEngineStats.totalResponseTime / aiEngineStats.totalQueries).toFixed(2)
+        : '0.0';
+    
+    const successRate = aiEngineStats.totalQueries > 0
+        ? ((aiEngineStats.successfulQueries / aiEngineStats.totalQueries) * 100).toFixed(1)
+        : '100.0';
+    
+    document.getElementById('ai-total-queries').textContent = aiEngineStats.totalQueries;
+    document.getElementById('ai-avg-time').textContent = avgTime + 's';
+    document.getElementById('ai-success-rate').textContent = successRate + '%';
+}
+
+// Add AI initialization to page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if we're on the AI Assistant section
+    if (document.getElementById('ai-assistant-section')) {
+        initializeAIAssistant();
+    }
+});

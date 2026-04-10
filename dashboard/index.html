@@ -32,6 +32,7 @@
             <button class="nav-btn" onclick="showSection('reports')">Reports</button>
             <button class="nav-btn" onclick="showSection('customers')">Customers</button>
             <button class="nav-btn" onclick="showSection('users')">Users</button>
+            <button class="nav-btn" onclick="showSection('ai-assistant')">AI Assistant</button>
             <button class="nav-btn" onclick="showSection('settings')">Settings</button>
         </nav>
 
@@ -192,7 +193,105 @@
                 <div id="customer-detail" class="data-table" style="margin-top:16px; display:none;"></div>
             </section>
 
-
+            <!-- AI Assistant Section -->
+            <section id="ai-assistant-section" class="section">
+                <div class="section-header">
+                    <h2>🤖 AI Assistant</h2>
+                    <div class="section-actions">
+                        <select id="ai-mode-select" class="form-input" style="width:150px;">
+                            <option value="hybrid">Hybrid Mode</option>
+                            <option value="rag">RAG Mode</option>
+                            <option value="agent">Agent Mode</option>
+                        </select>
+                        <button class="btn-primary" onclick="loadAISampleData()">Load Sample Data</button>
+                    </div>
+                </div>
+                
+                <div class="ai-assistant-container">
+                    <div class="ai-chat-main">
+                        <div class="ai-chat-messages" id="ai-assistant-messages">
+                            <div class="ai-welcome-message">
+                                <div class="ai-welcome-icon">🤖</div>
+                                <div class="ai-welcome-text">
+                                    <h3>WMS AI Assistant</h3>
+                                    <p>Ask me about warehouse management, inventory, products, orders, or any WMS-related questions.</p>
+                                    <div class="ai-quick-questions">
+                                        <h4>Quick Questions:</h4>
+                                        <button class="ai-quick-btn" onclick="askAIQuestion('What is a Warehouse Management System?')">What is a WMS?</button>
+                                        <button class="ai-quick-btn" onclick="askAIQuestion('How does inventory tracking work?')">How does inventory tracking work?</button>
+                                        <button class="ai-quick-btn" onclick="askAIQuestion('What is order fulfillment process?')">Order fulfillment process?</button>
+                                        <button class="ai-quick-btn" onclick="askAIQuestion('Check inventory for SKU12345')">Check inventory SKU12345</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="ai-chat-input-container">
+                            <div class="ai-input-group">
+                                <input 
+                                    type="text" 
+                                    id="ai-question-input" 
+                                    placeholder="Ask about WMS, inventory, products, warehouses..."
+                                    class="ai-input"
+                                    onkeypress="handleAIKeyPress(event)"
+                                >
+                                <button 
+                                    id="ai-send-btn" 
+                                    class="btn-primary ai-send-btn"
+                                    onclick="sendAIQuestion()"
+                                    disabled
+                                >
+                                    Send
+                                </button>
+                            </div>
+                            <div class="ai-input-actions">
+                                <button class="btn-secondary" onclick="showAIDocumentUpload()">📄 Upload Document</button>
+                                <button class="btn-secondary" onclick="clearAIChat()">🗑️ Clear Chat</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="ai-sidebar">
+                        <div class="ai-info-card">
+                            <h4>Engine Status</h4>
+                            <div class="ai-status-item">
+                                <span>Mode:</span>
+                                <span id="ai-current-mode" class="ai-status-value">-</span>
+                            </div>
+                            <div class="ai-status-item">
+                                <span>LLM:</span>
+                                <span id="ai-current-llm" class="ai-status-value">-</span>
+                            </div>
+                            <div class="ai-status-item">
+                                <span>Documents:</span>
+                                <span id="ai-doc-count" class="ai-status-value">-</span>
+                            </div>
+                            <div class="ai-status-item">
+                                <span>Status:</span>
+                                <span id="ai-engine-status" class="ai-status-value ai-status-online">Online</span>
+                            </div>
+                        </div>
+                        
+                        <div class="ai-info-card">
+                            <h4>Processing Info</h4>
+                            <div class="ai-stats">
+                                <div class="ai-stat">
+                                    <span class="ai-stat-label">Total Queries:</span>
+                                    <span id="ai-total-queries" class="ai-stat-value">0</span>
+                                </div>
+                                <div class="ai-stat">
+                                    <span class="ai-stat-label">Avg Response Time:</span>
+                                    <span id="ai-avg-time" class="ai-stat-value">0.0s</span>
+                                </div>
+                                <div class="ai-stat">
+                                    <span class="ai-stat-label">Success Rate:</span>
+                                    <span id="ai-success-rate" class="ai-stat-value">100%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
 
             <!-- Settings Section -->
             <section id="settings-section" class="section">
