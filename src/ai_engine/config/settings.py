@@ -11,29 +11,29 @@ class Settings:
     """Central configuration class for WMS AI Engine"""
     
     # LLM Configuration
-    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER")
-    LLM_MODEL: str = os.getenv("LLM_MODEL")
-    EVALUATOR_MODEL: str = os.getenv("EVALUATOR_MODEL")
-    TEMPERATURE: float = float(os.getenv("TEMPERATURE"))
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "groq")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "llama-3.1-8b-instant")
+    EVALUATOR_MODEL: str = os.getenv("EVALUATOR_MODEL", "llama-3.3-70b-versatile")
+    TEMPERATURE: float = float(os.getenv("TEMPERATURE", "0.7"))
     
     # Embedding Configuration
-    EMBEDDING_PROVIDER: str = os.getenv("EMBEDDING_PROVIDER")
-    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL")
+    EMBEDDING_PROVIDER: str = os.getenv("EMBEDDING_PROVIDER", "huggingface")
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
     
     # Database Configuration
-    VECTOR_DB_PATH: str = os.getenv("VECTOR_DB_PATH")
-    DB_CONNECTION_STRING: str = os.getenv("DB_CONNECTION_STRING")
+    VECTOR_DB_PATH: str = os.getenv("VECTOR_DB_PATH", "./vector_db")
+    DB_CONNECTION_STRING: str = os.getenv("DB_CONNECTION_STRING", "")
     
     # Retrieval Configuration
-    RETRIEVAL_K: int = int(os.getenv("RETRIEVAL_K"))
-    BM25_WEIGHT: float = float(os.getenv("BM25_WEIGHT"))
-    VECTOR_WEIGHT: float = float(os.getenv("VECTOR_WEIGHT"))
+    RETRIEVAL_K: int = int(os.getenv("RETRIEVAL_K", "3"))
+    BM25_WEIGHT: float = float(os.getenv("BM25_WEIGHT", "0.5"))
+    VECTOR_WEIGHT: float = float(os.getenv("VECTOR_WEIGHT", "0.5"))
     
     # Evaluation Configuration
-    QUALITY_THRESHOLD: float = float(os.getenv("QUALITY_THRESHOLD"))
+    QUALITY_THRESHOLD: float = float(os.getenv("QUALITY_THRESHOLD", "0.7"))
     
     # API Keys
-    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY")
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     
     @classmethod
     def get_llm_config(cls) -> Dict[str, Any]:

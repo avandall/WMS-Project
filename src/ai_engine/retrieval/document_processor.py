@@ -1,13 +1,20 @@
 """
 Document processing and chunking for WMS RAG system
 """
+import sys
+import os
 from typing import List
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_core.documents import Document as LangchainDocument
 import bs4
 
-from ..models.base import Document
+# Add the ai_engine directory to the path for imports when run directly
+if __name__ == "__main__":
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+    from models.base import Document
+else:
+    from ..models.base import Document
 
 
 class DocumentProcessor:

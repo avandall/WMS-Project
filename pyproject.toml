@@ -40,6 +40,11 @@ dependencies = [
     "tree-sitter>=0.25.2",
     "tree-sitter-languages>=1.10.2",
     "torch>=2.11.0",
+    "bs4>=0.0.2",
+    "typing>=3.10.0.0",
+    "langchain-chroma>=1.1.0",
+    "langchain-classic>=1.0.3",
+    "rank-bm25>=0.2.2",
 ]
 
 [project.optional-dependencies]

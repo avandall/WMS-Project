@@ -23,6 +23,11 @@ def load_inventory():
         engine = create_engine(settings.database_url)
         
         with engine.connect() as conn:
+            # Clear existing inventory first to avoid duplicates
+            print("?? Clearing existing inventory...")
+            conn.execute(text("DELETE FROM warehouse_inventory"))
+            conn.commit()
+            
             # Get actual warehouse IDs
             result = conn.execute(text("SELECT warehouse_id FROM warehouses ORDER BY warehouse_id"))
             warehouse_ids = [row[0] for row in result]
@@ -34,30 +39,30 @@ def load_inventory():
             print(f"Found product IDs: {product_ids}")
             
             # Insert warehouse inventory with correct IDs
-            print("📦 Loading warehouse inventory...")
+            print("?? Loading warehouse inventory...")
             inventory_data = [
-                (warehouse_ids[0], product_ids[0], 100),  # Pallet Gỗ in Kho Q1
-                (warehouse_ids[0], product_ids[1], 5),    # Xe nâng in Kho Q1
-                (warehouse_ids[0], product_ids[2], 500),  # Thùng carton in Kho Q1
-                (warehouse_ids[0], product_ids[3], 200),  # Màng bọc in Kho Q1
-                (warehouse_ids[1], product_ids[4], 50),   # Kệ sắt in Kho Thủ Đức
-                (warehouse_ids[1], product_ids[5], 20),   # Xe đẩy in Kho Thủ Đức
-                (warehouse_ids[2], product_ids[6], 1000), # Bao tải in Kho Bình Tân
-                (warehouse_ids[2], product_ids[7], 300),  # Dây đeo in Kho Hóc Môn
-                (warehouse_ids[3], product_ids[8], 150),  # Thùng nhựa in Kho Bình Chánh
-                (warehouse_ids[3], product_ids[9], 100), # Kẹp chì in Kho Q1
-                (warehouse_ids[4], product_ids[10], 3),  # Máy in mã vạch in Kho Thủ Đức
-                (warehouse_ids[4], product_ids[11], 800), # Băng keo in Kho Bình Tân
-                (warehouse_ids[0], product_ids[12], 200), # Giấy in hóa đơn in Kho Hóc Môn
-                (warehouse_ids[0], product_ids[13], 50),  # Bút laser in Kho Bình Chánh
-                (warehouse_ids[1], product_ids[14], 25),  # Đồng hồ in Kho Q1
-                (warehouse_ids[1], product_ids[15], 15),  # Bàn làm việc in Kho Thủ Đức
-                (warehouse_ids[2], product_ids[16], 30),  # Ghế văn phòng in Kho Bình Tân
-                (warehouse_ids[2], product_ids[17], 10),  # Laptop in Kho Hóc Môn
-                (warehouse_ids[3], product_ids[18], 20),  # Máy tính để bàn in Kho Bình Chánh
-                (warehouse_ids[3], product_ids[19], 35),  # Màn hình in Kho Q1
-                (warehouse_ids[4], product_ids[20], 60),  # Bàn phím cơ in Kho Thủ Đức
-                (warehouse_ids[4], product_ids[21], 100)  # Chuột không dây in Kho Bình Tân
+                (warehouse_ids[0], product_ids[0], 100),  # Pallet G?? in Kho Q1
+                (warehouse_ids[0], product_ids[1], 5),    # Xe n??ng in Kho Q1
+                (warehouse_ids[0], product_ids[2], 500),  # Th??ng carton in Kho Q1
+                (warehouse_ids[0], product_ids[3], 200),  # M??ng b??c in Kho Q1
+                (warehouse_ids[1], product_ids[4], 50),   # K?? s??t in Kho Th?? ??c
+                (warehouse_ids[1], product_ids[5], 20),   # Xe ??y in Kho Th?? ??c
+                (warehouse_ids[2], product_ids[6], 1000), # Bao t??i in Kho B??nh T??n
+                (warehouse_ids[2], product_ids[7], 300),  # D??y ??o in Kho H??c M??n
+                (warehouse_ids[3], product_ids[8], 150),  # Th??ng nh??a in Kho B??nh Ch??nh
+                (warehouse_ids[3], product_ids[9], 100), # K?p ch?? in Kho Q1
+                (warehouse_ids[4], product_ids[10], 3),  # M??y in m?? v??ch in Kho Th?? ??c
+                (warehouse_ids[4], product_ids[11], 800), # B??ng keo in Kho B??nh T??n
+                (warehouse_ids[0], product_ids[12], 200), # Gi??y in h??a ??n in Kho H??c M??n
+                (warehouse_ids[0], product_ids[13], 50),  # B??t laser in Kho B??nh Ch??nh
+                (warehouse_ids[1], product_ids[14], 25),  # ??ng h?? in Kho Q1
+                (warehouse_ids[1], product_ids[15], 15),  # B??n l??m vi??c in Kho Th?? ??c
+                (warehouse_ids[2], product_ids[16], 30),  # Gh?? v??n ph??ng in Kho B??nh T??n
+                (warehouse_ids[2], product_ids[17], 10),  # Laptop in Kho H??c M??n
+                (warehouse_ids[3], product_ids[18], 20),  # M??y t??nh ?? b??n in Kho B??nh Ch??nh
+                (warehouse_ids[3], product_ids[19], 35),  # M??n h??nh in Kho Q1
+                (warehouse_ids[4], product_ids[20], 60),  # B??n ph??m c?? in Kho Th?? ??c
+                (warehouse_ids[4], product_ids[21], 100)  # Chu??t kh??ng d??y in Kho B??nh T??n
             ]
             
             for warehouse_id, product_id, quantity in inventory_data:

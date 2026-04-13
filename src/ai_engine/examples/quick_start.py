@@ -3,7 +3,6 @@ Quick Start Guide for WMS AI Engine
 """
 import os
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def quick_start():
     """Simple quick start example"""
@@ -11,7 +10,7 @@ def quick_start():
     print("=" * 30)
     
     # Step 1: Import
-    from src.ai_engine import WMSEngine, ProcessingMode
+    from ai_engine import WMSEngine, ProcessingMode
     
     # Step 2: Initialize engine
     print("1. Initializing engine...")

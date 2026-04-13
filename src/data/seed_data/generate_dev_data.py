@@ -41,8 +41,8 @@ class DevDataGenerator:
         session = self.SessionLocal()
         try:
             # Check if we have more than seed data
-            product_count = session.execute(text("SELECT COUNT(*) FROM product")).scalar()
-            warehouse_count = session.execute(text("SELECT COUNT(*) FROM warehouse")).scalar()
+            product_count = session.execute(text("SELECT COUNT(*) FROM products")).scalar()
+            warehouse_count = session.execute(text("SELECT COUNT(*) FROM warehouses")).scalar()
             
             # Seed data has 22 products and 5 warehouses
             return product_count <= 22 and warehouse_count <= 5
@@ -69,8 +69,8 @@ class DevDataGenerator:
             # Insert warehouses
             for warehouse in warehouses:
                 session.execute(text("""
-                    INSERT INTO warehouse (name, location) 
-                    VALUES (:name, :location)
+                    INSERT INTO warehouses (location) 
+                    VALUES (:location)
                 """), warehouse)
             
             session.commit()
@@ -126,7 +126,7 @@ class DevDataGenerator:
             # Insert products
             for product in products:
                 session.execute(text("""
-                    INSERT INTO product (name, sku, price, description) 
+                    INSERT INTO products (name, sku, price, description) 
                     VALUES (:name, :sku, :price, :description)
                 """), product)
             
@@ -175,8 +175,8 @@ class DevDataGenerator:
         session = self.SessionLocal()
         try:
             # Get existing products and warehouses
-            products = session.execute(text("SELECT product_id FROM product ORDER BY product_id")).fetchall()
-            warehouses = session.execute(text("SELECT warehouse_id FROM warehouse ORDER BY warehouse_id")).fetchall()
+            products = session.execute(text("SELECT product_id FROM products ORDER BY product_id")).fetchall()
+            warehouses = session.execute(text("SELECT warehouse_id FROM warehouses ORDER BY warehouse_id")).fetchall()
             
             if not products or not warehouses:
                 print("❌ No products or warehouses found")
@@ -199,13 +199,13 @@ class DevDataGenerator:
             for record in inventory_records:
                 # Check if record already exists
                 existing = session.execute(text("""
-                    SELECT COUNT(*) FROM inventory 
+                    SELECT COUNT(*) FROM warehouse_inventory 
                     WHERE product_id = :product_id AND warehouse_id = :warehouse_id
                 """), record).scalar()
                 
                 if existing == 0:
                     session.execute(text("""
-                        INSERT INTO inventory (product_id, warehouse_id, quantity) 
+                        INSERT INTO warehouse_inventory (product_id, warehouse_id, quantity) 
                         VALUES (:product_id, :warehouse_id, :quantity)
                     """), record)
             
@@ -280,7 +280,7 @@ class DevDataGenerator:
                 doc_ids.append(doc_id)
             
             # Generate document items
-            products = session.execute(text("SELECT product_id, price FROM product ORDER BY product_id")).fetchall()
+            products = session.execute(text("SELECT product_id, price FROM products ORDER BY product_id")).fetchall()
             
             for doc_id in doc_ids:
                 num_items = random.randint(1, 5)

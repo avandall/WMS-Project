@@ -3,9 +3,8 @@ Complete Usage Guide for WMS AI Engine
 """
 import os
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.ai_engine import WMSEngine, ProcessingMode
+from ai_engine import WMSEngine, ProcessingMode
 
 
 def setup_environment():

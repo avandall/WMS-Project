@@ -29,46 +29,46 @@ def create_login_users():
         
         # Define users with known passwords (using valid system roles)
         users_with_passwords = [
-            ('admin@wms.vn', 'admin123', 'admin', 'Administrator', 1),
-            ('warehouse@wms.vn', 'warehouse123', 'warehouse', 'Warehouse Manager', 1),
-            ('sales@wms.vn', 'sales123', 'sales', 'Sales Staff', 1),
-            ('accountant@wms.vn', 'account123', 'accountant', 'Accountant', 1),
+            ('admin', 'admin@wms.com', 'Admin123!', 'admin', True),
+            ('manager', 'manager@wms.com', 'Manager123!', 'manager', True),
+            ('staff', 'staff@wms.com', 'Staff123!', 'staff', True),
+            ('user', 'user@wms.com', 'User123!', 'user', True),
         ]
         
         with engine.connect() as conn:
             # Clear existing users
-            print("🗑️  Clearing existing users...")
+            print("??  Clearing existing users...")
             conn.execute(text("DELETE FROM users"))
             conn.commit()
             
             # Insert users with known passwords
-            print("👥 Creating users with known passwords...")
-            for email, password, role, full_name, is_active in users_with_passwords:
+            print("?? Creating users with known passwords...")
+            for username, email, password, role, is_active in users_with_passwords:
                 hashed_pwd = hash_password(password)
                 conn.execute(text("""
-                    INSERT INTO users (email, hashed_password, role, full_name, is_active, created_at) 
-                    VALUES (:email, :hashed_password, :role, :full_name, :is_active, NOW())
+                    INSERT INTO users (username, email, password_hash, role, is_active, created_at) 
+                    VALUES (:username, :email, :password_hash, :role, :is_active, NOW())
                 """), {
+                    "username": username,
                     "email": email,
-                    "hashed_password": hashed_pwd,
+                    "password_hash": hashed_pwd,
                     "role": role,
-                    "full_name": full_name,
                     "is_active": is_active
                 })
-                print(f"  ✅ Created user: {email} (password: {password})")
+                print(f"  ?? Created user: {email} (password: {password})")
             
             conn.commit()
         
-        print("\n🎉 Login credentials created successfully!")
-        print("\n📋 Dashboard Login Credentials:")
-        print("┌─────────────────────┬─────────────────┬─────────────────┐")
-        print("│ Email                │ Password        │ Role            │")
-        print("├─────────────────────┼─────────────────┼─────────────────┤")
-        print("│ admin@wms.vn         │ admin123        │ Administrator   │")
-        print("│ warehouse@wms.vn     │ warehouse123    │ Warehouse       │")
-        print("│ sales@wms.vn         │ sales123        │ Sales           │")
-        print("│ accountant@wms.vn    │ account123      │ Accountant      │")
-        print("└─────────────────────┴─────────────────┴─────────────────┘")
+        print("\n?? Login credentials created successfully!")
+        print("\n?? Dashboard Login Credentials:")
+        print("??")
+        print("?? Email                ?? Password        ?? Role            ??")
+        print("????????????????????????????????????????????????????????????")
+        print("?? admin@wms.com        ?? Admin123!       ?? Administrator   ??")
+        print("?? manager@wms.com      ?? Manager123!     ?? Manager         ??")
+        print("?? staff@wms.com        ?? Staff123!       ?? Staff           ??")
+        print("?? user@wms.com         ?? User123!        ?? User            ??")
+        print("????????????????????????????????????????????????????????????")
         
         print(f"\n🌐 Dashboard URL: http://localhost:8080")
         print("🔑 Use any of the above credentials to login!")
