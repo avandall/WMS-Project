@@ -20,7 +20,13 @@ COPY pyproject.toml ./pyproject.toml
 COPY README.md ./README.md
 COPY uv.lock ./uv.lock
 COPY src ./src
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir . && \
+    find /usr/local -depth \
+    \( \
+        -name __pycache__ \
+        -o -name '*.pyc' \
+        -o -name '*.pyo' \
+    \) -exec rm -rf '{}' +
 
 EXPOSE 8000
 

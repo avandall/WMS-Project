@@ -72,21 +72,26 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
+    # 1. Lấy URL từ biến môi trường (ưu tiên số 1)
+    # Trong docker-compose, bạn đã set .env.docker nên os.getenv sẽ đọc được db:5432
+    db_url = os.getenv("DATABASE_URL")
 
-    In this scenario we need to create an Engine
-    and associate a connection with the context.
+    # 2. Nếu không có biến môi trường (chạy local ngoài docker), mới lấy từ alembic.ini
+    if not db_url:
+        db_url = config.get_main_option("sqlalchemy.url")
 
-    """
+    # 3. Tạo engine với URL đã chọn
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        url=db_url,  # Thêm dòng này để ghi đè URL từ .ini
     )
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, 
+            target_metadata=target_metadata
         )
 
         with context.begin_transaction():

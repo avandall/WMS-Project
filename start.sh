@@ -40,7 +40,7 @@ case $MODE in
         echo "🌐 Dashboard:   http://localhost:8080"
         echo "🌐 Adminer:     http://localhost:8090"
         echo ""
-        echo "🔧 If no data appears, run: ./scripts/setup_complete_wms.sh"
+        echo "🔧 Add seed data, run: docker compose exec api python ./scripts/seed.py"
         ;;
         
     "prod"|"production")
