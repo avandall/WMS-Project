@@ -3620,7 +3620,10 @@ async function sendAiMessage() {
     if (btn) btn.disabled = true;
 
     try {
-        const res = await makeRequest('/api/v1/ai/chat-db', 'POST', { query: message });
+        const res = await makeRequest('/api/v1/ai/chat-db', 'POST', { 
+            message: message,
+            include_rows: Boolean(includeRows && includeRows.checked)
+        });
 
         // apiRequest returns parsed json for 2xx
         appendAiMessage('assistant', res.answer || '(no answer)');
@@ -3630,7 +3633,8 @@ async function sendAiMessage() {
         if (sqlEl) sqlEl.textContent = res.sql || '';
         if (rowsEl) rowsEl.textContent = res.rows ? JSON.stringify(res.rows, null, 2) : '';
     } catch (e) {
-        appendAiMessage('assistant', `Error: ${e && e.message ? e.message : String(e)}`);
+        const errorMessage = e?.detail || e?.message || (typeof e === 'string' ? e : JSON.stringify(e));
+        appendAiMessage('assistant', `Error: ${errorMessage}`);
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -3785,7 +3789,10 @@ async function sendPersistentAiMessage() {
     updateAiChatStatus('Thinking...');
     
     try {
-        const res = await makeRequest('/api/v1/ai/chat-db', 'POST', { query: message });
+        const res = await makeRequest('/api/v1/ai/chat-db', 'POST', { 
+            message: message,
+            include_rows: false
+        });
         
         // Add AI response
         const response = res.answer || 'I apologize, but I couldn\'t process your request.';
@@ -3793,8 +3800,8 @@ async function sendPersistentAiMessage() {
         updateAiChatStatus('Response received');
         
     } catch (error) {
-        const errorMsg = error && error.message ? error.message : 'Unknown error occurred';
-        addPersistentAiMessage('assistant', `Error: ${errorMsg}`);
+        const errorMessage = error?.detail || error?.message || (typeof error === 'string' ? error : JSON.stringify(error));
+        addPersistentAiMessage('assistant', `Error: ${errorMessage}`);
         updateAiChatStatus('Error occurred');
     } finally {
         sendBtn.disabled = false;
@@ -3892,7 +3899,8 @@ async function sendAIQuestion() {
         const startTime = Date.now();
         
         const response = await makeRequest('/api/v1/ai/chat-db', 'POST', {
-            query: question
+            message: question,
+            include_rows: false
         });
         
         const responseTime = (Date.now() - startTime) / 1000;
@@ -3907,15 +3915,19 @@ async function sendAIQuestion() {
         
         // Remove typing indicator and add actual response
         removeAIMessage(typingId);
-        addAIMessage('assistant', response.response, false, {
-            mode: response.mode,
-            processingTime: response.processing_time,
-            success: response.success
+        
+        // Handle various response formats - backend returns 'answer' field
+        let aiResponse = response.answer || response.response || response.message || JSON.stringify(response);
+        addAIMessage('assistant', aiResponse, false, {
+            mode: response.mode || 'chat-db',
+            processingTime: response.processing_time || responseTime,
+            success: response.success !== false
         });
         
     } catch (error) {
         removeAIMessage(typingId);
-        addAIMessage('assistant', `Error: ${error.detail || error.message}`, false, { error: true });
+        const errorMessage = error?.detail || error?.message || (typeof error === 'string' ? error : JSON.stringify(error));
+        addAIMessage('assistant', `Error: ${errorMessage}`, false, { error: true });
     } finally {
         // Re-enable input and button
         input.disabled = false;
