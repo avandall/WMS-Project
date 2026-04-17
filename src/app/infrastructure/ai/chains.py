@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 from typing import Any
+import os
 
 from app.infrastructure.ai.database import get_langchain_db
 from app.infrastructure.ai.llm import get_chat_model
 from app.infrastructure.ai.settings import ai_engine_settings
 from app.infrastructure.ai.sql_exec import execute_readonly_sql
+
+# Import advanced RAG engine from lessons
+try:
+    from ai_engine.core.engine import WMSEngine, ProcessingMode
+    from ai_engine.config.settings import settings as ai_settings
+    RAG_ENGINE_AVAILABLE = True
+except ImportError:
+    RAG_ENGINE_AVAILABLE = False
+    print("Warning: Advanced RAG engine not available, falling back to SQL-only mode")
 
 
 def _extract_sql(text: str) -> str:
@@ -149,23 +159,142 @@ def is_relevant_query(question: str) -> bool:
     return result.startswith("true") or result == "yes" or result == "relevant"
 
 
+# Global RAG engine instance (lazy initialization)
+_rag_engine = None
+
+def get_rag_engine():
+    """Get or initialize the RAG engine"""
+    global _rag_engine
+    if _rag_engine is None and RAG_ENGINE_AVAILABLE:
+        try:
+            _rag_engine = WMSEngine(mode=ProcessingMode.HYBRID)
+            # Initialize with sample WMS data if not already done
+            _rag_engine.initialize_sample_data()
+            print("Advanced RAG engine initialized successfully")
+        except Exception as e:
+            print(f"Failed to initialize RAG engine: {e}")
+            _rag_engine = None
+    return _rag_engine
+
+def enhanced_rerank_logic(question: str, docs: list) -> str:
+    """Advanced reranking logic from lesson 4 - using Gemini for intelligent reranking"""
+    if not docs:
+        return ""
+    
+    try:
+        from langchain_core.output_parsers import StrOutputParser
+        from langchain_core.prompts import ChatPromptTemplate
+    except ImportError:
+        # Fallback to simple concatenation if langchain not available
+        return "\n\n".join([doc.page_content for doc in docs[:3]])
+    
+    # Reranking prompt from lesson 4
+    rerank_prompt = ChatPromptTemplate.from_template("""
+    You are a data validation expert. 
+    Based on the user's question, select only the 3 most relevant text passages from the list below.
+    Sort them by relevance in descending order.
+
+    Question: {question}
+
+    Document list:
+    {docs}
+
+    Only return the selected text passages, separated by '---'.
+    """)
+    
+    # Convert docs to string for Gemini
+    docs_str = "\n\n".join([f"Passage {i+1}: {doc.page_content}" for i, doc in enumerate(docs)])
+    
+    try:
+        llm = get_chat_model(temperature=0.1)
+        reranked_content = (rerank_prompt | llm | StrOutputParser()).invoke({
+            "question": question, 
+            "docs": docs_str
+        })
+        return reranked_content
+    except Exception as e:
+        print(f"Reranking failed: {e}")
+        # Fallback to top 3 documents
+        return "\n\n".join([doc.page_content for doc in docs[:3]])
+
+def hybrid_search_with_reranking(question: str) -> dict[str, Any]:
+    """Advanced hybrid search with reranking from lesson 4 and 5"""
+    rag_engine = get_rag_engine()
+    if not rag_engine:
+        return {"answer": "Advanced RAG engine not available", "mode": "unavailable"}
+    
+    try:
+        # Use hybrid mode (combines semantic + keyword search)
+        result = rag_engine.process_query(question, ProcessingMode.HYBRID)
+        
+        if result.get("success", False):
+            answer = result.get("response", "")
+            return {
+                "answer": answer,
+                "mode": result.get("mode", "hybrid"),
+                "success": True
+            }
+        else:
+            return {
+                "answer": "I couldn't find relevant information in the knowledge base.",
+                "mode": "hybrid_failed",
+                "success": False
+            }
+    except Exception as e:
+        print(f"Hybrid search error: {e}")
+        return {"answer": f"Search error: {str(e)}", "mode": "error", "success": False}
+
 def handle_customer_chat_with_db(message: str) -> dict[str, Any]:
-    """Entry point: customer message -> (SQL) -> DB rows -> final answer."""
+    """Enhanced entry point: Try RAG first, fallback to SQL for database queries."""
 
     stripped = (message or "").strip()
-    greetings = {"hi", "hello", "hey", "hola", "สวัสดี", "xin chào", "xin chao"}
+    greetings = {"hi", "hello", "hey", "hola", "sus di", "xin chào", "xin chao"}
     if stripped.lower() in greetings:
         return {
             "sql": "",
             "rows": [],
-            "answer": "Hi! Ask me about products, inventory, documents, customers… (read-only).",
+            "answer": "Hi! I can help with WMS operations using both knowledge base and database queries. Ask me about products, inventory, documents, customers, or general WMS questions!",
         }
 
+    # Try advanced RAG engine first for general knowledge questions
+    rag_engine = get_rag_engine()
+    if rag_engine and not stripped.lower().startswith("sql:"):
+        try:
+            # Use hybrid search with reranking for better results
+            rag_result = hybrid_search_with_reranking(stripped)
+            
+            if rag_result.get("success", False):
+                rag_answer = rag_result.get("answer", "")
+                
+                # If RAG gives a good answer, return it
+                if len(rag_answer) > 50 and "couldn't find" not in rag_answer.lower():
+                    return {
+                        "sql": "",
+                        "rows": [],
+                        "answer": rag_answer,
+                        "mode": rag_result.get("mode", "hybrid"),
+                        "engine_info": "Advanced RAG with reranking"
+                    }
+                # If RAG result is insufficient, try SQL for specific data queries
+                elif is_relevant_query(stripped):
+                    pass  # Continue to SQL processing
+                else:
+                    return {
+                        "sql": "",
+                        "rows": [],
+                        "answer": rag_answer or "I can help with WMS operations. Could you please rephrase your question?",
+                        "mode": "rag_fallback"
+                    }
+        except Exception as e:
+            print(f"RAG engine error: {e}")
+            # Fall back to SQL if RAG fails
+
+    # SQL-based processing for database queries and fallback
     if not is_relevant_query(stripped):
         return {
             "sql": "",
             "rows": [],
-            "answer": "Xin lỗi, tôi chỉ có thể hỗ trợ các thông tin liên quan đến kho hàng và sản phẩm. Bạn vui lòng đặt câu hỏi khác nhé!",
+            "answer": "Xin loi, toi chi co the ho tro cac thong tin lien quan den kho hang va san pham. Ban vui long dat cau hoi khac nhe!",
         }
 
     if stripped.lower().startswith("sql:"):
@@ -175,5 +304,10 @@ def handle_customer_chat_with_db(message: str) -> dict[str, Any]:
 
     rows = execute_readonly_sql(sql)
     answer = summarize_rows(stripped, sql, rows)
-    return {"sql": sql, "rows": rows, "answer": answer}
-
+    
+    return {
+        "sql": sql, 
+        "rows": rows, 
+        "answer": answer,
+        "mode": "sql"
+    }
