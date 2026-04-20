@@ -1,11 +1,12 @@
 import asyncio
 import random
 from datetime import datetime
-from sqlalchemy import select, text
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.core.auth import hash_password
 
-# Import toàn bộ model để tránh lỗi Relationship
+# Import các model chính xác từ project của bạn
 from app.infrastructure.persistence.models.user_table import UserModel
 from app.infrastructure.persistence.models.warehouse_table import WarehouseModel, WarehouseInventoryModel
 from app.infrastructure.persistence.models.product_table import ProductModel
@@ -13,139 +14,108 @@ from app.infrastructure.persistence.models.customer_table import CustomerModel
 from app.infrastructure.persistence.models.document_table import DocumentModel
 from app.infrastructure.persistence.models.document_item_table import DocumentItemModel
 from app.infrastructure.persistence.models.position_table import PositionModel
+from app.infrastructure.persistence.models.position_inventory_table import PositionInventoryModel
 from app.infrastructure.persistence.models.inventory_table import InventoryModel
 from app.infrastructure.persistence.models import *
 
 from faker import Faker
 fake = Faker(['vi_VN'])
 
-async def reset_sequences(db):
-    """Sửa lỗi trùng ID bằng cách đặt lại bộ đếm của Postgres"""
-    print("🔄 Resetting database sequences...")
-    tables_pks = {
-        'users': 'user_id',
-        'warehouses': 'warehouse_id',
-        'products': 'product_id',
-        'customers': 'customer_id',
-        'documents': 'document_id',
-        'positions': 'id'
-    }
-    for table, pk in tables_pks.items():
-        try:
-            db.execute(text(f"SELECT setval(pg_get_serial_sequence('{table}', '{pk}'), coalesce(max({pk}), 1), max({pk}) IS NOT NULL) FROM {table};"))
-        except Exception as e:
-            print(f"⚠️ Skip reset for {table}: {e}")
-    db.commit()
-
-async def seed_everything():
+async def run_seed():
     db = SessionLocal()
-    print("🏗️  Bắt đầu nạp dữ liệu WMS v3 (Fixed Roles + Customers)...")
-    
     try:
-        # 1. Reset ID
-        await reset_sequences(db)
-
-        # 2. TẠO USERS (Sử dụng đúng Role hệ thống cho phép)
-        print("👥 Creating users with valid roles...")
-        valid_users = [
-            ("admin@wms.com", "admin", "Hệ Thống Admin"),
-            ("ketoan@wms.com", "accountant", "Kế Toán Trưởng"),
-            ("banhang@wms.com", "sales", "Trưởng Phòng Kinh Doanh"),
-            ("thukho@wms.com", "warehouse", "Thủ Kho Tổng"),
-            ("khach@wms.com", "user", "Người Dùng Phụ")
+        print("🧹 Đang dọn dẹp dữ liệu cũ...")
+        tables = [
+            "position_inventory", "warehouse_inventory", "document_items", 
+            "documents", "inventory", "positions", "products", 
+            "customer_purchases", "customers", "warehouses", "users"
         ]
-        for email, role, name in valid_users:
-            existing = db.execute(select(UserModel).where(UserModel.email == email)).scalar_one_or_none()
-            if not existing:
-                db.add(UserModel(
-                    email=email,
-                    hashed_password=hash_password("Admin123!"),
-                    role=role,
-                    full_name=name,
-                    is_active=1
-                ))
+        db.execute(text(f"TRUNCATE TABLE {', '.join(tables)} RESTART IDENTITY CASCADE"))
+        db.commit()
+
+        # 1. TẠO USERS
+        print("👤 Đang tạo tài khoản người dùng...")
+        target_users = [
+            {"email": "admin@wms.com", "name": "System Admin", "role": "admin"},
+            {"email": "manager@wms.com", "name": "Warehouse Manager", "role": "warehouse"},
+            {"email": "guest@wms.com", "name": "Guest User", "role": "user"}
+        ]
+        for u in target_users:
+            db.add(UserModel(
+                email=u["email"],
+                full_name=u["name"],
+                hashed_password=hash_password("admin123"),
+                role=u["role"],
+                is_active=1
+            ))
         db.flush()
 
-        # 3. TẠO KHÁCH HÀNG (Dữ liệu mới yêu cầu)
-        print("👥 Creating 20 sample customers...")
+        # 2. TẠO WAREHOUSES & POSITIONS
+        print("🏠 Đang tạo kho và vị trí kệ...")
+        warehouses = []
+        positions = []
+        for i in range(2):
+            wh = WarehouseModel(location=f"Kho {fake.city()} - Khu vực {i+1}")
+            db.add(wh)
+            db.flush()
+            warehouses.append(wh)
+            
+            for shelf in ["A", "B"]:
+                for b in range(1, 3):
+                    pos = PositionModel(
+                        warehouse_id=wh.warehouse_id,
+                        code=f"{shelf}-{b:02d}",
+                        type="STORAGE",
+                        is_active=1
+                    )
+                    db.add(pos)
+                    positions.append(pos)
+        db.flush()
+
+        # 3. TẠO CUSTOMERS
+        print("🤝 Đang tạo khách hàng...")
         customers = []
-        for _ in range(20):
+        for _ in range(5):
             cust = CustomerModel(
-                name=fake.name(),
+                name=fake.company(),
                 email=fake.email(),
                 phone=fake.phone_number(),
                 address=fake.address(),
-                debt_balance=random.uniform(0, 5000000)
+                debt_balance=0.0
             )
             db.add(cust)
+            db.flush()
             customers.append(cust)
-        db.flush()
 
-        # 4. TẠO KHO
-        print("📍 Creating warehouses...")
-        warehouses = []
-        for loc_name in ["Kho Miền Bắc", "Kho Miền Nam", "Kho Miền Trung", "Kho Miền Tây"]:
-            wh = db.execute(select(WarehouseModel).where(WarehouseModel.location == loc_name)).scalar_one_or_none()
-            if not wh:
-                wh = WarehouseModel(location=loc_name)
-                db.add(wh)
-                db.flush()
-            warehouses.append(wh)
-
-        # 5. TẠO SẢN PHẨM RAG (Metadata phong phú)
-        print("📦 Creating realistic products for AI RAG...")
-        # Danh sách sản phẩm thực tế theo ngành hàng
-        sample_data = [
-            {"cat": "Điện tử", "items": ["Máy hàn thiếc Quick 936A", "Đồng hồ vạn năng Fluke", "Kính hiển vi soi mạch", "Bo mạch chủ Asus H510"]},
-            {"cat": "Cơ khí", "items": ["Máy mài cầm tay Bosch", "Bộ cờ lê vòng miệng", "Thước kẹp điện tử Mitutoyo", "Mũi khoan bê tông"]},
-            {"cat": "Gỗ", "items": ["Máy bào gỗ Makita", "Keo dán gỗ chuyên dụng", "Bộ đục gỗ cầm tay", "Gỗ thông tấm nhập khẩu"]},
-            {"cat": "Vật liệu may", "items": ["Cuộn vải thun Cotton", "Chỉ may công nghiệp", "Khóa kéo YKK", "Phấn may cao cấp"]}
-        ]
-
-        products = []
-        p_id_counter = 6000
-        for entry in sample_data:
-            cat = entry["cat"]
-            for item_name in entry["items"]:
-                p = ProductModel(
-                    product_id=p_id_counter,
-                    name=item_name,
-                    description=f"Sản phẩm thuộc nhóm {cat}. Chất lượng đạt chuẩn {random.choice(['ISO 9001', 'TCCS', 'Japan Standard'])}. Ứng dụng rộng rãi trong sản xuất {cat.lower()}.",
-                    price=random.uniform(200000, 5000000)
-                )
-                db.add(p)
-                products.append(p)
-                p_id_counter += 1
-        db.flush()
-
-        # 6. TẠO TỒN KHO (Inventory & Warehouse Inventory)
-        print("📊 Adding stock levels to inventory...")
-        for p in products:
-            # A. Tồn kho tổng (Bảng inventory)
-            total_qty = random.randint(100, 500)
-            inv = InventoryModel(
-                product_id=p.product_id,
-                quantity=total_qty
+        # 4. TẠO PRODUCTS (Khởi tạo danh sách 'products' tại đây để tránh lỗi undefined)
+        print("📦 Đang tạo sản phẩm...")
+        products = [] # Đã định nghĩa biến này
+        for i in range(1, 11):
+            p = ProductModel(
+                product_id=2000 + i,
+                name=fake.catch_phrase(),
+                description=f"Sản phẩm công nghiệp {i}",
+                price=random.uniform(100000, 1000000)
             )
-            db.add(inv)
+            db.add(p)
+            db.flush()
+            products.append(p) # Lưu vào list để dùng cho bước sau
 
-            # B. Phân bổ tồn kho vào các kho cụ thể (Bảng warehouse_inventory)
-            # Giả sử chia hàng vào 2 kho hiện có
-            for wh in warehouses:
-                share_qty = total_qty // len(warehouses) # Chia đều hoặc random
-                wh_inv = WarehouseInventoryModel(
-                    warehouse_id=wh.warehouse_id,
-                    product_id=p.product_id,
-                    quantity=share_qty
-                )
-                db.add(wh_inv)
-                
-        db.flush()
-        print(f"✅ Added {len(products)} products with stock levels.")
+        # 5. TẠO INVENTORY & STOCK
+        print("📉 Đang đổ hàng vào kho...")
+        for p in products:
+            # Tồn kho tổng
+            db.add(InventoryModel(product_id=p.product_id, quantity=100))
+            # Tồn kho tại kho cụ thể
+            wh = random.choice(warehouses)
+            db.add(WarehouseInventoryModel(warehouse_id=wh.warehouse_id, product_id=p.product_id, quantity=100))
+            # Tồn kho tại vị trí cụ thể
+            pos = random.choice([p_pos for p_pos in positions if p_pos.warehouse_id == wh.warehouse_id])
+            db.add(PositionInventoryModel(position_id=pos.id, product_id=p.product_id, quantity=100))
 
-        # 7. TẠO CHỨNG TỪ (Đảm bảo có Warehouse và Customer)
-        print("📄 Creating documents with full links...")
-        for i in range(15):
+        # 6. TẠO DOCUMENTS (Sửa lỗi Source Warehouse)
+        print("📄 Đang tạo chứng từ nhập xuất...")
+        for i in range(10):
             doc_type = "IMPORT" if i % 2 == 0 else "EXPORT"
             wh = random.choice(warehouses)
             cust = random.choice(customers)
@@ -154,32 +124,35 @@ async def seed_everything():
                 doc_type=doc_type,
                 status="POSTED",
                 created_by="admin@wms.com",
+                customer_id=cust.customer_id,
+                # EXPORT cần from_warehouse, IMPORT cần to_warehouse
                 from_warehouse_id=wh.warehouse_id if doc_type == "EXPORT" else None,
                 to_warehouse_id=wh.warehouse_id if doc_type == "IMPORT" else None,
-                customer_id=cust.customer_id,
                 created_at=datetime.now()
             )
             db.add(doc)
             db.flush()
             
-            # Thêm sản phẩm vào chứng từ
-            selected_products = random.sample(products, 2)
-            for p in selected_products:
-                db.add(DocumentItemModel(
-                    document_id=doc.document_id,
-                    product_id=p.product_id,
-                    quantity=random.randint(1, 100),
-                    unit_price=p.price
-                ))
+            # Chọn ngẫu nhiên sản phẩm từ danh sách 'products' đã tạo ở bước 4
+            p_selected = random.choice(products)
+            db.add(DocumentItemModel(
+                document_id=doc.document_id,
+                product_id=p_selected.product_id,
+                quantity=random.randint(5, 20),
+                unit_price=p_selected.price
+            ))
 
         db.commit()
-        print("✨ SEED COMPLETED: Fixed Roles, Added Customers, and Linked Warehouses!")
+        print("\n" + "="*40)
+        print("✨ SEED COMPLETED SUCCESSFULLY!")
+        print(f"Tài khoản Admin: admin@wms.com / admin123")
+        print("="*40)
 
     except Exception as e:
-        print(f"❌ Error during seeding: {e}")
+        print(f"❌ Lỗi: {e}")
         db.rollback()
     finally:
         db.close()
 
 if __name__ == "__main__":
-    asyncio.run(seed_everything())
+    asyncio.run(run_seed())

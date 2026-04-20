@@ -1165,7 +1165,7 @@ class EnhancedWMSTools:
                 raise Exception("Database engine not initialized")
             
             with self.engine.connect() as conn:
-                # Get all inventory items with safety stock comparison
+                # Get all inventory items with actual safety_stock and reorder_point from seed.py
                 if include_safety_stock:
                     query = text("""
                         SELECT sku, quantity, product_name, safety_stock, reorder_point,
