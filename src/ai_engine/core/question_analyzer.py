@@ -89,8 +89,10 @@ Analyze the following question and classify it into one of these categories:
    - Inventory levels for specific SKUs/products
    - Order status and tracking
    - Location information and warehouse data
+   - ABC analysis and slotting recommendations
    - Questions containing specific identifiers (SKU codes, order IDs, location codes)
    - "How many", "Where is", "What is the status of" type questions with specific entities
+   - "ABC analysis", "slotting", "storage recommendation", "optimal location" queries
 
 3. **COMPLEX** - Questions that likely need both:
    - Multi-step processes requiring both knowledge and data
