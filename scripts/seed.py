@@ -5,6 +5,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.core.auth import hash_password
+from app.core.database import Base, engine
 
 # Import các model chính xác từ project của bạn
 from app.infrastructure.persistence.models.user_table import UserModel
@@ -16,19 +17,29 @@ from app.infrastructure.persistence.models.document_item_table import DocumentIt
 from app.infrastructure.persistence.models.position_table import PositionModel
 from app.infrastructure.persistence.models.position_inventory_table import PositionInventoryModel
 from app.infrastructure.persistence.models.inventory_table import InventoryModel
+from app.infrastructure.persistence.models.audit_log_table import AuditLogModel
+from app.infrastructure.persistence.models.audit_event_table import AuditEventModel
 from app.infrastructure.persistence.models import *
 
 from faker import Faker
 fake = Faker(['vi_VN'])
 
 async def run_seed():
+    # 1. Đảm bảo bảng tồn tại (Sử dụng engine đồng bộ)
+    print("🏗️  Đang khởi tạo cấu trúc bảng (Schema)...")
+    from app.core.database import engine, Base
+    
+    # Quan trọng: Lệnh này sẽ tạo tất cả các bảng đã được import ở trên
+    Base.metadata.create_all(bind=engine) 
+    print("✅ Cấu trúc bảng đã sẵn sàng.")
+
     db = SessionLocal()
     try:
         print("🧹 Đang dọn dẹp dữ liệu cũ...")
         tables = [
             "position_inventory", "warehouse_inventory", "document_items", 
             "documents", "inventory", "positions", "products", 
-            "customer_purchases", "customers", "warehouses", "users"
+            "customer_purchases", "customers", "warehouses", "users", "audit_logs", "audit_events"
         ]
         db.execute(text(f"TRUNCATE TABLE {', '.join(tables)} RESTART IDENTITY CASCADE"))
         db.commit()
