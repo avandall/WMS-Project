@@ -16,7 +16,10 @@ class HybridRetriever(BaseRetriever):
     """Hybrid retriever combining semantic and keyword search"""
     
     def __init__(self):
-        self.embeddings = HuggingFaceEmbeddings(model_name=settings.EMBEDDING_MODEL)
+        self.embeddings = HuggingFaceEmbeddings(
+            model_name=settings.EMBEDDING_MODEL,
+            model_kwargs={'device': settings.EMBEDDING_DEVICE}
+        )
         self.vectorstore = Chroma(
             persist_directory=settings.VECTOR_DB_PATH,
             embedding_function=self.embeddings

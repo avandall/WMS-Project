@@ -80,26 +80,46 @@ def calculate_retrieval_metrics(retrieved_docs: List[str], relevant_docs: List[s
 
 
 def create_wms_sample_data() -> List[Dict[str, Any]]:
-    """Create sample WMS data for testing"""
+    """Create realistic WMS data based on actual database schema"""
     return [
         {
-            "text": "Warehouse Management System (WMS) is a software solution that helps manage and optimize daily warehouse operations including inventory management, order fulfillment, and shipping.",
-            "metadata": {"source": "wms_docs", "category": "overview"}
+            "text": "Warehouse Management System (WMS) manages multiple warehouses with storage positions organized by shelf codes (A-01, A-02, B-01, B-02). Each position has type STORAGE and is linked to specific warehouse locations. The system tracks inventory at three levels: total inventory, warehouse-level inventory, and position-level inventory.",
+            "metadata": {"source": "wms_docs", "category": "warehouse_structure"}
         },
         {
-            "text": "Inventory tracking in WMS involves real-time monitoring of stock levels, locations, and movements. This helps prevent stockouts and overstocking situations.",
-            "metadata": {"source": "wms_docs", "category": "inventory"}
+            "text": "Product management in WMS includes product_id (2001-2010), product name, description, and pricing. Each product has inventory tracking with quantity monitoring across different warehouses and positions. Products can be moved between locations through import/export documents.",
+            "metadata": {"source": "wms_docs", "category": "product_management"}
         },
         {
-            "text": "Order fulfillment process in WMS includes order picking, packing, and shipping. The system optimizes picking routes and assigns tasks to warehouse staff.",
-            "metadata": {"source": "wms_docs", "category": "fulfillment"}
+            "text": "Document system handles IMPORT and EXPORT transactions with POSTED status. Each document has source/destination warehouse, customer information, and contains multiple document items with quantities and unit prices. Documents are created by users and include timestamps for tracking.",
+            "metadata": {"source": "wms_docs", "category": "document_management"}
         },
         {
-            "text": "WMS provides real-time visibility into warehouse operations through dashboards and reports. Managers can track KPIs like order accuracy, fulfillment time, and inventory turnover.",
-            "metadata": {"source": "wms_docs", "category": "reporting"}
+            "text": "Customer management includes company name, email, phone, address, and debt balance tracking. Each customer can be linked to multiple documents for import/export transactions. The system maintains customer relationships and financial records.",
+            "metadata": {"source": "wms_docs", "category": "customer_management"}
         },
         {
-            "text": "Barcode scanning and RFID technology are integrated with WMS to automate data capture and reduce manual errors in inventory management.",
-            "metadata": {"source": "wms_docs", "category": "technology"}
+            "text": "User roles in WMS include admin, warehouse manager, and regular users. Admin users have full system access, warehouse managers handle operations, and regular users have limited permissions. All users have email authentication and active status tracking.",
+            "metadata": {"source": "wms_docs", "category": "user_management"}
+        },
+        {
+            "text": "Inventory flow: Products start with total quantity (100 units), distributed to warehouses (100 units per warehouse), then further distributed to specific positions (100 units per position). This three-tier inventory system ensures accurate tracking at each level.",
+            "metadata": {"source": "wms_docs", "category": "inventory_flow"}
+        },
+        {
+            "text": "Position inventory tracking links specific positions to products with quantity monitoring. Each position belongs to a warehouse and stores specific product quantities. This enables precise location-based inventory management and picking operations.",
+            "metadata": {"source": "wms_docs", "category": "position_inventory"}
+        },
+        {
+            "text": "Audit logging system tracks all changes with audit_logs and audit_events tables. This maintains comprehensive records of system operations, user actions, and data modifications for compliance and troubleshooting purposes.",
+            "metadata": {"source": "wms_docs", "category": "audit_system"}
+        },
+        {
+            "text": "Document items represent individual product transactions within documents. Each item includes product_id, quantity, and unit_price, allowing for detailed tracking of specific product movements and financial calculations.",
+            "metadata": {"source": "wms_docs", "category": "document_items"}
+        },
+        {
+            "text": "Warehouse inventory provides intermediate tracking between total inventory and position inventory. Each warehouse maintains its own product quantities, enabling regional inventory management and transfer operations between warehouses.",
+            "metadata": {"source": "wms_docs", "category": "warehouse_inventory"}
         }
     ]

@@ -19,6 +19,7 @@ class Settings:
     # Embedding Configuration
     EMBEDDING_PROVIDER: str = os.getenv("EMBEDDING_PROVIDER", "huggingface")
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+    EMBEDDING_DEVICE: str = os.getenv("EMBEDDING_DEVICE", "cpu")
     
     # Database Configuration
     VECTOR_DB_PATH: str = os.getenv("VECTOR_DB_PATH", "./vector_db")
@@ -30,7 +31,7 @@ class Settings:
     VECTOR_WEIGHT: float = float(os.getenv("VECTOR_WEIGHT", "0.5"))
     
     # Evaluation Configuration
-    QUALITY_THRESHOLD: float = float(os.getenv("QUALITY_THRESHOLD", "0.7"))
+    QUALITY_THRESHOLD: float = float(os.getenv("QUALITY_THRESHOLD", "0.3"))
     
     # API Keys
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")

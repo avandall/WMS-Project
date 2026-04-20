@@ -10,7 +10,6 @@ from ..retrieval import HybridRetriever, DocumentProcessor
 from ..generation import LLMGenerator
 from ..utils import logger, validate_api_keys, create_wms_sample_data
 from ..config import settings
-from .question_analyzer import QuestionAnalyzer
 
 
 class ProcessingMode(Enum):
@@ -23,13 +22,12 @@ class ProcessingMode(Enum):
 class WMSEngine:
     """Main WMS AI Engine that orchestrates all components"""
     
-    def __init__(self, mode: ProcessingMode = ProcessingMode.RAG, auto_mode_selection: bool = True):
+    def __init__(self, mode: ProcessingMode = ProcessingMode.RAG):
         self.mode = mode
-        self.auto_mode_selection = auto_mode_selection
         self._validate_configuration()
         self._initialize_components()
         
-        logger.info(f"WMS AI Engine initialized in {mode.value} mode with auto_selection={auto_mode_selection}")
+        logger.info(f"WMS AI Engine initialized in {mode.value} mode")
     
     def _validate_configuration(self):
         """Validate API keys and configuration"""
@@ -52,9 +50,6 @@ class WMSEngine:
         self.rag_workflow = AdvancedRAGWorkflow()
         self.wms_agent = WMSAgent()
         
-        # Question analyzer for intelligent mode selection
-        self.question_analyzer = QuestionAnalyzer()
-        
         logger.info("All components initialized successfully")
     
     def process_query(self, question: str, mode: Optional[ProcessingMode] = None) -> Dict[str, Any]:
@@ -68,52 +63,26 @@ class WMSEngine:
         Returns:
             Dictionary containing response and metadata
         """
-        # Determine processing mode
-        if mode:
-            processing_mode = mode
-            analysis_result = None
-        elif self.auto_mode_selection:
-            # Use AI to analyze question and select mode
-            analysis_result = self.question_analyzer.analyze_question(question)
-            processing_mode = ProcessingMode(analysis_result["recommended_mode"])
-            logger.info(f"Auto-selected {processing_mode.value} mode for question: {question[:100]}...")
-        else:
-            processing_mode = self.mode
-            analysis_result = None
-            
+        processing_mode = mode or self.mode
+        
         logger.info(f"Processing query in {processing_mode.value} mode: {question[:100]}...")
         
         try:
-            # Base response structure
-            base_response = {
-                "mode": processing_mode.value,
-                "success": True,
-                "question": question
-            }
-            
-            # Add analysis metadata if available
-            if analysis_result:
-                base_response.update({
-                    "auto_selected": True,
-                    "question_type": analysis_result["question_type"],
-                    "confidence": analysis_result["confidence"],
-                    "reasoning": analysis_result["reasoning"],
-                    "entities": analysis_result["entities"],
-                    "keywords": analysis_result["keywords"],
-                    "analysis_summary": self.question_analyzer.get_analysis_summary(analysis_result)
-                })
-            else:
-                base_response["auto_selected"] = False
-            
             if processing_mode == ProcessingMode.RAG:
                 response = self.rag_workflow.process(question)
-                base_response["response"] = response
-                return base_response
+                return {
+                    "response": response,
+                    "mode": "rag",
+                    "success": True
+                }
             
             elif processing_mode == ProcessingMode.AGENT:
                 response = self.wms_agent.process(question)
-                base_response["response"] = response
-                return base_response
+                return {
+                    "response": response,
+                    "mode": "agent",
+                    "success": True
+                }
             
             elif processing_mode == ProcessingMode.HYBRID:
                 # Try RAG first, fallback to agent if needed
@@ -123,15 +92,18 @@ class WMSEngine:
                 if len(rag_response) < 50 or "couldn't find" in rag_response.lower():
                     logger.info("RAG response insufficient, trying agent mode")
                     agent_response = self.wms_agent.process(question)
-                    base_response.update({
+                    return {
                         "response": agent_response,
                         "mode": "agent_fallback",
+                        "success": True,
                         "rag_response": rag_response
-                    })
-                    return base_response
+                    }
                 
-                base_response["response"] = rag_response
-                return base_response
+                return {
+                    "response": rag_response,
+                    "mode": "rag",
+                    "success": True
+                }
             
         except Exception as e:
             logger.error(f"Error processing query: {str(e)}")
@@ -139,8 +111,7 @@ class WMSEngine:
                 "response": f"Error processing your request: {str(e)}",
                 "mode": processing_mode.value,
                 "success": False,
-                "error": str(e),
-                "question": question
+                "error": str(e)
             }
     
     def add_documents(self, documents: list, metadatas: list = None):
