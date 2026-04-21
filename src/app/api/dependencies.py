@@ -27,6 +27,7 @@ from app.infrastructure.persistence.repositories.position_repo import PositionRe
 from app.infrastructure.persistence.repositories.product_repo import ProductRepo
 from app.infrastructure.persistence.repositories.user_repo import UserRepo
 from app.infrastructure.persistence.repositories.warehouse_repo import WarehouseRepo
+from .service_factory import ServiceFactory
 
 
 def get_product_repo(db: Session = Depends(get_session)) -> ProductRepo:
@@ -123,6 +124,16 @@ def get_customer_service(db: Session = Depends(get_session)) -> CustomerService:
 
 def get_user_service(db: Session = Depends(get_session)) -> UserService:
     return UserService(user_repo=UserRepo(db))
+
+
+def get_service_factory(db: Session = Depends(get_session)) -> ServiceFactory:
+    """Get service factory following DIP principle."""
+    return ServiceFactory(db)
+
+
+def get_product_service(factory: ServiceFactory = Depends(get_service_factory)) -> ProductService:
+    """Get product service using factory pattern."""
+    return factory.get_product_service()
 
 
 def get_repository_container(db: Session = Depends(get_session)) -> RepositoryContainerImpl:

@@ -1,7 +1,7 @@
 """Command pattern implementation for business operations."""
 
 from .product_commands import CreateProductCommand, UpdateProductCommand, DeleteProductCommand
-from .product_handlers import ProductCommandHandler
+from .command_handlers import ProductCommandHandler
 
 __all__ = [
     "CreateProductCommand",
