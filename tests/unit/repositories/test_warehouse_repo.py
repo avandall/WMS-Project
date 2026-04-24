@@ -366,12 +366,18 @@ class TestWarehouseRepo:
         mock_session.get.return_value = sample_warehouse_model
         
         # Create inventory models
-        inventory_model1 = WarehouseInventoryModel(warehouse_id=1, product_id=1, quantity=50)
-        inventory_model2 = WarehouseInventoryModel(warehouse_id=1, product_id=2, quantity=30)
+        inventory_model1 = Mock(spec=WarehouseInventoryModel)
+        inventory_model1.product_id = 1
+        inventory_model1.quantity = 50
+        inventory_model2 = Mock(spec=WarehouseInventoryModel)
+        inventory_model2.product_id = 2
+        inventory_model2.quantity = 30
         
         # Mock session.execute to return inventory models
         mock_result = Mock()
-        mock_result.scalars.return_value.all.return_value = [inventory_model1, inventory_model2]
+        mock_scalars = Mock()
+        mock_scalars.__iter__ = Mock(return_value=iter([inventory_model1, inventory_model2]))
+        mock_result.scalars.return_value = mock_scalars
         mock_session.execute.return_value = mock_result
         
         result = warehouse_repo.get_warehouse_inventory(1)
@@ -403,7 +409,9 @@ class TestWarehouseRepo:
         
         # Mock session.execute to return empty list
         mock_result = Mock()
-        mock_result.scalars.return_value.all.return_value = []
+        mock_scalars = Mock()
+        mock_scalars.__iter__ = Mock(return_value=iter([]))
+        mock_result.scalars.return_value = mock_scalars
         mock_session.execute.return_value = mock_result
         
         result = warehouse_repo.get_warehouse_inventory(1)
@@ -462,10 +470,22 @@ class TestWarehouseRepo:
         # Mock session.get to return warehouse model
         mock_session.get.return_value = sample_warehouse_model
         
+        # Mock session.new and session.dirty to be iterable
+        mock_session.new = []
+        mock_session.dirty = []
+        
+        # Mock execute to return an existing inventory row
+        mock_inventory_row = Mock(spec=WarehouseInventoryModel)
+        mock_inventory_row.quantity = 10  # Existing quantity
+        
+        mock_result = Mock()
+        mock_result.scalar_one_or_none.return_value = mock_inventory_row
+        mock_session.execute.return_value = mock_result
+        
         warehouse_repo.add_product_to_warehouse(warehouse_id=1, product_id=1, quantity=0)
         
-        # Verify quantity was updated (even if zero)
-        # This depends on the implementation - assuming it allows zero
+        # Verify quantity was updated (should remain 10 + 0 = 10)
+        assert mock_inventory_row.quantity == 10
 
     # ============================================================================
     # REMOVE PRODUCT FROM WAREHOUSE TESTS
@@ -602,7 +622,9 @@ class TestWarehouseRepo:
         warehouse_model = WarehouseModel(warehouse_id=1, location="Test Warehouse")
         warehouse_model.inventory_items = [inventory_item]
         
-        result = WarehouseRepo._to_domain(warehouse_model)
+        # Create a warehouse repo instance to call the instance method
+        repo = WarehouseRepo(session=Mock())
+        result = repo._to_domain(warehouse_model)
         
         # Verify conversion
         assert result.warehouse_id == 1
@@ -617,7 +639,9 @@ class TestWarehouseRepo:
         warehouse_model = WarehouseModel(warehouse_id=1, location="Test Warehouse")
         warehouse_model.inventory_items = []
         
-        result = WarehouseRepo._to_domain(warehouse_model)
+        # Create a warehouse repo instance to call the instance method
+        repo = WarehouseRepo(session=Mock())
+        result = repo._to_domain(warehouse_model)
         
         # Verify conversion
         assert result.warehouse_id == 1
@@ -632,7 +656,9 @@ class TestWarehouseRepo:
         warehouse_model = WarehouseModel(warehouse_id=1, location="Test Warehouse")
         warehouse_model.inventory_items = [inventory_item1, inventory_item2]
         
-        result = WarehouseRepo._to_domain(warehouse_model)
+        # Create a warehouse repo instance to call the instance method
+        repo = WarehouseRepo(session=Mock())
+        result = repo._to_domain(warehouse_model)
         
         # Verify conversion
         assert len(result.inventory) == 2
@@ -653,6 +679,10 @@ class TestWarehouseRepo:
         
         # Save warehouse
         warehouse_repo.save(sample_warehouse)
+        
+        # Reset side_effect for get operation
+        mock_session.get.side_effect = None
+        mock_session.get.return_value = warehouse_model
         
         # Get warehouse
         result = warehouse_repo.get(1)
@@ -787,7 +817,7 @@ class TestWarehouseRepo:
         # Mock session.delete to raise exception
         mock_session.delete.side_effect = Exception("Database error")
         
-        with pytest.raises(Exception, match="Database error"):
+        with pytest.raises(ValidationError, match="Cannot delete warehouse 1: it is referenced by existing documents"):
             warehouse_repo.delete(1)
 
     def test_add_product_database_error_handling(self, warehouse_repo, mock_session, sample_warehouse_model):

@@ -1,13 +1,18 @@
 #!/bin/bash
-
-# Test runner script for WMS project
-# This script ensures PYTHONPATH is set correctly before running pytest
-
 set -e
 
-# Set PYTHONPATH to include src directory
-export PYTHONPATH="${PYTHONPATH}:$(pwd)/src"
+# 1. Đảm bảo dùng đúng môi trường ảo
+if [ -d ".venv" ]; then
+    source .venv/bin/activate
+fi
 
-# Run pytest with all arguments passed to this script
-echo "Running tests with PYTHONPATH=${PYTHONPATH}"
-pytest "$@"
+# 2. Thiết lập PYTHONPATH (Dùng đường dẫn tuyệt đối để chắc chắn)
+export PYTHONPATH="$(pwd)/src:$(pwd)"
+
+echo "--- Debug Info ---"
+echo "Python Path: $(which python)"
+echo "PYTHONPATH: $PYTHONPATH"
+echo "------------------"
+
+# 3. Chạy test thông qua module python để tránh lỗi import
+python3 -m pytest "$@"

@@ -515,6 +515,10 @@ class TestProductRepo:
         # Save product
         product_repo.save(sample_product)
         
+        # Reset side_effect for delete operation
+        mock_session.get.side_effect = None
+        mock_session.get.return_value = product_model  # Return the saved product model
+        
         # Delete product
         with patch('app.infrastructure.persistence.repositories.product_repo.InventoryModel') as mock_inventory_model:
             mock_inventory_model.return_value = Mock()

@@ -27,13 +27,31 @@ except ImportError:
     JWT_AVAILABLE = False
     jwt = Mock()
 
+# Import Permission directly since it's just an enum
+try:
+    from app.core.permissions import Permission
+except ImportError:
+    # Create a mock Permission enum if the import fails
+    from enum import Enum
+    class Permission(str, Enum):
+        VIEW_PRODUCTS = "view_products"
+        VIEW_INVENTORY = "view_inventory"
+        VIEW_REPORTS = "view_reports"
+        MANAGE_PRODUCTS = "manage_products"
+        EDIT_PRICES = "edit_prices"
+        MANAGE_WAREHOUSES = "manage_warehouses"
+        DOC_CREATE_IMPORT = "doc_create_import"
+        DOC_CREATE_EXPORT = "doc_create_export"
+        DOC_CREATE_TRANSFER = "doc_create_transfer"
+        DOC_POST = "doc_post"
+        MANAGE_USERS = "manage_users"
+
 # Make app imports conditional
 try:
     from app.domain.entities.user import User
     from app.application.services.user_service import UserService
     from app.api.auth_deps import get_current_user, require_permissions
     from app.api.authorization import ProductAuthorizer
-    from app.core.permissions import Permission
     APP_IMPORTS_AVAILABLE = True
 except ImportError:
     APP_IMPORTS_AVAILABLE = False
@@ -42,7 +60,6 @@ except ImportError:
     get_current_user = Mock
     require_permissions = Mock
     ProductAuthorizer = Mock
-    Permission = Mock
 # Authentication and Authorization errors are not in domain exceptions, so we create them
 class AuthenticationError(Exception):
     """Authentication failed error"""

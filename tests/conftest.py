@@ -77,9 +77,10 @@ def lazy_load_app():
         return
     try:
         from app.api import app as _app
-
         app = _app
-    except (ImportError, ModuleNotFoundError):
+        APP_AVAILABLE = True # Nhớ gán lại True nếu thành công
+    except (ImportError, ModuleNotFoundError) as e:
+        print(f"\n[CRITICAL] Lazy load failed: {e}") # In lỗi thật ra đây
         APP_AVAILABLE = False
         raise
 

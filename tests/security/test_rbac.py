@@ -14,6 +14,25 @@ except ImportError:
     FASTAPI_AVAILABLE = False
     TestClient = Mock
 
+# Import Permission directly since it's just an enum
+try:
+    from app.core.permissions import Permission
+except ImportError:
+    # Create a mock Permission enum if the import fails
+    from enum import Enum
+    class Permission(str, Enum):
+        VIEW_PRODUCTS = "view_products"
+        VIEW_INVENTORY = "view_inventory"
+        VIEW_REPORTS = "view_reports"
+        MANAGE_PRODUCTS = "manage_products"
+        EDIT_PRICES = "edit_prices"
+        MANAGE_WAREHOUSES = "manage_warehouses"
+        DOC_CREATE_IMPORT = "doc_create_import"
+        DOC_CREATE_EXPORT = "doc_create_export"
+        DOC_CREATE_TRANSFER = "doc_create_transfer"
+        DOC_POST = "doc_post"
+        MANAGE_USERS = "manage_users"
+
 # Make app imports conditional
 try:
     from app.api import app

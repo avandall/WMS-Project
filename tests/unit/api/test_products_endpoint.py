@@ -4,7 +4,8 @@ Covers all product endpoints, validation, error handling, and business logic
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, patch
+from unittest import mock
 from io import BytesIO
 import csv
 import json
@@ -17,7 +18,7 @@ try:
 except ImportError:
     FASTAPI_AVAILABLE = False
     HTTPException = Exception
-    TestClient = Mock
+    TestClient = mock.Mock
 
 try:
     from app.api.v1.endpoints.products import router
@@ -26,17 +27,18 @@ try:
     API_IMPORTS_AVAILABLE = True
 except ImportError:
     API_IMPORTS_AVAILABLE = False
-    router = Mock()
-    ProductCreate = Mock
-    ProductUpdate = Mock
-    ProductResponse = Mock
-    Permission = Mock
+    router = mock.Mock()
+    ProductCreate = mock.Mock
+    ProductUpdate = mock.Mock
+    ProductResponse = mock.Mock
+    Permission = mock.Mock
 
 from app.application.services.product_service import ProductService
 from app.domain.entities.product import Product
 
 
 
+@pytest.mark.skipif(not API_IMPORTS_AVAILABLE, reason="API dependencies not available")
 class TestProductsEndpoint:
     """Test Products API Endpoints"""
 
@@ -46,20 +48,20 @@ class TestProductsEndpoint:
 
     @pytest.fixture
     def mock_product_service(self):
-        """Mock ProductService"""
-        service = Mock(spec=ProductService)
-        service.get_all_products = Mock()
-        service.create_product = Mock()
-        service.get_product_details = Mock()
-        service.update_product = Mock()
-        service.delete_product = Mock()
-        service.import_products = Mock()
+        """mock.Mock ProductService"""
+        service = mock.Mock(spec=ProductService)
+        service.get_all_products = mock.Mock()
+        service.create_product = mock.Mock()
+        service.get_product_details = mock.Mock()
+        service.update_product = mock.Mock()
+        service.delete_product = mock.Mock()
+        service.import_products = mock.Mock()
         return service
 
     @pytest.fixture
     def mock_current_user(self):
-        """Mock current user"""
-        user = Mock()
+        """mock.Mock current user"""
+        user = mock.Mock()
         user.role = "admin"
         user.user_id = 1
         return user
@@ -95,11 +97,11 @@ class TestProductsEndpoint:
 
     @pytest.fixture
     def mock_dependencies(self):
-        """Mock all dependencies"""
+        """mock.Mock all dependencies"""
         return {
-            "get_current_user": Mock(return_value=mock_current_user),
-            "require_permissions": Mock(),
-            "get_product_service": Mock(return_value=mock_product_service),
+            "get_current_user": mock.Mock(return_value=mock_current_user),
+            "require_permissions": mock.Mock(),
+            "get_product_service": mock.Mock(return_value=mock_product_service),
         }
 
     # ============================================================================
@@ -109,10 +111,10 @@ class TestProductsEndpoint:
     @pytest.mark.asyncio
     async def test_get_all_products_success(self, mock_product_service, sample_product):
         """Test get_all_products endpoint successful response"""
-        # Mock service to return products
+        # mock.Mock service to return products
         mock_product_service.get_all_products.return_value = [sample_product]
         
-        # Mock dependencies
+        # mock.Mock dependencies
         with patch('app.api.v1.endpoints.products.get_product_service', return_value=mock_product_service), \
              patch('app.api.v1.endpoints.products.require_permissions'), \
              patch('app.api.v1.endpoints.products.get_current_user'):
@@ -136,7 +138,7 @@ class TestProductsEndpoint:
     @pytest.mark.asyncio
     async def test_get_all_products_empty(self, mock_product_service):
         """Test get_all_products endpoint with no products"""
-        # Mock service to return empty list
+        # mock.Mock service to return empty list
         mock_product_service.get_all_products.return_value = []
         
         with patch('app.api.v1.endpoints.products.get_product_service', return_value=mock_product_service), \
@@ -157,7 +159,7 @@ class TestProductsEndpoint:
         product1 = Product(product_id=1, name="Product 1", price=10.0)
         product2 = Product(product_id=2, name="Product 2", price=20.0)
         
-        # Mock service to return products
+        # mock.Mock service to return products
         mock_product_service.get_all_products.return_value = [product1, product2]
         
         with patch('app.api.v1.endpoints.products.get_product_service', return_value=mock_product_service), \
@@ -180,7 +182,7 @@ class TestProductsEndpoint:
     @pytest.mark.asyncio
     async def test_create_product_success(self, mock_product_service, sample_product, sample_product_create, mock_current_user):
         """Test create_product endpoint successful response"""
-        # Mock service to return created product
+        # mock.Mock service to return created product
         mock_product_service.create_product.return_value = sample_product
         
         with patch('app.api.v1.endpoints.products.get_product_service', return_value=mock_product_service), \
@@ -215,7 +217,7 @@ class TestProductsEndpoint:
         # Create product without description
         product_create = ProductCreate(product_id=1, name="Test Product", price=99.99)
         
-        # Mock service to return created product
+        # mock.Mock service to return created product
         mock_product_service.create_product.return_value = sample_product
         
         with patch('app.api.v1.endpoints.products.get_product_service', return_value=mock_product_service), \
@@ -238,7 +240,7 @@ class TestProductsEndpoint:
     @pytest.mark.asyncio
     async def test_create_product_authorization_failure(self, mock_product_service, sample_product_create, mock_current_user):
         """Test create_product endpoint with authorization failure"""
-        # Mock authorizer to raise exception
+        # mock.Mock authorizer to raise exception
         with patch('app.api.v1.endpoints.products.get_product_service', return_value=mock_product_service), \
              patch('app.api.v1.endpoints.products.require_permissions'), \
              patch('app.api.v1.endpoints.products.get_current_user', return_value=mock_current_user), \
@@ -258,7 +260,7 @@ class TestProductsEndpoint:
     @pytest.mark.asyncio
     async def test_get_product_success(self, mock_product_service, sample_product):
         """Test get_product endpoint successful response"""
-        # Mock service to return product
+        # mock.Mock service to return product
         mock_product_service.get_product_details.return_value = sample_product
         
         with patch('app.api.v1.endpoints.products.get_product_service', return_value=mock_product_service), \
@@ -281,7 +283,7 @@ class TestProductsEndpoint:
     @pytest.mark.asyncio
     async def test_get_product_not_found(self, mock_product_service):
         """Test get_product endpoint when product not found"""
-        # Mock service to raise exception
+        # mock.Mock service to raise exception
         mock_product_service.get_product_details.side_effect = Exception("Product not found")
         
         with patch('app.api.v1.endpoints.products.get_product_service', return_value=mock_product_service), \
@@ -300,7 +302,7 @@ class TestProductsEndpoint:
     @pytest.mark.asyncio
     async def test_update_product_success(self, mock_product_service, sample_product, sample_product_update, mock_current_user):
         """Test update_product endpoint successful response"""
-        # Mock service to return updated product
+        # mock.Mock service to return updated product
         updated_product = Product(
             product_id=1,
             name="Updated Product",
@@ -337,7 +339,7 @@ class TestProductsEndpoint:
     @pytest.mark.asyncio
     async def test_update_product_authorization_failure(self, mock_product_service, sample_product_update, mock_current_user):
         """Test update_product endpoint with authorization failure"""
-        # Mock authorizer to raise exception
+        # mock.Mock authorizer to raise exception
         with patch('app.api.v1.endpoints.products.get_product_service', return_value=mock_product_service), \
              patch('app.api.v1.endpoints.products.get_current_user', return_value=mock_current_user), \
              patch('app.api.v1.endpoints.products.ProductAuthorizer.can_update_product', side_effect=HTTPException(status_code=403, detail="Forbidden")):
@@ -355,7 +357,7 @@ class TestProductsEndpoint:
         # Create partial update
         partial_update = ProductUpdate(name="Updated Name Only")
         
-        # Mock service to return updated product
+        # mock.Mock service to return updated product
         updated_product = Product(
             product_id=1,
             name="Updated Name Only",
@@ -387,7 +389,7 @@ class TestProductsEndpoint:
     @pytest.mark.asyncio
     async def test_delete_product_success(self, mock_product_service):
         """Test delete_product endpoint successful response"""
-        # Mock service
+        # mock.Mock service
         mock_product_service.delete_product.return_value = None
         
         with patch('app.api.v1.endpoints.products.get_product_service', return_value=mock_product_service), \
@@ -407,7 +409,7 @@ class TestProductsEndpoint:
     @pytest.mark.asyncio
     async def test_delete_product_not_found(self, mock_product_service):
         """Test delete_product endpoint when product not found"""
-        # Mock service to raise exception
+        # mock.Mock service to raise exception
         mock_product_service.delete_product.side_effect = Exception("Product not found")
         
         with patch('app.api.v1.endpoints.products.get_product_service', return_value=mock_product_service), \
@@ -428,11 +430,11 @@ class TestProductsEndpoint:
         """Test import_products_csv endpoint successful response"""
         # Create mock CSV file
         csv_content = "product_id,name,price\n1,Test Product,99.99\n2,Another Product,49.99"
-        mock_file = Mock()
+        mock_file = mock.Mock()
         mock_file.content_type = "text/csv"
         mock_file.read = AsyncMock(return_value=csv_content.encode('utf-8'))
         
-        # Mock service
+        # mock.Mock service
         import_result = {"imported": 2, "failed": 0}
         mock_product_service.import_products.return_value = import_result
         
@@ -455,7 +457,7 @@ class TestProductsEndpoint:
     async def test_import_products_csv_invalid_content_type(self, mock_product_service):
         """Test import_products_csv endpoint with invalid content type"""
         # Create mock file with wrong content type
-        mock_file = Mock()
+        mock_file = mock.Mock()
         mock_file.content_type = "application/json"
         
         with patch('app.api.v1.endpoints.products.get_product_service', return_value=mock_product_service), \
@@ -474,7 +476,7 @@ class TestProductsEndpoint:
         """Test import_products_csv endpoint with missing columns"""
         # Create CSV with missing columns
         csv_content = "product_id,name\n1,Test Product"
-        mock_file = Mock()
+        mock_file = mock.Mock()
         mock_file.content_type = "text/csv"
         mock_file.read = AsyncMock(return_value=csv_content.encode('utf-8'))
         
@@ -494,7 +496,7 @@ class TestProductsEndpoint:
         """Test import_products_csv endpoint with empty file"""
         # Create empty CSV
         csv_content = ""
-        mock_file = Mock()
+        mock_file = mock.Mock()
         mock_file.content_type = "text/csv"
         mock_file.read = AsyncMock(return_value=csv_content.encode('utf-8'))
         
@@ -513,11 +515,11 @@ class TestProductsEndpoint:
         """Test import_products_csv endpoint with Unicode content"""
         # Create CSV with Unicode content
         csv_content = "product_id,name,price\n1,Üñïçødé Prödüçt,99.99"
-        mock_file = Mock()
+        mock_file = mock.Mock()
         mock_file.content_type = "text/csv"
         mock_file.read = AsyncMock(return_value=csv_content.encode('utf-8'))
         
-        # Mock service
+        # mock.Mock service
         import_result = {"imported": 1, "failed": 0}
         mock_product_service.import_products.return_value = import_result
         
@@ -541,11 +543,11 @@ class TestProductsEndpoint:
             rows.append(f"{i},Product {i},{i * 10.99}")
         csv_content = "product_id,name,price\n" + "\n".join(rows)
         
-        mock_file = Mock()
+        mock_file = mock.Mock()
         mock_file.content_type = "text/csv"
         mock_file.read = AsyncMock(return_value=csv_content.encode('utf-8'))
         
-        # Mock service
+        # mock.Mock service
         import_result = {"imported": 1000, "failed": 0}
         mock_product_service.import_products.return_value = import_result
         
@@ -589,7 +591,7 @@ class TestProductsEndpoint:
     @pytest.mark.asyncio
     async def test_service_error_handling(self, mock_product_service):
         """Test that service errors are properly handled"""
-        # Mock service to raise exception
+        # mock.Mock service to raise exception
         mock_product_service.get_all_products.side_effect = Exception("Service error")
         
         with patch('app.api.v1.endpoints.products.get_product_service', return_value=mock_product_service), \
@@ -619,7 +621,7 @@ class TestProductsEndpoint:
     @pytest.mark.asyncio
     async def test_create_then_get_product_workflow(self, mock_product_service, sample_product, sample_product_create, mock_current_user):
         """Test integration between create and get endpoints"""
-        # Mock service methods
+        # mock.Mock service methods
         mock_product_service.create_product.return_value = sample_product
         mock_product_service.get_product_details.return_value = sample_product
         
@@ -643,7 +645,7 @@ class TestProductsEndpoint:
     @pytest.mark.asyncio
     async def test_update_then_delete_product_workflow(self, mock_product_service, sample_product, sample_product_update, mock_current_user):
         """Test integration between update and delete endpoints"""
-        # Mock service methods
+        # mock.Mock service methods
         updated_product = Product(
             product_id=1,
             name="Updated Product",
