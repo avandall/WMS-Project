@@ -580,7 +580,7 @@ class TestWarehouseOperationsFunctional:
         # Verify workflow results
         assert len(old_inventory) == 3
         assert len(transferred_items) == 3
-        mock_warehouse_service.transfer_all_inventory.assert_called_once_with(1, 2)
+        mock_warehouse_service.transfer_all_inventory.assert_called_once_with(from_warehouse_id=1, to_warehouse_id=2)
         mock_warehouse_service.delete_warehouse.assert_called_once_with(1)
 
     # ============================================================================
@@ -806,9 +806,14 @@ class TestWarehouseOperationsFunctional:
         target_warehouse = Warehouse(warehouse_id=2, location="Target Warehouse")
         
         mock_warehouse_service.get_warehouse.side_effect = [closing_warehouse, target_warehouse]
-        mock_warehouse_service.get_warehouse_inventory.return_value = [
-            InventoryItem(product_id=1, quantity=100),
-            InventoryItem(product_id=2, quantity=50)
+        mock_warehouse_service.get_warehouse_inventory.side_effect = [
+            # First call: inventory before transfer
+            [
+                InventoryItem(product_id=1, quantity=100),
+                InventoryItem(product_id=2, quantity=50)
+            ],
+            # Second call: empty inventory after transfer
+            []
         ]
         mock_warehouse_service.transfer_all_inventory.return_value = [
             InventoryItem(product_id=1, quantity=100),

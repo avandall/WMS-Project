@@ -4,6 +4,7 @@ Tests for SQL injection attacks and input sanitization
 """
 
 import pytest
+import time
 from unittest.mock import Mock, patch
 
 # Make FastAPI imports conditional
@@ -118,11 +119,11 @@ class TestSQLInjectionPrevention:
         ]
         
         for payload in time_payloads:
-            start_time = pytest.time.time()
+            start_time = time.time()
             
             try:
                 response = client.get(f"/api/products?id={payload}")
-                end_time = pytest.time.time()
+                end_time = time.time()
                 
                 # Should not take unusually long time
                 response_time = end_time - start_time
