@@ -1,14 +1,14 @@
 
 """
-Test file - Minimal Working Version
+Domain Entity Test - Minimal Working Version
 Temporarily skipped to reduce errors and failures
 """
 
 import pytest
 
 
-class TestMinimal:
-    """Minimal test class - Temporarily Skipped"""
+class TestMinimalEntity:
+    """Minimal entity test class - Temporarily Skipped"""
     
     def test_placeholder(self):
         """Placeholder test - skipped"""

@@ -3,8 +3,17 @@ Pytest configuration and fixtures for WMS tests.
 Sets up common fixtures for testing.
 """
 
-import pytest
+import sys
 import os
+from pathlib import Path
+
+# Add src to Python path for all tests
+project_root = Path(__file__).parent.parent
+src_path = project_root / "src"
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
+
+import pytest
 from typing import Any
 import requests
 
@@ -285,7 +294,11 @@ from app.domain.entities.product import Product
 from app.domain.interfaces.product_repo import IProductRepo
 from app.domain.interfaces.inventory_repo import IInventoryRepo
 from app.infrastructure.persistence.repositories.repository_container import RepositoryContainerImpl
-from app.api.authorization.product_authorizers import ProductAuthorizer
+# Import ProductAuthorizer conditionally to avoid FastAPI dependency issues
+try:
+    from app.api.authorization.product_authorizers import ProductAuthorizer
+except ImportError:
+    ProductAuthorizer = None
 # Import ServiceFactory conditionally to avoid import issues
 try:
     from app.api.dependencies.service_factory import ServiceFactory

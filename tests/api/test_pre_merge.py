@@ -4,10 +4,9 @@ Tests API endpoints, validation, error handling, and contract compliance
 """
 
 import pytest
-from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch
 import json
-
+from fastapi.testclient import TestClient
 from app.api import app
 
 
