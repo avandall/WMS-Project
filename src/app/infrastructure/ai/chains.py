@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 import os
+import re
 
 from app.infrastructure.ai.database import get_langchain_db
 from app.infrastructure.ai.llm import get_chat_model
@@ -28,6 +29,37 @@ def _extract_sql(text: str) -> str:
     return cleaned.strip().rstrip(";").strip()
 
 
+def _validate_table_access(sql: str) -> str:
+    """Validate that SQL only accesses allowed WMS tables."""
+    
+    # Define allowed table patterns (WMS-specific tables only)
+    allowed_tables = {
+        'products', 'inventory', 'warehouses', 'customers', 'orders', 
+        'documents', 'suppliers', 'transactions', 'shipments', 'positions',
+        'product_entities', 'inventory_entities', 'warehouse_entities',
+        'user_entities', 'document_entities', 'position_entities'
+    }
+    
+    # Extract table names using regex patterns
+    # Look for FROM, JOIN, INTO table references
+    table_patterns = [
+        r'\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*)',
+        r'\bJOIN\s+([a-zA-Z_][a-zA-Z0-9_]*)',
+        r'\bINTO\s+([a-zA-Z_][a-zA-Z0-9_]*)',
+    ]
+    
+    found_tables = set()
+    for pattern in table_patterns:
+        matches = re.findall(pattern, sql, re.IGNORECASE)
+        found_tables.update(match.lower() for match in matches)
+    
+    # Check for forbidden tables
+    forbidden_tables = found_tables - allowed_tables
+    if forbidden_tables:
+        raise ValueError(f"Access to forbidden tables not allowed: {', '.join(sorted(forbidden_tables))}")
+    
+    return sql
+
 def generate_sql_from_question(question: str) -> str:
     """Use an LLM to generate a safe, read-only SQL query for the WMS DB."""
 
@@ -45,11 +77,13 @@ def generate_sql_from_question(question: str) -> str:
         [
             (
                 "system",
-                "You are a Senior PostgreSQL Analyst.\n"
+                "You are a Senior PostgreSQL Analyst for a Warehouse Management System.\n"
                 "Your goal is to write a syntactically correct SQL query based on the schema provided.\n"
                 "Rules:\n"
                 f"- Use ONLY SELECT or WITH statements.\n"
                 f"- LIMIT results to {max_rows} unless specified.\n"
+                "- ONLY query WMS tables: products, inventory, warehouses, customers, orders, documents, suppliers, etc.\n"
+                "- NEVER query system tables, user tables, or authentication tables.\n"
                 "- Return ONLY the SQL code, no markdown, no explanation.",
             ),
             ("human", "Question: {question}\n\nDatabase schema:\n{schema}\n\nSQL:"),
@@ -59,7 +93,10 @@ def generate_sql_from_question(question: str) -> str:
     llm = get_chat_model(temperature=0)
     chain = prompt | llm | StrOutputParser()
     sql = chain.invoke({"question": question, "schema": schema})
-    return _extract_sql(sql)
+    cleaned_sql = _extract_sql(sql)
+    
+    # Validate table access before returning
+    return _validate_table_access(cleaned_sql)
 
 
 def summarize_rows(question: str, sql: str, rows: list[dict[str, Any]]) -> str:
@@ -99,7 +136,7 @@ def is_relevant_query(question: str) -> bool:
     except Exception as exc:  # pragma: no cover
         raise RuntimeError("Missing dependency: `langchain-core`.") from exc
 
-    # First, check for obvious WMS-related keywords
+    # First, check for obvious WMS-related keywords (removed generic terms)
     wms_keywords = [
         'product', 'inventory', 'warehouse', 'stock', 'item', 'goods',
         'customer', 'client', 'order', 'document', 'transaction',
@@ -107,7 +144,6 @@ def is_relevant_query(question: str) -> bool:
         'quantity', 'price', 'cost', 'supplier', 'vendor',
         'location', 'storage', 'shelf', 'rack', 'bin',
         'shipment', 'delivery', 'receiving', 'dispatch',
-        'database', 'data', 'record', 'table', 'query',
         'how many', 'count', 'list', 'show', 'find', 'search', 'report',
         # Vietnamese keywords
         'sản phẩm', 'hàng tồn kho', 'kho hàng', 'khách hàng', 'đơn hàng',
@@ -116,6 +152,11 @@ def is_relevant_query(question: str) -> bool:
     ]
     
     question_lower = question.lower()
+    
+    # First check for forbidden table names explicitly
+    forbidden_tables = ['users', 'auth', 'system', 'information_schema', 'pg_', 'admin', 'password', 'credentials']
+    if any(table in question_lower for table in forbidden_tables):
+        return False
     
     # If any WMS keywords are found, consider it relevant
     if any(keyword in question_lower for keyword in wms_keywords):
@@ -299,6 +340,8 @@ def handle_customer_chat_with_db(message: str) -> dict[str, Any]:
 
     if stripped.lower().startswith("sql:"):
         sql = stripped[4:].strip()
+        # Validate table access for direct SQL too
+        sql = _validate_table_access(sql)
     else:
         sql = generate_sql_from_question(stripped)
 
