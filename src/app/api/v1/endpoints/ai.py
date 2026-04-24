@@ -22,7 +22,7 @@ async def chat_db(payload: ChatDBRequest):
     
     try:
         # Enhanced processing with mode support
-        result = await run_in_threadpool(handle_customer_chat_with_db, payload.message)
+        result = await run_in_threadpool(handle_customer_chat_with_db, payload.message, payload.mode)
         
         # Calculate processing time
         processing_time = time.time() - start_time

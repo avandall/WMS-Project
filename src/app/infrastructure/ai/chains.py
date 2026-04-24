@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any
 import os
 import re
+import threading
+from datetime import datetime, timedelta
 
 from app.infrastructure.ai.database import get_langchain_db
 from app.infrastructure.ai.llm import get_chat_model
@@ -200,22 +202,57 @@ def is_relevant_query(question: str) -> bool:
     return result.startswith("true") or result == "yes" or result == "relevant"
 
 
-# Global RAG engine instance (lazy initialization)
+# Global RAG engine instance (thread-safe lazy initialization)
 _rag_engine = None
+_rag_engine_lock = threading.Lock()
+_rag_engine_init_attempted = False
+_rag_engine_last_attempt = None
+_rag_engine_failure_cooldown = 300  # 5 minutes cooldown between failed attempts
 
 def get_rag_engine():
-    """Get or initialize the RAG engine"""
-    global _rag_engine
-    if _rag_engine is None and RAG_ENGINE_AVAILABLE:
-        try:
-            _rag_engine = WMSEngine(mode=ProcessingMode.HYBRID)
-            # Initialize with sample WMS data if not already done
-            _rag_engine.initialize_sample_data()
-            print("Advanced RAG engine initialized successfully")
-        except Exception as e:
-            print(f"Failed to initialize RAG engine: {e}")
-            _rag_engine = None
-    return _rag_engine
+    """Get or initialize the RAG engine with thread-safe initialization and failure cooldown"""
+    global _rag_engine, _rag_engine_init_attempted, _rag_engine_last_attempt
+    
+    # Return existing engine if available
+    if _rag_engine is not None:
+        return _rag_engine
+    
+    # Check if we're in cooldown period after a failed initialization
+    if (_rag_engine_init_attempted and 
+        _rag_engine_last_attempt and 
+        datetime.now() - _rag_engine_last_attempt < timedelta(seconds=_rag_engine_failure_cooldown)):
+        return None
+    
+    # Use lock to prevent race conditions during initialization
+    with _rag_engine_lock:
+        # Double-check pattern: check again after acquiring lock
+        if _rag_engine is not None:
+            return _rag_engine
+        
+        # Check cooldown again inside lock
+        if (_rag_engine_init_attempted and 
+            _rag_engine_last_attempt and 
+            datetime.now() - _rag_engine_last_attempt < timedelta(seconds=_rag_engine_failure_cooldown)):
+            return None
+        
+        # Attempt initialization
+        if RAG_ENGINE_AVAILABLE:
+            _rag_engine_init_attempted = True
+            _rag_engine_last_attempt = datetime.now()
+            
+            try:
+                _rag_engine = WMSEngine(mode=ProcessingMode.HYBRID)
+                # Initialize with sample WMS data if not already done
+                _rag_engine.initialize_sample_data()
+                print("Advanced RAG engine initialized successfully")
+                return _rag_engine
+            except Exception as e:
+                print(f"Failed to initialize RAG engine: {e}")
+                _rag_engine = None
+                # Keep _rag_engine_init_attempted and _rag_engine_last_attempt set for cooldown
+                return None
+        else:
+            return None
 
 def enhanced_rerank_logic(question: str, docs: list) -> str:
     """Advanced reranking logic from lesson 4 - using Gemini for intelligent reranking"""
@@ -285,7 +322,7 @@ def hybrid_search_with_reranking(question: str) -> dict[str, Any]:
         print(f"Hybrid search error: {e}")
         return {"answer": f"Search error: {str(e)}", "mode": "error", "success": False}
 
-def handle_customer_chat_with_db(message: str) -> dict[str, Any]:
+def handle_customer_chat_with_db(message: str, mode: str = "auto") -> dict[str, Any]:
     """Enhanced entry point: Try RAG first, fallback to SQL for database queries."""
 
     stripped = (message or "").strip()
@@ -297,7 +334,113 @@ def handle_customer_chat_with_db(message: str) -> dict[str, Any]:
             "answer": "Hi! I can help with WMS operations using both knowledge base and database queries. Ask me about products, inventory, documents, customers, or general WMS questions!",
         }
 
-    # Try advanced RAG engine first for general knowledge questions
+    # Mode-specific processing
+    mode = mode.lower() if mode else "auto"
+    
+    # Force SQL mode
+    if mode == "sql":
+        if not is_relevant_query(stripped):
+            return {
+                "sql": "",
+                "rows": [],
+                "answer": "Xin loi, toi chi co the ho tro cac thong tin lien quan den kho hang va san pham. Ban vui long dat cau hoi khac nhe!",
+                "mode": "sql_blocked"
+            }
+        if stripped.lower().startswith("sql:"):
+            sql = stripped[4:].strip()
+            sql = _validate_table_access(sql)
+        else:
+            sql = generate_sql_from_question(stripped)
+        rows = execute_readonly_sql(sql)
+        answer = summarize_rows(stripped, sql, rows)
+        return {
+            "sql": sql, 
+            "rows": rows, 
+            "answer": answer,
+            "mode": "sql"
+        }
+    
+    # Force RAG mode
+    elif mode == "rag":
+        rag_engine = get_rag_engine()
+        if not rag_engine:
+            return {
+                "sql": "",
+                "rows": [],
+                "answer": "RAG engine not available. Please try 'auto' or 'sql' mode.",
+                "mode": "rag_unavailable"
+            }
+        try:
+            rag_result = hybrid_search_with_reranking(stripped)
+            if rag_result.get("success", False):
+                rag_answer = rag_result.get("answer", "")
+                return {
+                    "sql": "",
+                    "rows": [],
+                    "answer": rag_answer,
+                    "mode": rag_result.get("mode", "rag"),
+                    "engine_info": "Advanced RAG with reranking"
+                }
+            else:
+                return {
+                    "sql": "",
+                    "rows": [],
+                    "answer": "I couldn't find relevant information in the knowledge base.",
+                    "mode": "rag_failed"
+                }
+        except Exception as e:
+            print(f"RAG engine error: {e}")
+            return {"answer": f"RAG error: {str(e)}", "mode": "rag_error"}
+    
+    # Force hybrid mode
+    elif mode == "hybrid":
+        rag_engine = get_rag_engine()
+        if not rag_engine:
+            return {
+                "sql": "",
+                "rows": [],
+                "answer": "Hybrid mode requires RAG engine. Please try 'auto' or 'sql' mode.",
+                "mode": "hybrid_unavailable"
+            }
+        try:
+            rag_result = hybrid_search_with_reranking(stripped)
+            if rag_result.get("success", False):
+                rag_answer = rag_result.get("answer", "")
+                # Hybrid mode: if RAG gives good answer, use it; otherwise fallback to SQL
+                if len(rag_answer) > 50 and "couldn't find" not in rag_answer.lower():
+                    return {
+                        "sql": "",
+                        "rows": [],
+                        "answer": rag_answer,
+                        "mode": rag_result.get("mode", "hybrid"),
+                        "engine_info": "Advanced RAG with reranking"
+                    }
+                # Fallback to SQL for specific data queries
+                elif is_relevant_query(stripped):
+                    pass  # Continue to SQL processing
+                else:
+                    return {
+                        "sql": "",
+                        "rows": [],
+                        "answer": rag_answer or "I can help with WMS operations. Could you please rephrase your question?",
+                        "mode": "hybrid_fallback"
+                    }
+            else:
+                # Fallback to SQL if RAG fails
+                if is_relevant_query(stripped):
+                    pass  # Continue to SQL processing
+                else:
+                    return {
+                        "sql": "",
+                        "rows": [],
+                        "answer": "I couldn't find relevant information in the knowledge base.",
+                        "mode": "hybrid_failed"
+                    }
+        except Exception as e:
+            print(f"Hybrid search error: {e}")
+            return {"answer": f"Hybrid error: {str(e)}", "mode": "hybrid_error"}
+    
+    # Auto mode (default): Try RAG first, fallback to SQL
     rag_engine = get_rag_engine()
     if rag_engine and not stripped.lower().startswith("sql:"):
         try:

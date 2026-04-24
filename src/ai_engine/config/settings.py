@@ -30,8 +30,8 @@ class Settings:
     BM25_WEIGHT: float = float(os.getenv("BM25_WEIGHT", "0.5"))
     VECTOR_WEIGHT: float = float(os.getenv("VECTOR_WEIGHT", "0.5"))
     
-    # Evaluation Configuration
-    QUALITY_THRESHOLD: float = float(os.getenv("QUALITY_THRESHOLD", "0.3"))
+    # Evaluation Configuration (scale 0-10 to match evaluator)
+    QUALITY_THRESHOLD: float = float(os.getenv("QUALITY_THRESHOLD", "5.0"))
     
     # API Keys
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")

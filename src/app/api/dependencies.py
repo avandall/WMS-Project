@@ -125,10 +125,6 @@ def get_user_service(db: Session = Depends(get_session)) -> UserService:
     return UserService(user_repo=UserRepo(db))
 
 
-def get_product_service(db: Session = Depends(get_session)) -> ProductService:
-    return ProductService(product_repo=ProductRepo(db), inventory_repo=InventoryRepo(db))
-
-
 
 
 def get_repository_container(db: Session = Depends(get_session)) -> RepositoryContainerImpl:
