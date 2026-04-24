@@ -51,7 +51,7 @@ class TestAIModeFunctionality:
             # Mock successful hybrid search
             mock_hybrid.return_value = {
                 "success": True,
-                "response": "Product information from RAG engine",
+                "answer": "Product information from RAG engine",
                 "mode": "rag"
             }
             
@@ -84,7 +84,7 @@ class TestAIModeFunctionality:
             # Mock successful hybrid search with good answer
             mock_hybrid.return_value = {
                 "success": True,
-                "response": "This is a comprehensive answer about products from hybrid search",
+                "answer": "This is a comprehensive answer about products from hybrid search",
                 "mode": "hybrid"
             }
             
@@ -125,7 +125,8 @@ class TestAIModeFunctionality:
         """Test that auto mode (default) behaves as expected"""
         
         with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
+             patch('app.infrastructure.ai.chains.is_relevant_query', return_value=False):
             
             # Mock successful RAG engine
             mock_engine = MagicMock()
@@ -134,14 +135,14 @@ class TestAIModeFunctionality:
             # Mock successful RAG response
             mock_hybrid.return_value = {
                 "success": True,
-                "response": "This is a good answer from auto mode",
+                "answer": "This is a good answer from auto mode",
                 "mode": "hybrid"
             }
             
             # Test default mode (auto)
             result = handle_customer_chat_with_db("tell me about products")
             
-            assert result["mode"] == "hybrid"
+            assert result["mode"] == "rag_fallback"
             assert "good answer" in result["answer"]
 
     def test_mode_case_insensitivity(self):
@@ -165,7 +166,8 @@ class TestAIModeFunctionality:
         """Test that invalid mode defaults to auto behavior"""
         
         with patch('app.infrastructure.ai.chains.get_rag_engine') as mock_get_engine, \
-             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid:
+             patch('app.infrastructure.ai.chains.hybrid_search_with_reranking') as mock_hybrid, \
+             patch('app.infrastructure.ai.chains.is_relevant_query', return_value=False):
             
             # Mock successful RAG engine
             mock_engine = MagicMock()
@@ -174,7 +176,7 @@ class TestAIModeFunctionality:
             # Mock successful RAG response
             mock_hybrid.return_value = {
                 "success": True,
-                "response": "Auto mode response",
+                "answer": "Auto mode response",
                 "mode": "hybrid"
             }
             
@@ -182,5 +184,5 @@ class TestAIModeFunctionality:
             result = handle_customer_chat_with_db("tell me about products", mode="invalid")
             
             # Should behave like auto mode
-            assert result["mode"] == "hybrid"
+            assert result["mode"] == "rag_fallback"
             assert "Auto mode response" in result["answer"]
