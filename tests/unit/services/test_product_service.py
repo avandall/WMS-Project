@@ -127,34 +127,37 @@ class TestProductService:
     # GET PRODUCT DETAILS TESTS
     # ============================================================================
 
-    def test_get_product_details_success(self, product_service, sample_product):
+    @pytest.mark.asyncio
+    async def test_get_product_details_success(self, product_service, sample_product):
         """Test get_product_details successful retrieval"""
         # Mock the query handler
         product_service._query_handler.handle_get = Mock(return_value=sample_product)
         
-        result = product_service.get_product_details(1)
+        result = await product_service.get_product_details(1)
         
         assert result == sample_product
         product_service._query_handler.handle_get.assert_called_once()
 
-    def test_get_product_details_not_found(self, product_service):
+    @pytest.mark.asyncio
+    async def test_get_product_details_not_found(self, product_service):
         """Test get_product_details when product not found"""
         # Mock the query handler to raise exception
         product_service._query_handler.handle_get = Mock(side_effect=EntityNotFoundError("Product not found"))
         
         with pytest.raises(EntityNotFoundError, match="Product not found"):
-            product_service.get_product_details(1)
+            await product_service.get_product_details(999)
 
     # ============================================================================
     # UPDATE PRODUCT TESTS
     # ============================================================================
 
-    def test_update_product_success(self, product_service, sample_product):
+    @pytest.mark.asyncio
+    async def test_update_product_success(self, product_service, sample_product):
         """Test update_product successful update"""
         # Mock the command handler
         product_service._command_handler.handle_update = Mock(return_value=sample_product)
         
-        result = product_service.update_product(
+        result = await product_service.update_product(
             product_id=1,
             name="Updated Product",
             price=149.99,
@@ -164,12 +167,13 @@ class TestProductService:
         assert result == sample_product
         product_service._command_handler.handle_update.assert_called_once()
 
-    def test_update_product_partial_update(self, product_service, sample_product):
+    @pytest.mark.asyncio
+    async def test_update_product_partial_update(self, product_service, sample_product):
         """Test update_product with partial data"""
         # Mock the command handler
         product_service._command_handler.handle_update = Mock(return_value=sample_product)
         
-        result = product_service.update_product(
+        result = await product_service.update_product(
             product_id=1,
             name="Updated Product"
         )
@@ -177,68 +181,74 @@ class TestProductService:
         assert result == sample_product
         product_service._command_handler.handle_update.assert_called_once()
 
-    def test_update_product_not_found(self, product_service):
+    @pytest.mark.asyncio
+    async def test_update_product_not_found(self, product_service):
         """Test update_product when product not found"""
         # Mock the command handler to raise exception
         product_service._command_handler.handle_update = Mock(side_effect=EntityNotFoundError("Product not found"))
         
         with pytest.raises(EntityNotFoundError, match="Product not found"):
-            product_service.update_product(product_id=1, name="Updated Product")
+            await product_service.update_product(product_id=1, name="Updated Product")
 
     # ============================================================================
     # DELETE PRODUCT TESTS
     # ============================================================================
 
-    def test_delete_product_success(self, product_service):
+    @pytest.mark.asyncio
+    async def test_delete_product_success(self, product_service):
         """Test delete_product successful deletion"""
         # Mock the command handler
         product_service._command_handler.handle_delete = Mock(return_value=None)
         
-        result = product_service.delete_product(1)
+        result = await product_service.delete_product(1)
         
         assert result is None
         product_service._command_handler.handle_delete.assert_called_once()
 
-    def test_delete_product_not_found(self, product_service):
+    @pytest.mark.asyncio
+    async def test_delete_product_not_found(self, product_service):
         """Test delete_product when product not found"""
         # Mock the command handler to raise exception
         product_service._command_handler.handle_delete = Mock(side_effect=EntityNotFoundError("Product not found"))
         
         with pytest.raises(EntityNotFoundError, match="Product not found"):
-            product_service.delete_product(1)
+            await product_service.delete_product(1)
 
     # ============================================================================
     # GET PRODUCT WITH INVENTORY TESTS
     # ============================================================================
 
-    def test_get_product_with_inventory_success(self, product_service, sample_product):
-        """Test get_product_with_inventory successful retrieval"""
+    @pytest.mark.asyncio
+    async def test_get_product_with_inventory_success(self, product_service, sample_product):
+        """Test get_product_with_inventory success"""
         # Mock dependencies
         product_service._query_handler.handle_get = Mock(return_value=sample_product)
         product_service._command_handler.inventory_repo.get_quantity = Mock(return_value=50)
         
-        result = product_service.get_product_with_inventory(1)
+        result = await product_service.get_product_with_inventory(1)
         
         expected = {"product": sample_product, "current_inventory": 50}
         assert result == expected
         product_service._query_handler.handle_get.assert_called_once()
         product_service._command_handler.inventory_repo.get_quantity.assert_called_once_with(1)
 
-    def test_get_product_with_inventory_product_not_found(self, product_service):
+    @pytest.mark.asyncio
+    async def test_get_product_with_inventory_product_not_found(self, product_service):
         """Test get_product_with_inventory when product not found"""
         # Mock dependencies
         product_service._query_handler.handle_get = Mock(side_effect=EntityNotFoundError("Product not found"))
         
         with pytest.raises(EntityNotFoundError, match="Product not found"):
-            product_service.get_product_with_inventory(1)
+            await product_service.get_product_with_inventory(1)
 
-    def test_get_product_with_inventory_zero_quantity(self, product_service, sample_product):
+    @pytest.mark.asyncio
+    async def test_get_product_with_inventory_zero_quantity(self, product_service, sample_product):
         """Test get_product_with_inventory with zero inventory"""
         # Mock dependencies
         product_service._query_handler.handle_get = Mock(return_value=sample_product)
         product_service._command_handler.inventory_repo.get_quantity = Mock(return_value=0)
         
-        result = product_service.get_product_with_inventory(1)
+        result = await product_service.get_product_with_inventory(1)
         
         expected = {"product": sample_product, "current_inventory": 0}
         assert result == expected
@@ -294,23 +304,25 @@ class TestProductService:
     # GET ALL PRODUCTS TESTS
     # ============================================================================
 
-    def test_get_all_products_success(self, product_service, sample_product):
+    @pytest.mark.asyncio
+    async def test_get_all_products_success(self, product_service, sample_product):
         """Test get_all_products successful retrieval"""
         # Mock the query handler
         products_list = [sample_product]
         product_service._query_handler.handle_get_all = Mock(return_value=products_list)
         
-        result = product_service.get_all_products()
+        result = await product_service.get_all_products()
         
         assert result == products_list
         product_service._query_handler.handle_get_all.assert_called_once()
 
-    def test_get_all_products_empty(self, product_service):
+    @pytest.mark.asyncio
+    async def test_get_all_products_empty(self, product_service):
         """Test get_all_products with no products"""
         # Mock the query handler
         product_service._query_handler.handle_get_all = Mock(return_value=[])
         
-        result = product_service.get_all_products()
+        result = await product_service.get_all_products()
         
         assert result == []
 
@@ -466,7 +478,8 @@ class TestProductService:
     # INTEGRATION TESTS
     # ============================================================================
 
-    def test_service_integration_create_and_get(self, product_service, sample_product):
+    @pytest.mark.asyncio
+    async def test_service_integration_create_and_get(self, product_service, sample_product):
         """Test integration between create and get methods"""
         # Mock dependencies
         product_service._command_handler.handle_create = Mock(return_value=sample_product)
@@ -480,11 +493,12 @@ class TestProductService:
         )
         
         # Get product
-        retrieved = product_service.get_product_details(1)
+        retrieved = await product_service.get_product_details(1)
         
         assert created == retrieved == sample_product
 
-    def test_service_integration_update_and_get_with_inventory(self, product_service, sample_product):
+    @pytest.mark.asyncio
+    async def test_service_integration_update_and_get_with_inventory(self, product_service, sample_product):
         """Test integration between update and get with inventory methods"""
         # Mock dependencies
         product_service._command_handler.handle_update = Mock(return_value=sample_product)
@@ -492,14 +506,14 @@ class TestProductService:
         product_service._command_handler.inventory_repo.get_quantity = Mock(return_value=75)
         
         # Update product
-        updated = product_service.update_product(
+        updated = await product_service.update_product(
             product_id=1,
             name="Updated Product",
             price=149.99
         )
         
         # Get product with inventory
-        with_inventory = product_service.get_product_with_inventory(1)
+        with_inventory = await product_service.get_product_with_inventory(1)
         
         assert updated == sample_product
         assert with_inventory["product"] == sample_product
@@ -509,7 +523,8 @@ class TestProductService:
     # EDGE CASE TESTS
     # ============================================================================
 
-    def test_service_with_none_values(self, product_service, sample_product):
+    @pytest.mark.asyncio
+    async def test_service_with_none_values(self, product_service, sample_product):
         """Test service methods with None values"""
         # Mock dependencies
         product_service._command_handler.handle_create = Mock(return_value=sample_product)
@@ -524,7 +539,7 @@ class TestProductService:
         )
         
         # Update with None values
-        result2 = product_service.update_product(
+        result2 = await product_service.update_product(
             product_id=1,
             name=None,
             price=None,
@@ -533,7 +548,8 @@ class TestProductService:
         
         assert result1 == result2 == sample_product
 
-    def test_service_with_large_data(self, product_service, sample_product):
+    @pytest.mark.asyncio
+    async def test_service_with_large_data(self, product_service, sample_product):
         """Test service methods with large data"""
         # Mock dependencies
         product_service._command_handler.handle_create = Mock(return_value=sample_product)
@@ -551,7 +567,7 @@ class TestProductService:
         )
         
         # Update with long data
-        result2 = product_service.update_product(
+        result2 = await product_service.update_product(
             product_id=1,
             name=long_name,
             price=999999.99,
@@ -560,7 +576,8 @@ class TestProductService:
         
         assert result1 == result2 == sample_product
 
-    def test_service_with_special_characters(self, product_service, sample_product):
+    @pytest.mark.asyncio
+    async def test_service_with_special_characters(self, product_service, sample_product):
         """Test service methods with special characters"""
         # Mock dependencies
         product_service._command_handler.handle_create = Mock(return_value=sample_product)
@@ -578,7 +595,7 @@ class TestProductService:
         )
         
         # Update with special characters
-        result2 = product_service.update_product(
+        result2 = await product_service.update_product(
             product_id=1,
             name=special_name,
             price=99.99,
@@ -587,7 +604,8 @@ class TestProductService:
         
         assert result1 == result2 == sample_product
 
-    def test_service_with_unicode_characters(self, product_service, sample_product):
+    @pytest.mark.asyncio
+    async def test_service_with_unicode_characters(self, product_service, sample_product):
         """Test service methods with Unicode characters"""
         # Mock dependencies
         product_service._command_handler.handle_create = Mock(return_value=sample_product)
@@ -605,7 +623,7 @@ class TestProductService:
         )
         
         # Update with Unicode
-        result2 = product_service.update_product(
+        result2 = await product_service.update_product(
             product_id=1,
             name=unicode_name,
             price=99.99,

@@ -5,6 +5,8 @@ import io
 from typing import Dict, List, Optional
 
 from app.shared.core.logging import get_logger
+from app.shared.core.cache import cached, invalidate_cache_pattern
+from app.shared.core.redis import redis_manager
 from app.modules.products.domain.entities.product import Product
 from app.shared.domain.business_exceptions import ValidationError
 from app.modules.inventory.domain.interfaces.inventory_repo import IInventoryRepo
@@ -62,12 +64,15 @@ class ProductService:
         )
         return self._command_handler.handle_create(command)
 
-    def get_product_details(self, product_id: int) -> Product:
+    @cached(prefix="product", ttl=3600)  # 1 hour cache
+    async def get_product_details(self, product_id: int) -> Product:
         """Get product details using query pattern."""
         query = GetProductQuery(product_id=product_id)
         return self._query_handler.handle_get(query)
 
-    def update_product(
+    @invalidate_cache_pattern("product")
+    @invalidate_cache_pattern("products_all")
+    async def update_product(
         self,
         product_id: int,
         name: Optional[str] = None,
@@ -81,16 +86,23 @@ class ProductService:
             price=price,
             description=description,
         )
-        return self._command_handler.handle_update(command)
+        result = self._command_handler.handle_update(command)
+        # Invalidate specific product cache
+        await redis_manager.delete(f"product:{product_id}")
+        return result
 
-    def delete_product(self, product_id: int) -> None:
+    @invalidate_cache_pattern("product")
+    @invalidate_cache_pattern("products_all")
+    async def delete_product(self, product_id: int) -> None:
         """Delete product using command pattern."""
         command = DeleteProductCommand(product_id=product_id)
         self._command_handler.handle_delete(command)
+        # Invalidate specific product cache
+        await redis_manager.delete(f"product:{product_id}")
 
-    def get_product_with_inventory(self, product_id: int) -> dict:
+    async def get_product_with_inventory(self, product_id: int) -> dict:
         """Get product with inventory information - facade method."""
-        product = self.get_product_details(product_id)
+        product = await self.get_product_details(product_id)
         quantity = self._command_handler.inventory_repo.get_quantity(product_id)
         return {"product": product, "current_inventory": quantity}
 
@@ -103,7 +115,8 @@ class ProductService:
             products.append({"product": product, "current_inventory": quantity})
         return products
 
-    def get_all_products(self) -> List[Product]:
+    @cached(prefix="products_all", ttl=1800)  # 30 minutes cache
+    async def get_all_products(self) -> List[Product]:
         """Get all products using query pattern."""
         query = GetAllProductsQuery()
         return self._query_handler.handle_get_all(query)

@@ -48,6 +48,7 @@ dependencies = [
     "unsloth>=2026.3.11",
     "datasets>=4.3.0",
     "trl>=0.24.0",
+    "redis>=7.4.0",
 ]
 
 [project.optional-dependencies]

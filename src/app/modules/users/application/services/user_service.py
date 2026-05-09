@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Dict
 
 from app.shared.core.auth import create_token, hash_password, verify_password
+from app.shared.core.cache import cached, invalidate_cache_pattern
+from app.shared.core.redis import redis_manager
 from app.shared.core.settings import settings
 from app.modules.users.domain.entities.user import User
 from app.shared.domain.business_exceptions import EntityNotFoundError, ValidationError
@@ -55,7 +57,8 @@ class UserService:
             "user": user,
         }
 
-    def get_user(self, user_id: int) -> User:
+    @cached(prefix="user", ttl=1800)  # 30 minutes cache
+    async def get_user(self, user_id: int) -> User:
         user = self.user_repo.get(user_id)
         if not user:
             raise EntityNotFoundError("User not found")
@@ -64,8 +67,9 @@ class UserService:
     def list_users(self) -> Dict[int, User]:
         return self.user_repo.get_all()
 
-    def update_role(self, user_id: int, role: str) -> User:
-        user = self.get_user(user_id)
+    @invalidate_cache_pattern("user")
+    async def update_role(self, user_id: int, role: str) -> User:
+        user = await self.get_user(user_id)
         updated = User(
             user_id=user.user_id,
             email=user.email,
@@ -74,10 +78,14 @@ class UserService:
             full_name=user.full_name,
             is_active=user.is_active,
         )
-        return self.user_repo.save(updated)
+        result = self.user_repo.save(updated)
+        # Invalidate specific user cache
+        await redis_manager.delete(f"user:{user_id}")
+        return result
 
-    def change_password(self, user_id: int, old_password: str, new_password: str) -> User:
-        user = self.get_user(user_id)
+    @invalidate_cache_pattern("user")
+    async def change_password(self, user_id: int, old_password: str, new_password: str) -> User:
+        user = await self.get_user(user_id)
         if not verify_password(old_password, user.hashed_password):
             raise ValidationError("Current password is incorrect")
         if len(new_password) < 6:
@@ -93,6 +101,9 @@ class UserService:
         )
         return self.user_repo.save(updated)
 
-    def delete_user(self, user_id: int) -> None:
-        self.get_user(user_id)
+    @invalidate_cache_pattern("user")
+    async def delete_user(self, user_id: int) -> None:
+        await self.get_user(user_id)
         self.user_repo.delete(user_id)
+        # Invalidate specific user cache
+        await redis_manager.delete(f"user:{user_id}")

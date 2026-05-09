@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     cors_allow_methods: list[str] = ["*"]
     cors_allow_headers: list[str] = ["*"]
 
+    # Redis Configuration
+    redis_url: str = "redis://localhost:6379/0"
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_password: str = ""
+    redis_max_connections: int = 10
+
     @field_validator("database_url")
     @classmethod
     def validate_database_url(cls, v: str) -> str:

@@ -34,8 +34,11 @@ def create_app() -> FastAPI:
 
     from app.api.middleware import audit_middleware, rate_limit_middleware
     from app.api.v1.router import router as v1_router
+    from app.api.v1.endpoints.websocket import router as websocket_router
     from app.shared.core.database import check_db_connection, init_db
     from app.shared.core.logging import clear_request_id, set_request_id, setup_logging
+    from app.shared.core.redis import redis_manager
+    from app.shared.core.pubsub import pubsub_manager
     from app.shared.core.settings import settings
     from app.shared.domain.business_exceptions import DomainError, EntityNotFoundError, ValidationError
 
@@ -44,11 +47,43 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         if settings.testing:
-            logger.info("Skipping init_db() because settings.testing=True")
+            logger.info("Skipping init_db() and Redis because settings.testing=True")
             yield
             return
+        
+        # Initialize database
         init_db()
+        
+        # Initialize Redis
+        try:
+            await redis_manager.initialize()
+            logger.info("Redis initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize Redis: {e}")
+            # Continue without Redis for now
+        
+        # Initialize Pub/Sub manager
+        try:
+            await pubsub_manager.initialize()
+            logger.info("Pub/Sub manager initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize Pub/Sub manager: {e}")
+        
         yield
+        
+        # Cleanup Pub/Sub manager
+        try:
+            await pubsub_manager.shutdown()
+            logger.info("Pub/Sub manager shutdown")
+        except Exception as e:
+            logger.error(f"Error shutting down Pub/Sub manager: {e}")
+        
+        # Cleanup Redis connections
+        try:
+            await redis_manager.close()
+            logger.info("Redis connections closed")
+        except Exception as e:
+            logger.error(f"Error closing Redis connections: {e}")
 
     app = FastAPI(
         title=settings.title,
@@ -83,13 +118,27 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["Health Check"])
     async def health_check():
         db_healthy = check_db_connection()
-        status = "healthy" if db_healthy else "unhealthy"
-        status_code = 200 if db_healthy else 503
+        
+        # Check Redis health
+        redis_healthy = False
+        try:
+            if redis_manager.client:
+                await redis_manager.client.ping()
+                redis_healthy = True
+        except Exception:
+            redis_healthy = False
+        
+        # Overall status
+        all_healthy = db_healthy and redis_healthy
+        status = "healthy" if all_healthy else "unhealthy"
+        status_code = 200 if all_healthy else 503
+        
         return JSONResponse(
             status_code=status_code,
             content={
                 "status": status,
                 "database": "connected" if db_healthy else "disconnected",
+                "redis": "connected" if redis_healthy else "disconnected",
                 "version": settings.version,
             },
         )
@@ -119,6 +168,8 @@ def create_app() -> FastAPI:
     app.include_router(v1_router, prefix="/api")
     # Versioned alias:
     app.include_router(v1_router, prefix="/api/v1")
+    # WebSocket endpoints
+    app.include_router(websocket_router, prefix="/api/v1")
 
     logger.info("FastAPI app created")
     return app

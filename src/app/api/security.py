@@ -10,15 +10,17 @@ from typing import Dict, Optional
 from fastapi import HTTPException, status
 
 from app.shared.core.logging import get_logger
+from app.shared.core.redis import redis_manager
 from app.shared.core.settings import settings
 
 logger = get_logger(__name__)
 
 
 class RateLimiter:
-    """Simple in-memory rate limiter (use Redis in production)."""
+    """Redis-based distributed rate limiter."""
 
     def __init__(self):
+        # Fallback to in-memory if Redis is not available
         self.requests: Dict[str, list] = defaultdict(list)
         self.lock = asyncio.Lock()
 
@@ -26,6 +28,40 @@ class RateLimiter:
         if limit is None:
             limit = settings.rate_limit_per_minute
 
+        # Try Redis first
+        try:
+            if redis_manager.client:
+                return await self._redis_rate_limit(client_ip, limit)
+        except Exception as e:
+            logger.warning(f"Redis rate limiting failed, falling back to in-memory: {e}")
+
+        # Fallback to in-memory rate limiting
+        return await self._memory_rate_limit(client_ip, limit)
+
+    async def _redis_rate_limit(self, client_ip: str, limit: int) -> bool:
+        """Redis-based rate limiting using sliding window."""
+        key = f"rate_limit:{client_ip}"
+        
+        # Get current count
+        current_count = await redis_manager.get(key)
+        if current_count is None:
+            current_count = 0
+        else:
+            current_count = int(current_count)
+        
+        if current_count >= limit:
+            logger.warning(f"Rate limit exceeded for IP: {client_ip}")
+            return False
+        
+        # Increment counter with expiration
+        new_count = await redis_manager.increment(key)
+        if new_count == 1:  # First request in this window
+            await redis_manager.expire(key, 60)  # 1 minute window
+        
+        return new_count <= limit
+
+    async def _memory_rate_limit(self, client_ip: str, limit: int) -> bool:
+        """In-memory rate limiting as fallback."""
         async with self.lock:
             now = datetime.now()
             cutoff = now - timedelta(minutes=1)

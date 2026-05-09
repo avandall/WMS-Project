@@ -4,7 +4,8 @@ Covers all UserService methods, validation, edge cases, and business logic
 """
 
 import pytest
-from unittest.mock import Mock, patch
+import asyncio
+from unittest.mock import Mock, patch, AsyncMock
 
 from app.modules.users.application.services.user_service import UserService
 from app.modules.users.domain.entities.user import User
@@ -152,21 +153,23 @@ class TestUserService:
     # GET USER TESTS
     # ============================================================================
 
-    def test_get_user_found(self, user_service, mock_user_repo, sample_user):
+    @pytest.mark.asyncio
+    async def test_get_user_found(self, user_service, mock_user_repo, sample_user):
         """Test get user when found"""
         mock_user_repo.get.return_value = sample_user
 
-        result = user_service.get_user(1)
+        result = await user_service.get_user(1)
 
         assert result == sample_user
         mock_user_repo.get.assert_called_once_with(1)
 
-    def test_get_user_not_found(self, user_service, mock_user_repo):
+    @pytest.mark.asyncio
+    async def test_get_user_not_found(self, user_service, mock_user_repo):
         """Test get user when not found"""
         mock_user_repo.get.return_value = None
 
         with pytest.raises(EntityNotFoundError, match="User not found"):
-            user_service.get_user(999)
+            await user_service.get_user(999)
 
     # ============================================================================
     # LIST USERS TESTS
@@ -193,64 +196,69 @@ class TestUserService:
     # UPDATE ROLE TESTS
     # ============================================================================
 
-    def test_update_role(self, user_service, mock_user_repo, sample_user):
+    @pytest.mark.asyncio
+    async def test_update_role(self, user_service, mock_user_repo, sample_user):
         """Test update user role"""
         mock_user_repo.get.return_value = sample_user
         mock_user_repo.save.return_value = sample_user
 
-        result = user_service.update_role(1, "admin")
+        result = await user_service.update_role(1, "admin")
 
         mock_user_repo.get.assert_called_once_with(1)
         mock_user_repo.save.assert_called_once()
         saved_user = mock_user_repo.save.call_args[0][0]
         assert saved_user.role == "admin"
 
-    def test_update_role_user_not_found(self, user_service, mock_user_repo):
+    @pytest.mark.asyncio
+    async def test_update_role_user_not_found(self, user_service, mock_user_repo):
         """Test update role when user not found"""
         mock_user_repo.get.return_value = None
 
         with pytest.raises(EntityNotFoundError, match="User not found"):
-            user_service.update_role(999, "admin")
+            await user_service.update_role(999, "admin")
 
     # ============================================================================
     # CHANGE PASSWORD TESTS
     # ============================================================================
 
+    @pytest.mark.asyncio
     @patch('app.modules.users.application.services.user_service.verify_password')
     @patch('app.modules.users.application.services.user_service.hash_password')
-    def test_change_password_success(self, mock_hash, mock_verify, user_service, mock_user_repo, sample_user):
+    async def test_change_password_success(self, mock_hash, mock_verify, user_service, mock_user_repo, sample_user):
         """Test change password with valid data"""
         mock_user_repo.get.return_value = sample_user
         mock_verify.return_value = True
         mock_hash.return_value = "new_hashed_password"
         mock_user_repo.save.return_value = sample_user
 
-        result = user_service.change_password(1, "old_password", "new_password123")
+        result = await user_service.change_password(1, "old_password", "new_password123")
 
         mock_verify.assert_called_once_with("old_password", sample_user.hashed_password)
         mock_hash.assert_called_once_with("new_password123")
         mock_user_repo.save.assert_called_once()
         assert result == sample_user
 
+    @pytest.mark.asyncio
     @patch('app.modules.users.application.services.user_service.verify_password')
-    def test_change_password_invalid_old_password(self, mock_verify, user_service, mock_user_repo, sample_user):
+    async def test_change_password_invalid_old_password(self, mock_verify, user_service, mock_user_repo, sample_user):
         """Test change password with invalid old password"""
         mock_user_repo.get.return_value = sample_user
         mock_verify.return_value = False
 
         with pytest.raises(ValidationError, match="Current password is incorrect"):
-            user_service.change_password(1, "wrong_old_password", "new_password123")
+            await user_service.change_password(1, "wrong_old_password", "new_password123")
 
         mock_user_repo.save.assert_not_called()
 
+    @pytest.mark.asyncio
     @patch('app.modules.users.application.services.user_service.verify_password')
-    def test_change_password_short_new_password(self, mock_verify, user_service, mock_user_repo, sample_user):
+    async def test_change_password_short_new_password(self, mock_verify, user_service, mock_user_repo, sample_user):
         """Test change password with short new password"""
         mock_user_repo.get.return_value = sample_user
         mock_verify.return_value = True
 
         with pytest.raises(ValidationError, match="New password must be at least 6 characters"):
-            user_service.change_password(1, "old_password", "short")
+            await user_service.change_password(1, "old_password", "short")
 
         mock_user_repo.save.assert_not_called()
 
@@ -258,20 +266,22 @@ class TestUserService:
     # DELETE USER TESTS
     # ============================================================================
 
-    def test_delete_user(self, user_service, mock_user_repo, sample_user):
+    @pytest.mark.asyncio
+    async def test_delete_user(self, user_service, mock_user_repo, sample_user):
         """Test delete user"""
         mock_user_repo.get.return_value = sample_user
 
-        user_service.delete_user(1)
+        await user_service.delete_user(1)
 
         mock_user_repo.get.assert_called_once_with(1)
         mock_user_repo.delete.assert_called_once_with(1)
 
-    def test_delete_user_not_found(self, user_service, mock_user_repo):
+    @pytest.mark.asyncio
+    async def test_delete_user_not_found(self, user_service, mock_user_repo):
         """Test delete user when not found"""
         mock_user_repo.get.return_value = None
 
         with pytest.raises(EntityNotFoundError, match="User not found"):
-            user_service.delete_user(999)
+            await user_service.delete_user(999)
 
         mock_user_repo.delete.assert_not_called()
