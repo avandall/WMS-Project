@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from app.shared.core.redis import redis_manager
@@ -38,8 +38,8 @@ class SessionManager:
         session_data = {
             "user_id": user_id,
             "session_id": session_id,
-            "created_at": datetime.utcnow().isoformat(),
-            "last_accessed": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "last_accessed": datetime.now(timezone.utc).isoformat(),
             "user_data": user_data,
             "ip_address": user_data.get("ip_address"),
             "user_agent": user_data.get("user_agent"),
@@ -68,7 +68,7 @@ class SessionManager:
         if isinstance(session_data, str):
             session_data = json.loads(session_data)
         
-        session_data["last_accessed"] = datetime.utcnow().isoformat()
+        session_data["last_accessed"] = datetime.now(timezone.utc).isoformat()
         await redis_manager.set(session_key, session_data, ex=self.default_ttl)
         
         return session_data
@@ -86,7 +86,7 @@ class SessionManager:
         
         # Update session data
         session_data.update(updates)
-        session_data["last_accessed"] = datetime.utcnow().isoformat()
+        session_data["last_accessed"] = datetime.now(timezone.utc).isoformat()
         
         await redis_manager.set(session_key, session_data, ex=self.default_ttl)
         logger.debug(f"Updated session {session_id}")
@@ -169,7 +169,7 @@ class SessionManager:
         await redis_manager.expire(session_key, ttl)
         
         # Also update last accessed time
-        await self.update_session(session_id, {"last_accessed": datetime.utcnow().isoformat()})
+        await self.update_session(session_id, {"last_accessed": datetime.now(timezone.utc).isoformat()})
         
         logger.debug(f"Extended session {session_id} by {ttl} seconds")
         return True

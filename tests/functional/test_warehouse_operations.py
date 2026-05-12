@@ -346,10 +346,10 @@ class TestWarehouseOperationsFunctional:
         initial_quantity = current_inventory[0].quantity if current_inventory else 0
         
         # 2. Add inventory (stock in)
-        mock_inventory_service.add_to_total_inventory(1, 25)
+        await mock_inventory_service.add_to_total_inventory(1, 25)
         
         # 3. Remove inventory (stock out)
-        mock_inventory_service.remove_from_total_inventory(1, 10)
+        await mock_inventory_service.remove_from_total_inventory(1, 10)
         
         # 4. Check final inventory
         final_inventory = await mock_warehouse_service.get_warehouse_inventory(1)
@@ -372,17 +372,17 @@ class TestWarehouseOperationsFunctional:
             {"product": sample_products[2], "current_quantity": 5, "threshold": 10, "needs_restock": True}
         ]
         
-        mock_inventory_service.get_low_stock_products.return_value = low_stock_items
+        mock_inventory_service.get_low_stock_products = AsyncMock(return_value=low_stock_items)
         mock_product_service.get_product_details.side_effect = sample_products
         
         # Execute workflow
         # 1. Check low stock products
-        low_stock = mock_inventory_service.get_low_stock_products(threshold=10)
+        low_stock = await mock_inventory_service.get_low_stock_products(threshold=10)
         
         # 2. Generate restock recommendations
         restock_recommendations = []
         for item in low_stock:
-            product = mock_product_service.get_product_details(item["product"].product_id)
+            product = await mock_product_service.get_product_details(item["product"].product_id)
             restock_quantity = item["threshold"] * 2  # Restock to double the threshold
             restock_recommendations.append({
                 "product": product,
@@ -538,7 +538,7 @@ class TestWarehouseOperationsFunctional:
         posted_document = await mock_document_service.post_document(document.document_id, "manager")
         
         # 6. Alternative: Use direct transfer service
-        mock_warehouse_service.transfer_product(
+        await mock_warehouse_service.transfer_product(
             from_warehouse_id=1,
             to_warehouse_id=2,
             product_id=1,

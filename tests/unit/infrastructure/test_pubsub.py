@@ -58,6 +58,14 @@ class TestPubSubManager:
         """Mock redis manager."""
         mock_manager = AsyncMock()
         mock_pubsub = AsyncMock()
+        
+        # Create a proper async iterator for listen()
+        async def mock_listen():
+            # Empty async iterator that yields nothing
+            return
+            yield  # This makes it an async generator
+        
+        mock_pubsub.listen = mock_listen
         mock_manager.subscribe.return_value = mock_pubsub
         return mock_manager, mock_pubsub
     
