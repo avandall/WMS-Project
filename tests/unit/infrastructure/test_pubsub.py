@@ -118,26 +118,12 @@ class TestPubSubManager:
         manager = PubSubManager()
         await manager.initialize()
         
-        # Store the original task
-        original_task = manager._listener_task
-        
-        # Set running to False to avoid task waiting
-        manager._running = False
-        
-        # Cancel the task
-        if original_task:
-            original_task.cancel()
-            # Don't await the task in test to avoid await issues
-            try:
-                original_task.cancel.assert_called_once()
-            except:
-                pass  # Task might not have cancel method
-        
-        # Close pubsub
-        await mock_pubsub.aclose()
+        # Call shutdown method to test proper shutdown behavior
+        await manager.shutdown()
         
         # Verify shutdown state
         assert manager._running is False
+        mock_pubsub.aclose.assert_awaited_once()
     
     @pytest.mark.asyncio
     async def test_subscribe_to_event_type(self, setup_redis_mock):

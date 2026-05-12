@@ -30,9 +30,8 @@ class RateLimiter:
 
         # Try Redis first
         try:
-            if redis_manager.client:
-                return await self._redis_rate_limit(client_ip, limit)
-        except Exception as e:
+            return await self._redis_rate_limit(client_ip, limit)
+        except (RuntimeError, Exception) as e:
             logger.warning(f"Redis rate limiting failed, falling back to in-memory: {e}")
 
         # Fallback to in-memory rate limiting

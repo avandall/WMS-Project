@@ -134,7 +134,7 @@ class TestWarehouseOperationsFunctional:
             {"product_id": 1, "quantity": 100, "unit_price": 99.99},
             {"product_id": 2, "quantity": 50, "unit_price": 49.99}
         ]
-        document = mock_document_service.create_import_document(
+        document = await mock_document_service.create_import_document(
             to_warehouse_id=warehouse.warehouse_id,
             items=items_data,
             created_by="admin"
@@ -194,7 +194,7 @@ class TestWarehouseOperationsFunctional:
             {"product_id": 1, "quantity": 50, "unit_price": 99.99},
             {"product_id": 2, "quantity": 25, "unit_price": 49.99}
         ]
-        document = mock_document_service.create_transfer_document(
+        document = await mock_document_service.create_transfer_document(
             from_warehouse_id=source.warehouse_id,
             to_warehouse_id=target.warehouse_id,
             items=items_data,
@@ -253,7 +253,7 @@ class TestWarehouseOperationsFunctional:
         
         # 3. Create import document
         items_data = [{"product_id": product.product_id, "quantity": 100, "unit_price": 99.99}]
-        document = mock_document_service.create_import_document(
+        document = await mock_document_service.create_import_document(
             to_warehouse_id=warehouse.warehouse_id,
             items=items_data,
             created_by="admin",
@@ -308,7 +308,7 @@ class TestWarehouseOperationsFunctional:
         
         # 2. Create export document
         items_data = [{"product_id": 1, "quantity": 25, "unit_price": 99.99}]
-        document = mock_document_service.create_export_document(
+        document = await mock_document_service.create_export_document(
             from_warehouse_id=1,
             items=items_data,
             created_by="admin",
@@ -459,7 +459,7 @@ class TestWarehouseOperationsFunctional:
             })
         
         if adjustment_items:
-            document = mock_document_service.create_import_document(
+            document = await mock_document_service.create_import_document(
                 to_warehouse_id=1,
                 items=adjustment_items,
                 created_by="admin",
@@ -526,7 +526,7 @@ class TestWarehouseOperationsFunctional:
         
         # 4. Create transfer document
         items_data = [{"product_id": 1, "quantity": transfer_quantity, "unit_price": 99.99}]
-        document = mock_document_service.create_transfer_document(
+        document = await mock_document_service.create_transfer_document(
             from_warehouse_id=1,
             to_warehouse_id=2,
             items=items_data,

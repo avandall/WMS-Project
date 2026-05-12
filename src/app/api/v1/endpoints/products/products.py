@@ -92,6 +92,6 @@ async def import_products_csv(
     if file.content_type not in {"text/csv", "application/vnd.ms-excel", "application/csv"}:
         raise HTTPException(status_code=400, detail="CSV file required")
     content = await file.read()
-    result = service.import_products_from_csv(content)
+    result = await service.import_products_from_csv(content)
     return result
 

@@ -172,14 +172,15 @@ class ProductService:
                 self._command_handler.handle_create(command)
                 created += 1
                 
-        return {"created": created, "updated": updated}
+        result = {"created": created, "updated": updated}
         # Invalidate products_all cache (best-effort)
         try:
             await redis_manager.delete("products_all")
         except Exception as e:
             logger.error(f"Failed to invalidate products_all cache: {e}")
+        return result
 
-    def import_products_from_csv(self, content: bytes) -> Dict:
+    async def import_products_from_csv(self, content: bytes) -> Dict:
         """Parse CSV content and import products."""
         decoded = content.decode("utf-8")
         reader = csv.DictReader(io.StringIO(decoded))
@@ -189,5 +190,5 @@ class ProductService:
             if not required.issubset(row.keys()):
                 raise ValidationError("CSV must include product_id,name,price")
             rows.append(row)
-        result = self.import_products(rows)
+        result = await self.import_products(rows)
         return {"summary": result, "count": len(rows)}

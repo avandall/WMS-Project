@@ -51,7 +51,7 @@ async def refresh(payload: RefreshRequest, service: UserService = Depends(get_us
     except jwt.PyJWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
-    user = service.get_user(int(decoded.get("sub")))
+    user = await service.get_user(int(decoded.get("sub")))
     access = create_token(
         str(user.user_id),
         settings.access_token_expire_minutes,

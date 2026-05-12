@@ -56,13 +56,14 @@ class TestUserService:
     # ============================================================================
 
     @patch('app.modules.users.application.services.user_service.hash_password')
-    def test_create_user_success(self, mock_hash, user_service, mock_user_repo, sample_user):
+    @pytest.mark.asyncio
+    async def test_create_user_success(self, mock_hash, user_service, mock_user_repo, sample_user):
         """Test create user with valid data"""
         mock_hash.return_value = "hashed_password"
         mock_user_repo.get_by_email.return_value = None
         mock_user_repo.save.return_value = sample_user
 
-        result = user_service.create_user(
+        result = await user_service.create_user(
             email="test@example.com",
             password="password123",
             role="user",
@@ -75,26 +76,28 @@ class TestUserService:
         assert result == sample_user
 
     @patch('app.modules.users.application.services.user_service.hash_password')
-    def test_create_user_duplicate_email(self, mock_hash, user_service, mock_user_repo, sample_user):
+    @pytest.mark.asyncio
+    async def test_create_user_duplicate_email(self, mock_hash, user_service, mock_user_repo, sample_user):
         """Test create user with duplicate email"""
         mock_hash.return_value = "hashed_password"
         mock_user_repo.get_by_email.return_value = sample_user
 
         with pytest.raises(ValidationError, match="User already exists"):
-            user_service.create_user(
+            await user_service.create_user(
                 email="test@example.com",
                 password="password123"
             )
 
         mock_user_repo.save.assert_not_called()
 
-    def test_create_user_default_role(self, user_service, mock_user_repo):
+    @pytest.mark.asyncio
+    async def test_create_user_default_role(self, user_service, mock_user_repo):
         """Test create user with default role"""
         mock_user_repo.get_by_email.return_value = None
         mock_user_repo.save.return_value = Mock()
 
         with patch('app.modules.users.application.services.user_service.hash_password'):
-            user_service.create_user(
+            await user_service.create_user(
                 email="test@example.com",
                 password="password123"
             )
@@ -109,37 +112,41 @@ class TestUserService:
 
     @patch('app.modules.users.application.services.user_service.create_token')
     @patch('app.modules.users.application.services.user_service.verify_password')
-    def test_authenticate_success(self, mock_verify, mock_create, user_service, mock_user_repo, sample_user):
+    @pytest.mark.asyncio
+    async def test_authenticate_success(self, mock_verify, mock_create, user_service, mock_user_repo, sample_user):
         """Test authenticate with valid credentials"""
         mock_user_repo.get_by_email.return_value = sample_user
         mock_verify.return_value = True
         mock_create.side_effect = ["access_token", "refresh_token"]
 
-        result = user_service.authenticate("test@example.com", "password123")
+        result = await user_service.authenticate("test@example.com", "password123")
 
         assert result["access_token"] == "access_token"
         assert result["refresh_token"] == "refresh_token"
         assert result["token_type"] == "bearer"
         assert result["user"] == sample_user
 
-    def test_authenticate_invalid_email(self, user_service, mock_user_repo):
+    @pytest.mark.asyncio
+    async def test_authenticate_invalid_email(self, user_service, mock_user_repo):
         """Test authenticate with invalid email"""
         mock_user_repo.get_by_email.return_value = None
 
         with pytest.raises(ValidationError, match="Invalid credentials"):
-            user_service.authenticate("wrong@example.com", "password123")
+            await user_service.authenticate("wrong@example.com", "password123")
 
     @patch('app.modules.users.application.services.user_service.verify_password')
-    def test_authenticate_invalid_password(self, mock_verify, user_service, mock_user_repo, sample_user):
+    @pytest.mark.asyncio
+    async def test_authenticate_invalid_password(self, mock_verify, user_service, mock_user_repo, sample_user):
         """Test authenticate with invalid password"""
         mock_user_repo.get_by_email.return_value = sample_user
         mock_verify.return_value = False
 
         with pytest.raises(ValidationError, match="Invalid credentials"):
-            user_service.authenticate("test@example.com", "wrong_password")
+            await user_service.authenticate("test@example.com", "wrong_password")
 
     @patch('app.modules.users.application.services.user_service.verify_password')
-    def test_authenticate_inactive_user(self, mock_verify, user_service, mock_user_repo):
+    @pytest.mark.asyncio
+    async def test_authenticate_inactive_user(self, mock_verify, user_service, mock_user_repo):
         """Test authenticate with inactive user"""
         inactive_user = Mock()
         inactive_user.is_active = False
@@ -147,7 +154,7 @@ class TestUserService:
         mock_verify.return_value = True
 
         with pytest.raises(ValidationError, match="User is inactive"):
-            user_service.authenticate("test@example.com", "password123")
+            await user_service.authenticate("test@example.com", "password123")
 
     # ============================================================================
     # GET USER TESTS

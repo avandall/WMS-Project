@@ -153,7 +153,7 @@ class TestSessionManager:
         """Test getting session when Redis returns bytes."""
         mock_manager = setup_redis_mock
         session_data = {"user_id": 1, "session_id": "test-session"}
-        mock_manager.get.return_value = json.dumps(session_data)
+        mock_manager.get.return_value = json.dumps(session_data).encode("utf-8")
         
         manager = SessionManager()
         result = await manager.get_session("test-session")
@@ -274,7 +274,7 @@ class TestSessionManager:
         mock_manager.client.smembers.return_value = session_ids
         
         session_data = {"user_id": 1, "session_id": "session1"}
-        mock_manager.get.return_value = json.dumps(session_data)
+        mock_manager.get.return_value = json.dumps(session_data).encode("utf-8")
         
         manager = SessionManager()
         sessions = await manager.get_user_sessions(1)

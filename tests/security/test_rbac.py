@@ -247,9 +247,9 @@ class TestRBAC:
         
         for invalid_role in edge_cases:
             try:
-                result = authorizer.can_create_product(invalid_role)
-                # Should handle gracefully and return False or raise exception
-                assert result is False or isinstance(result, Exception)
+                authorizer.can_create_product(invalid_role)
+                # Guard-style authorizer raises on deny, None on allow
+                pytest.fail(f"Invalid role should not be authorized: {invalid_role}")
             except Exception:
                 pass  # Expected to fail gracefully
 
@@ -296,8 +296,8 @@ class TestRBAC:
                 # For now, test that authorization doesn't allow arbitrary role changes
                 result = authorizer.can_create_product(current_role)
                 
-                # Should return a boolean result or raise exception
-                assert isinstance(result, bool) or isinstance(result, Exception)
+                # Guard-style authorizer returns None on success
+                assert result is None
             except Exception:
                 pass
 
@@ -371,8 +371,8 @@ class TestRBAC:
             try:
                 # Test that system can handle custom roles
                 result = authorizer.can_read_product(role)
-                # Should return a boolean result or raise exception
-                assert isinstance(result, bool) or isinstance(result, Exception)
+                # Guard-style authorizer returns None on success
+                assert result is None
             except Exception:
                 pass  # May fail gracefully
 

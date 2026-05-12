@@ -76,15 +76,19 @@ class TestRedisManager:
     @pytest.mark.asyncio
     async def test_initialize_with_decode_responses(self, redis_manager, mock_connection_pool, mock_redis_client):
         """Test that decode_responses=True is added to URL if not present."""
-        settings.redis_url = "redis://localhost:6379/0"
-        
-        with patch('redis.asyncio.ConnectionPool.from_url', return_value=mock_connection_pool) as mock_from_url:
-            with patch('redis.asyncio.Redis', return_value=mock_redis_client):
-                await redis_manager.initialize()
-                
-                # Check that decode_responses=True was added
-                called_url = mock_from_url.call_args[0][0]
-                assert "decode_responses=True" in called_url
+        original_url = settings.redis_url
+        try:
+            settings.redis_url = "redis://localhost:6379/0"
+            
+            with patch('redis.asyncio.ConnectionPool.from_url', return_value=mock_connection_pool) as mock_from_url:
+                with patch('redis.asyncio.Redis', return_value=mock_redis_client):
+                    await redis_manager.initialize()
+                    
+                    # Check that decode_responses=True was added
+                    called_url = mock_from_url.call_args[0][0]
+                    assert "decode_responses=True" in called_url
+        finally:
+            settings.redis_url = original_url
     
     @pytest.mark.asyncio
     async def test_initialize_failure(self, redis_manager):

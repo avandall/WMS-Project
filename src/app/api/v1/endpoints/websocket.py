@@ -59,6 +59,18 @@ class ConnectionManager:
         
         logger.info(f"WebSocket disconnected for user {user_id}")
     
+    def _cleanup_connection(self, websocket: WebSocket, user_id: int = None):
+        """Remove connection from all registries to prevent stale references."""
+        # Remove from all channel connections
+        for channel_connections in self.active_connections.values():
+            channel_connections.discard(websocket)
+        
+        # Remove from user connections if user_id provided
+        if user_id is not None and user_id in self.user_connections:
+            self.user_connections[user_id].discard(websocket)
+            if not self.user_connections[user_id]:
+                del self.user_connections[user_id]
+
     async def send_personal_message(self, message: str, user_id: int):
         """Send message to specific user."""
         if user_id in self.user_connections:
@@ -71,9 +83,9 @@ class ConnectionManager:
                 except Exception:
                     disconnected.add(connection)
             
-            # Clean up disconnected connections
+            # Clean up disconnected connections from all registries
             for conn in disconnected:
-                self.user_connections[user_id].discard(conn)
+                self._cleanup_connection(conn, user_id)
     
     async def broadcast_to_channel(self, message: str, channel: str):
         """Broadcast message to all connections in a channel."""
@@ -87,9 +99,9 @@ class ConnectionManager:
                 except Exception:
                     disconnected.add(connection)
             
-            # Clean up disconnected connections
+            # Clean up disconnected connections from all registries
             for conn in disconnected:
-                self.active_connections[channel].discard(conn)
+                self._cleanup_connection(conn)
     
     async def broadcast_to_all(self, message: str):
         """Broadcast message to all connected clients."""
@@ -102,9 +114,9 @@ class ConnectionManager:
             except Exception:
                 disconnected.add(connection)
         
-        # Clean up disconnected connections
+        # Clean up disconnected connections from all registries
         for conn in disconnected:
-            self.active_connections["general"].discard(conn)
+            self._cleanup_connection(conn)
 
 
 manager = ConnectionManager()
@@ -221,10 +233,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, current_user = 
     except WebSocketDisconnect:
         pass
     finally:
-        # Unsubscribe from pub/sub events to prevent memory leaks
-        pubsub_manager.unsubscribe(EventType.STOCK_CHANGE, on_stock_change)
-        pubsub_manager.unsubscribe(EventType.INVENTORY_UPDATE, on_inventory_update)
-        pubsub_manager.unsubscribe(EventType.SYSTEM_ALERT, on_system_alert)
         manager.disconnect(websocket, user_id)
 
 
@@ -279,7 +287,7 @@ async def websocket_test_page():
                 userId = document.getElementById('userId').value;
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const host = window.location.host;
-                const wsUrl = `${protocol}//${host}/ws/v1/ws/${userId}`;
+                const wsUrl = `${protocol}//${host}/api/v1/ws/${userId}`;
                 
                 ws = new WebSocket(wsUrl);
                 
@@ -311,7 +319,7 @@ async def websocket_test_page():
             function sendMessage() {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     const message = document.getElementById('messageInput').value;
-                    ws.send(message);
+                    ws.send(JSON.stringify({ type: 'client_message', data: message }));
                     document.getElementById('messageInput').value = '';
                 } else {
                     addMessage('WebSocket not connected', 'error');

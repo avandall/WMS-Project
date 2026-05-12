@@ -67,6 +67,8 @@ class SessionManager:
         # Update last accessed time and refresh user session index TTL
         if isinstance(session_data, str):
             session_data = json.loads(session_data)
+        elif isinstance(session_data, bytes):
+            session_data = json.loads(session_data.decode('utf-8'))
         
         session_data["last_accessed"] = datetime.now(timezone.utc).isoformat()
         # Get current TTL to preserve it

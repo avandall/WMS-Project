@@ -92,7 +92,7 @@ async def create_transfer_document(
 ):
     items_dict = [item.model_dump() for item in doc.items]
     created_by = doc.created_by or current_user.email
-    document = service.create_transfer_document(
+    document = await service.create_transfer_document(
         from_warehouse_id=doc.source_warehouse_id,
         to_warehouse_id=doc.destination_warehouse_id,
         items=items_dict,

@@ -145,7 +145,7 @@ docker compose down -v
 - **Code Quality**: Black formatting, MyPy type checking
 
 ### Project Structure
-```
+```text
 src/
 ├── app/                          # Main application
 │   ├── api/                      # FastAPI endpoints & middleware
@@ -168,7 +168,7 @@ src/
     └── workflows/              # AI workflow orchestration
 ```
 
-## � Documentation
+## 📚 Documentation
 
 - **[PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md)** - Comprehensive technical documentation
 - **[API Documentation](http://localhost:8000/docs)** - Interactive Swagger API docs
@@ -183,6 +183,6 @@ src/
 5. Run the test suite
 6. Submit a pull request
 
-## �📝 License
+## 📝 License
 
 [Add your license information here]

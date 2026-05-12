@@ -18,7 +18,7 @@ class UserService:
     def __init__(self, user_repo: IUserRepo):
         self.user_repo = user_repo
 
-    def create_user(
+    async def create_user(
         self,
         email: str,
         password: str,
@@ -37,7 +37,7 @@ class UserService:
         )
         return self.user_repo.save(user)
 
-    def authenticate(self, email: str, password: str) -> dict:
+    async def authenticate(self, email: str, password: str) -> dict:
         user = self.user_repo.get_by_email(email)
         if not user or not verify_password(password, user.hashed_password):
             raise ValidationError("Invalid credentials")
@@ -105,12 +105,13 @@ class UserService:
             full_name=user.full_name,
             is_active=user.is_active,
         )
-        return self.user_repo.save(updated)
+        result = self.user_repo.save(updated)
         # Invalidate specific user cache (best-effort)
         try:
             await redis_manager.delete(f"user:{user_id}")
         except Exception as e:
             logger.error(f"Failed to invalidate user cache: {e}")
+        return result
 
     @invalidate_cache_pattern("user")
     async def delete_user(self, user_id: int) -> None:
