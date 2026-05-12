@@ -37,7 +37,7 @@ async def list_users(service: UserService = Depends(get_user_service)):
     dependencies=[Depends(require_permissions(Permission.MANAGE_USERS))],
 )
 async def create_user(payload: UserCreate, service: UserService = Depends(get_user_service)):
-    user = service.create_user(
+    user = await service.create_user(
         email=payload.email,
         password=payload.password,
         role=payload.role,

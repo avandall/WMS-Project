@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status, WebSocket, WebSocketException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import jwt
 
@@ -85,4 +85,36 @@ def require_permissions(*perms: Permission):
         return user
 
     return _checker
+
+
+async def get_current_user_ws(websocket: WebSocket, db=Depends(get_session)):
+    """WebSocket-specific authentication that extracts token from query params."""
+    if settings.testing:
+        test_user = User(
+            user_id=1,
+            email="test-admin@example.com",
+            hashed_password="not-used-in-testing",
+            role="admin",
+            full_name="Test Admin",
+            is_active=True,
+        )
+        return test_user
+
+    # Extract token from query parameters
+    token = websocket.query_params.get("token")
+    if not token:
+        raise WebSocketException(code=1008, reason="Not authenticated: token required")
+
+    try:
+        payload = decode_token(token)
+        user_id = int(payload.get("sub"))
+    except jwt.PyJWTError:
+        raise WebSocketException(code=1008, reason="Invalid token")
+
+    service = UserService(UserRepo(db))
+    user = await service.get_user(user_id)
+    if not user.is_active:
+        raise WebSocketException(code=1008, reason="Inactive user")
+    
+    return user
 

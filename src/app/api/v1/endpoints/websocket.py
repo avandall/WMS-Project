@@ -5,7 +5,7 @@ import asyncio
 from typing import Dict, Set, List
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from fastapi.responses import HTMLResponse
-from app.api.auth_deps import get_current_user
+from app.api.auth_deps import get_current_user_ws
 
 from app.shared.core.pubsub import pubsub_manager, EventType
 from app.shared.core.logging import get_logger
@@ -62,8 +62,10 @@ class ConnectionManager:
     async def send_personal_message(self, message: str, user_id: int):
         """Send message to specific user."""
         if user_id in self.user_connections:
+            # Create a copy to avoid mutation during iteration
+            connections = list(self.user_connections[user_id])
             disconnected = set()
-            for connection in self.user_connections[user_id]:
+            for connection in connections:
                 try:
                     await connection.send_text(message)
                 except Exception:
@@ -76,8 +78,10 @@ class ConnectionManager:
     async def broadcast_to_channel(self, message: str, channel: str):
         """Broadcast message to all connections in a channel."""
         if channel in self.active_connections:
+            # Create a copy to avoid mutation during iteration
+            connections = list(self.active_connections[channel])
             disconnected = set()
-            for connection in self.active_connections[channel]:
+            for connection in connections:
                 try:
                     await connection.send_text(message)
                 except Exception:
@@ -89,8 +93,10 @@ class ConnectionManager:
     
     async def broadcast_to_all(self, message: str):
         """Broadcast message to all connected clients."""
+        # Create a copy to avoid mutation during iteration
+        connections = list(self.active_connections.get("general", set()))
         disconnected = set()
-        for connection in self.active_connections.get("general", set()):
+        for connection in connections:
             try:
                 await connection.send_text(message)
             except Exception:
@@ -103,9 +109,55 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# Global pub/sub event handlers to prevent per-connection duplication
+async def handle_stock_change(data):
+    message = json.dumps({
+        "type": "stock_change",
+        "data": data,
+        "timestamp": data.get("timestamp")
+    })
+    task = asyncio.create_task(manager.broadcast_to_channel(message, "stock_changes"))
+    # Store task reference to prevent garbage collection
+    if not hasattr(manager, '_tasks'):
+        manager._tasks = set()
+    manager._tasks.add(task)
+    # Add cleanup callback
+    task.add_done_callback(manager._tasks.discard)
+
+async def handle_inventory_update(data):
+    message = json.dumps({
+        "type": "inventory_update", 
+        "data": data,
+        "timestamp": data.get("timestamp")
+    })
+    task = asyncio.create_task(manager.broadcast_to_channel(message, "inventory"))
+    if not hasattr(manager, '_tasks'):
+        manager._tasks = set()
+    manager._tasks.add(task)
+    # Add cleanup callback
+    task.add_done_callback(manager._tasks.discard)
+
+async def handle_system_alert(data):
+    message = json.dumps({
+        "type": "system_alert",
+        "data": data,
+        "timestamp": data.get("timestamp")
+    })
+    task = asyncio.create_task(manager.broadcast_to_all(message))
+    if not hasattr(manager, '_tasks'):
+        manager._tasks = set()
+    manager._tasks.add(task)
+    # Add cleanup callback
+    task.add_done_callback(manager._tasks.discard)
+
+# Subscribe to events once at module level
+pubsub_manager.subscribe(EventType.STOCK_CHANGE, handle_stock_change)
+pubsub_manager.subscribe(EventType.INVENTORY_UPDATE, handle_inventory_update)
+pubsub_manager.subscribe(EventType.SYSTEM_ALERT, handle_system_alert)
+
 
 @router.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: int, current_user = Depends(get_current_user)):
+async def websocket_endpoint(websocket: WebSocket, user_id: int, current_user = Depends(get_current_user_ws)):
     """WebSocket endpoint for real-time updates."""
     # Validate user authorization
     if current_user.user_id != user_id:
@@ -119,52 +171,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, current_user = 
             await websocket.close(code=1008, reason="Invalid channel name")
             return
     
-    # Subscribe to pub/sub events
-    def on_stock_change(data):
-        message = json.dumps({
-            "type": "stock_change",
-            "data": data,
-            "timestamp": data.get("timestamp")
-        })
-        task = asyncio.create_task(manager.broadcast_to_channel(message, "stock_changes"))
-        # Store task reference to prevent garbage collection
-        if not hasattr(manager, '_tasks'):
-            manager._tasks = set()
-        manager._tasks.add(task)
-        # Add cleanup callback
-        task.add_done_callback(manager._tasks.discard)
-    
-    def on_inventory_update(data):
-        message = json.dumps({
-            "type": "inventory_update", 
-            "data": data,
-            "timestamp": data.get("timestamp")
-        })
-        task = asyncio.create_task(manager.broadcast_to_channel(message, "inventory"))
-        if not hasattr(manager, '_tasks'):
-            manager._tasks = set()
-        manager._tasks.add(task)
-        # Add cleanup callback
-        task.add_done_callback(manager._tasks.discard)
-    
-    def on_system_alert(data):
-        message = json.dumps({
-            "type": "system_alert",
-            "data": data,
-            "timestamp": data.get("timestamp")
-        })
-        task = asyncio.create_task(manager.broadcast_to_all(message))
-        if not hasattr(manager, '_tasks'):
-            manager._tasks = set()
-        manager._tasks.add(task)
-        # Add cleanup callback
-        task.add_done_callback(manager._tasks.discard)
-    
-    # Subscribe to events
-    pubsub_manager.subscribe(EventType.STOCK_CHANGE, on_stock_change)
-    pubsub_manager.subscribe(EventType.INVENTORY_UPDATE, on_inventory_update)
-    pubsub_manager.subscribe(EventType.SYSTEM_ALERT, on_system_alert)
-    
+        
     try:
         await manager.connect(websocket, user_id, channels)
         
@@ -188,6 +195,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, current_user = 
                     new_channels = message.get("channels", [])
                     async with manager._connection_lock:
                         for channel in new_channels:
+                            # Validate channel name
+                            if not channel.replace("_", "").isalnum():
+                                continue
+                            # Limit number of channels per connection
+                            if len(channels) >= 20:
+                                break
                             if channel not in channels:
                                 channels.append(channel)
                                 if channel not in manager.active_connections:
@@ -309,7 +322,15 @@ async def websocket_test_page():
                 const messages = document.getElementById('messages');
                 const messageDiv = document.createElement('div');
                 messageDiv.className = `message ${type}`;
-                messageDiv.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong><br>${message}`;
+                
+                const ts = document.createElement('strong');
+                ts.textContent = new Date().toLocaleTimeString();
+                messageDiv.appendChild(ts);
+                messageDiv.appendChild(document.createElement('br'));
+                const body = document.createElement('span');
+                body.textContent = message;
+                messageDiv.appendChild(body);
+                
                 messages.appendChild(messageDiv);
                 messages.scrollTop = messages.scrollHeight;
             }

@@ -6,6 +6,9 @@ from app.shared.core.auth import create_token, hash_password, verify_password
 from app.shared.core.cache import cached, invalidate_cache_pattern
 from app.shared.core.redis import redis_manager
 from app.shared.core.settings import settings
+from app.shared.core.logging import get_logger
+
+logger = get_logger(__name__)
 from app.modules.users.domain.entities.user import User
 from app.shared.domain.business_exceptions import EntityNotFoundError, ValidationError
 from app.modules.users.domain.interfaces.user_repo import IUserRepo
@@ -79,8 +82,11 @@ class UserService:
             is_active=user.is_active,
         )
         result = self.user_repo.save(updated)
-        # Invalidate specific user cache
-        await redis_manager.delete(f"user:{user_id}")
+        # Invalidate specific user cache (best-effort)
+        try:
+            await redis_manager.delete(f"user:{user_id}")
+        except Exception as e:
+            logger.error(f"Failed to invalidate user cache: {e}")
         return result
 
     @invalidate_cache_pattern("user")
@@ -100,10 +106,18 @@ class UserService:
             is_active=user.is_active,
         )
         return self.user_repo.save(updated)
+        # Invalidate specific user cache (best-effort)
+        try:
+            await redis_manager.delete(f"user:{user_id}")
+        except Exception as e:
+            logger.error(f"Failed to invalidate user cache: {e}")
 
     @invalidate_cache_pattern("user")
     async def delete_user(self, user_id: int) -> None:
         await self.get_user(user_id)
         self.user_repo.delete(user_id)
-        # Invalidate specific user cache
-        await redis_manager.delete(f"user:{user_id}")
+        # Invalidate specific user cache (best-effort)
+        try:
+            await redis_manager.delete(f"user:{user_id}")
+        except Exception as e:
+            logger.error(f"Failed to invalidate user cache: {e}")

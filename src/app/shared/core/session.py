@@ -181,7 +181,7 @@ class SessionManager:
         if not exists:
             return False
         
-        ttl = additional_seconds or self.default_ttl
+        ttl = additional_seconds if additional_seconds is not None else self.default_ttl
         await redis_manager.expire(session_key, ttl)
         
         # Also update last accessed time without overriding TTL

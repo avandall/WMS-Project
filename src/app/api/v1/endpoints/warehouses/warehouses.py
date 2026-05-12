@@ -43,7 +43,7 @@ async def create_warehouse(
     warehouse: WarehouseCreate,
     service: WarehouseService = Depends(get_warehouse_service),
 ):
-    created_warehouse = service.create_warehouse(warehouse.name)
+    created_warehouse = await service.create_warehouse(warehouse.name)
     return WarehouseResponse.from_domain(created_warehouse)
 
 

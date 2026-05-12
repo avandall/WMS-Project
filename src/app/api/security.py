@@ -75,8 +75,8 @@ class RateLimiter:
                 return False
         except Exception as e:
             logger.error(f"Rate limiting error: {e}")
-            # Fallback to simple check
-            return False
+            # Fallback to in-memory rate limiting
+            return await self._memory_rate_limit(client_ip, limit)
 
     async def _memory_rate_limit(self, client_ip: str, limit: int) -> bool:
         """In-memory rate limiting as fallback."""

@@ -20,7 +20,7 @@ router = APIRouter()
 
 @router.post("/register", response_model=UserResponse, status_code=201)
 async def register(payload: UserCreate, service: UserService = Depends(get_user_service)):
-    user = service.create_user(
+    user = await service.create_user(
         email=payload.email,
         password=payload.password,
         role=payload.role,
@@ -31,7 +31,7 @@ async def register(payload: UserCreate, service: UserService = Depends(get_user_
 
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, service: UserService = Depends(get_user_service)):
-    tokens = service.authenticate(payload.email, payload.password)
+    tokens = await service.authenticate(payload.email, payload.password)
     return TokenResponse(
         access_token=tokens["access_token"],
         refresh_token=tokens["refresh_token"],

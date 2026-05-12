@@ -35,7 +35,7 @@ async def create_product(
 ):
     ProductAuthorizer.can_create_product(user.role)
     
-    created_product = service.create_product(
+    created_product = await service.create_product(
         product_id=product.product_id,
         name=product.name,
         price=product.price,

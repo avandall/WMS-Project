@@ -35,7 +35,7 @@ class ProductService:
         self._query_handler = ProductQueryHandler(product_repo)
         self._validator = ProductValidator()
 
-    def create_product(
+    async def create_product(
         self,
         product_id: Optional[int] = None,
         name: Optional[str] = None,
@@ -62,7 +62,15 @@ class ProductService:
             price=price,
             description=description,
         )
-        return self._command_handler.handle_create(command)
+        result = self._command_handler.handle_create(command)
+        
+        # Invalidate products_all cache (best-effort)
+        try:
+            await redis_manager.delete("products_all")
+        except Exception as e:
+            logger.error(f"Failed to invalidate products_all cache: {e}")
+        
+        return result
 
     @cached(prefix="product", ttl=3600)  # 1 hour cache
     async def get_product_details(self, product_id: int) -> Product:
@@ -87,8 +95,13 @@ class ProductService:
             description=description,
         )
         result = self._command_handler.handle_update(command)
-        # Invalidate specific product cache
-        await redis_manager.delete(f"product:{product_id}")
+        
+        # Invalidate specific product cache (best-effort)
+        try:
+            await redis_manager.delete(f"product:{product_id}")
+        except Exception as e:
+            logger.error(f"Failed to invalidate product cache: {e}")
+        
         return result
 
     @invalidate_cache_pattern("product")
@@ -97,8 +110,11 @@ class ProductService:
         """Delete product using command pattern."""
         command = DeleteProductCommand(product_id=product_id)
         self._command_handler.handle_delete(command)
-        # Invalidate specific product cache
-        await redis_manager.delete(f"product:{product_id}")
+        # Invalidate specific product cache (best-effort)
+        try:
+            await redis_manager.delete(f"product:{product_id}")
+        except Exception as e:
+            logger.error(f"Failed to invalidate product cache: {e}")
 
     async def get_product_with_inventory(self, product_id: int) -> dict:
         """Get product with inventory information - facade method."""
@@ -121,7 +137,7 @@ class ProductService:
         query = GetAllProductsQuery()
         return self._query_handler.handle_get_all(query)
 
-    def import_products(self, rows: List[Dict]) -> Dict:
+    async def import_products(self, rows: List[Dict]) -> Dict:
         """Import products with separated validation logic."""
         self._validator.validate_csv_rows(rows)
         
@@ -157,6 +173,11 @@ class ProductService:
                 created += 1
                 
         return {"created": created, "updated": updated}
+        # Invalidate products_all cache (best-effort)
+        try:
+            await redis_manager.delete("products_all")
+        except Exception as e:
+            logger.error(f"Failed to invalidate products_all cache: {e}")
 
     def import_products_from_csv(self, content: bytes) -> Dict:
         """Parse CSV content and import products."""

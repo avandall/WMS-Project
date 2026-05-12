@@ -175,6 +175,11 @@ class WarehouseService:
                 f"Use the transfer endpoint to move inventory to another warehouse first."
             )
         self.warehouse_repo.delete(warehouse_id)
+        # Invalidate specific warehouse cache (best-effort)
+        try:
+            await redis_manager.delete(f"warehouse:{warehouse_id}")
+        except Exception as e:
+            logger.error(f"Failed to invalidate warehouse cache: {e}")
 
     async def _get_warehouse_product_quantity(self, warehouse_id: int, product_id: int) -> int:
         inventory = self.warehouse_repo.get_warehouse_inventory(warehouse_id)
