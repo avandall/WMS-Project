@@ -85,14 +85,48 @@ def cached(
                     if isinstance(cached_result, bytes):
                         cached_result = cached_result.decode('utf-8')
                     
-                    # Try to parse as JSON if it looks like JSON
+                    # Try to parse as JSON (our cached format)
                     if isinstance(cached_result, str) and cached_result.startswith(('{', '[')):
                         parsed = json.loads(cached_result)
-                        # Preserve original types for domain entities
-                        return parsed
+                        # Check if this is our typed cache format
+                        if isinstance(parsed, dict) and '__cached_type__' in parsed and '__cached_value__' in parsed:
+                            cached_type = parsed['__cached_type__']
+                            cached_value = parsed['__cached_value__']
+                            
+                            # Restore original type
+                            if cached_type == 'int':
+                                return int(cached_value)
+                            elif cached_type == 'float':
+                                return float(cached_value)
+                            elif cached_type == 'bool':
+                                return cached_value.lower() == 'true'
+                            elif cached_type == 'str':
+                                return str(cached_value)
+                            elif cached_type == 'dict':
+                                return cached_value
+                            elif cached_type == 'list':
+                                return cached_value
+                            else:
+                                # For domain objects or other types, return as-is
+                                return cached_value
+                        else:
+                            # Legacy format or regular JSON
+                            return parsed
                     else:
-                        # Return as-is for primitive types (int, str, etc.)
-                        return cached_result
+                        # Handle primitive types stored directly (legacy)
+                        try:
+                            # Try to convert to int if possible
+                            if isinstance(cached_result, str) and cached_result.isdigit():
+                                return int(cached_result)
+                            # Try to convert to float if possible
+                            elif isinstance(cached_result, str):
+                                try:
+                                    return float(cached_result)
+                                except ValueError:
+                                    return cached_result
+                            return cached_result
+                        except (ValueError, AttributeError):
+                            return cached_result
                 except (json.JSONDecodeError, UnicodeDecodeError):
                     return cached_result
             
@@ -100,8 +134,30 @@ def cached(
             try:
                 result = await func(*args, **kwargs)
                 
+                # Prepare cache value with type information
+                cache_value = result
+                if isinstance(result, (dict, list)):
+                    # For dict/list, store as JSON with type info
+                    cache_value = {
+                        '__cached_type__': type(result).__name__,
+                        '__cached_value__': result
+                    }
+                elif isinstance(result, (int, float, bool, str)):
+                    # For primitives, store with type info
+                    cache_value = {
+                        '__cached_type__': type(result).__name__,
+                        '__cached_value__': str(result)
+                    }
+                else:
+                    # For domain objects and other types, store their string representation
+                    # but mark the type so we can handle it appropriately
+                    cache_value = {
+                        '__cached_type__': type(result).__name__,
+                        '__cached_value__': str(result)
+                    }
+                
                 # Cache the result
-                success = await redis_manager.set(cache_key, result, ex=ttl)
+                success = await redis_manager.set(cache_key, cache_value, ex=ttl)
                 if success:
                     logger.debug(f"Cached result for key: {cache_key}")
                 else:

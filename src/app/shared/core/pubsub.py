@@ -79,6 +79,21 @@ class PubSubManager:
         self._subscriptions[channel].append(callback)
         logger.info(f"Subscribed to {channel}")
     
+    def unsubscribe(self, event_type: EventType, callback: Callable) -> None:
+        """Unsubscribe from specific event type."""
+        channel = f"wms_events:{event_type.value}"
+        if channel in self._subscriptions:
+            try:
+                self._subscriptions[channel].remove(callback)
+                logger.info(f"Unsubscribed from {channel}")
+                # Clean up empty subscription lists
+                if not self._subscriptions[channel]:
+                    del self._subscriptions[channel]
+            except ValueError:
+                logger.warning(f"Callback not found in subscriptions for {channel}")
+        else:
+            logger.warning(f"No subscriptions found for {channel}")
+    
     async def publish(self, event: Event) -> None:
         """Publish event to Redis."""
         try:

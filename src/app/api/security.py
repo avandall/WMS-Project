@@ -49,21 +49,29 @@ class RateLimiter:
         
         if count < tonumber(ARGV[1]) then
             count = redis.call('INCR', KEYS[1])
-            if tonumber(current) == 0 then
+            if count == 1 then
                 redis.call('EXPIRE', KEYS[1], ARGV[2])
             end
-            return {count = count, allowed = true}
+            return {1, count}  -- {allowed, count}
         else
-            return {count = count, allowed = false}
+            return {0, count}  -- {allowed, count}
         end
         """
         
         try:
             result = await redis_manager.client.eval(lua_script, 1, key, limit, 60)
-            if result['allowed']:
-                return True
+            # Redis EVAL returns a list, not a dict
+            if isinstance(result, (list, tuple)) and len(result) >= 2:
+                allowed = bool(result[0])
+                count = result[1]
+                if allowed:
+                    return True
+                else:
+                    logger.warning(f"Rate limit exceeded for IP: {client_ip} (count: {count})")
+                    return False
             else:
-                logger.warning(f"Rate limit exceeded for IP: {client_ip} (count: {result['count']})")
+                # Fallback: if result format is unexpected, deny the request
+                logger.warning(f"Unexpected rate limiter result format: {result}")
                 return False
         except Exception as e:
             logger.error(f"Rate limiting error: {e}")

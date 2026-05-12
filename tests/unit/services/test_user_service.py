@@ -175,20 +175,22 @@ class TestUserService:
     # LIST USERS TESTS
     # ============================================================================
 
-    def test_list_users(self, user_service, mock_user_repo, sample_user):
+    @pytest.mark.asyncio
+    async def test_list_users(self, user_service, mock_user_repo, sample_user):
         """Test list users"""
         mock_user_repo.get_all.return_value = {1: sample_user}
 
-        result = user_service.list_users()
+        result = await user_service.list_users()
 
         assert result == {1: sample_user}
         mock_user_repo.get_all.assert_called_once()
 
-    def test_list_users_empty(self, user_service, mock_user_repo):
+    @pytest.mark.asyncio
+    async def test_list_users_empty(self, user_service, mock_user_repo):
         """Test list users with no users"""
         mock_user_repo.get_all.return_value = {}
 
-        result = user_service.list_users()
+        result = await user_service.list_users()
 
         assert result == {}
 

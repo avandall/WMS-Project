@@ -191,7 +191,7 @@ class TestInventoryServiceIntegration:
         cache_call_args = mock_redis.set.call_args
         # Cache key should include function name and args hash
         assert "inventory_quantity:get_total_quantity:args:" in cache_call_args[0][0]
-        assert cache_call_args[0][1] == 15
+        assert cache_call_args[0][1] == {'__cached_type__': 'int', '__cached_value__': '15'}
         assert cache_call_args[1]["ex"] == 300  # 5 minutes TTL
     
     @pytest.mark.asyncio
@@ -201,12 +201,12 @@ class TestInventoryServiceIntegration:
         """Test getting total quantity with cache hit."""
         mock_redis, mock_publisher, mock_inventory_repo = setup_mocks
         
-        # Cache hit scenario
-        mock_redis.get.return_value = "25"
+        # Cache hit scenario - use new typed cache format
+        mock_redis.get.return_value = '{"__cached_type__": "int", "__cached_value__": "25"}'
         
         result = await inventory_service.get_total_quantity(1)
         
-        assert result == "25"  # Cache returns string
+        assert result == 25  # Cache returns typed int
         
         # Verify repo was NOT called (cache hit)
         mock_inventory_repo.get_quantity.assert_not_called()

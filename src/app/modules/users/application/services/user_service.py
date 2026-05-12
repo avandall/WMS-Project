@@ -64,7 +64,7 @@ class UserService:
             raise EntityNotFoundError("User not found")
         return user
 
-    def list_users(self) -> Dict[int, User]:
+    async def list_users(self) -> Dict[int, User]:
         return self.user_repo.get_all()
 
     @invalidate_cache_pattern("user")

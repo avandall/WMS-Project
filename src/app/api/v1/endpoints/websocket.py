@@ -108,7 +108,7 @@ manager = ConnectionManager()
 async def websocket_endpoint(websocket: WebSocket, user_id: int, current_user = Depends(get_current_user)):
     """WebSocket endpoint for real-time updates."""
     # Validate user authorization
-    if current_user.id != user_id:
+    if current_user.user_id != user_id:
         await websocket.close(code=1008, reason="Unauthorized: Cannot access another user's WebSocket")
         return
     
@@ -131,6 +131,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, current_user = 
         if not hasattr(manager, '_tasks'):
             manager._tasks = set()
         manager._tasks.add(task)
+        # Add cleanup callback
+        task.add_done_callback(manager._tasks.discard)
     
     def on_inventory_update(data):
         message = json.dumps({
@@ -139,7 +141,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, current_user = 
             "timestamp": data.get("timestamp")
         })
         task = asyncio.create_task(manager.broadcast_to_channel(message, "inventory"))
+        if not hasattr(manager, '_tasks'):
+            manager._tasks = set()
         manager._tasks.add(task)
+        # Add cleanup callback
+        task.add_done_callback(manager._tasks.discard)
     
     def on_system_alert(data):
         message = json.dumps({
@@ -148,7 +154,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, current_user = 
             "timestamp": data.get("timestamp")
         })
         task = asyncio.create_task(manager.broadcast_to_all(message))
+        if not hasattr(manager, '_tasks'):
+            manager._tasks = set()
         manager._tasks.add(task)
+        # Add cleanup callback
+        task.add_done_callback(manager._tasks.discard)
     
     # Subscribe to events
     pubsub_manager.subscribe(EventType.STOCK_CHANGE, on_stock_change)
@@ -198,6 +208,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, current_user = 
     except WebSocketDisconnect:
         pass
     finally:
+        # Unsubscribe from pub/sub events to prevent memory leaks
+        pubsub_manager.unsubscribe(EventType.STOCK_CHANGE, on_stock_change)
+        pubsub_manager.unsubscribe(EventType.INVENTORY_UPDATE, on_inventory_update)
+        pubsub_manager.unsubscribe(EventType.SYSTEM_ALERT, on_system_alert)
         manager.disconnect(websocket, user_id)
 
 

@@ -19,7 +19,7 @@ from app.modules.users.application.services.user_service import UserService
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def get_current_user(
+async def get_current_user(
     request: Request,
     creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db=Depends(get_session),
@@ -46,7 +46,7 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     service = UserService(UserRepo(db))
-    user = service.get_user(user_id)
+    user = await service.get_user(user_id)
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
     request.state.user = user
