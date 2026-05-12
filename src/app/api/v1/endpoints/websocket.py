@@ -3,8 +3,9 @@
 import json
 import asyncio
 from typing import Dict, Set, List
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from fastapi.responses import HTMLResponse
+from app.api.auth_deps import get_current_user
 
 from app.shared.core.pubsub import pubsub_manager, EventType
 from app.shared.core.logging import get_logger
@@ -20,26 +21,28 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, Set[WebSocket]] = {}
         self.user_connections: Dict[int, Set[WebSocket]] = {}
+        self._connection_lock = asyncio.Lock()
     
     async def connect(self, websocket: WebSocket, user_id: int, channels: List[str]):
         """Accept WebSocket connection and subscribe to channels."""
         await websocket.accept()
         
-        # Add to general connections
-        if "general" not in self.active_connections:
-            self.active_connections["general"] = set()
-        self.active_connections["general"].add(websocket)
-        
-        # Add to user-specific connections
-        if user_id not in self.user_connections:
-            self.user_connections[user_id] = set()
-        self.user_connections[user_id].add(websocket)
-        
-        # Add to channel-specific connections
-        for channel in channels:
-            if channel not in self.active_connections:
-                self.active_connections[channel] = set()
-            self.active_connections[channel].add(websocket)
+        async with self._connection_lock:
+            # Add to general connections
+            if "general" not in self.active_connections:
+                self.active_connections["general"] = set()
+            self.active_connections["general"].add(websocket)
+            
+            # Add to user-specific connections
+            if user_id not in self.user_connections:
+                self.user_connections[user_id] = set()
+            self.user_connections[user_id].add(websocket)
+            
+            # Add to channel-specific connections
+            for channel in channels:
+                if channel not in self.active_connections:
+                    self.active_connections[channel] = set()
+                self.active_connections[channel].add(websocket)
         
         logger.info(f"WebSocket connected for user {user_id}, channels: {channels}")
     
@@ -102,9 +105,19 @@ manager = ConnectionManager()
 
 
 @router.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: int):
+async def websocket_endpoint(websocket: WebSocket, user_id: int, current_user = Depends(get_current_user)):
     """WebSocket endpoint for real-time updates."""
+    # Validate user authorization
+    if current_user.id != user_id:
+        await websocket.close(code=1008, reason="Unauthorized: Cannot access another user's WebSocket")
+        return
+    
+    # Validate channel names to prevent injection
     channels = ["general", f"user_{user_id}"]
+    for channel in channels:
+        if not channel.replace("_", "").isalnum():
+            await websocket.close(code=1008, reason="Invalid channel name")
+            return
     
     # Subscribe to pub/sub events
     def on_stock_change(data):
@@ -113,7 +126,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
             "data": data,
             "timestamp": data.get("timestamp")
         })
-        asyncio.create_task(manager.broadcast_to_channel(message, "stock_changes"))
+        task = asyncio.create_task(manager.broadcast_to_channel(message, "stock_changes"))
+        # Store task reference to prevent garbage collection
+        if not hasattr(manager, '_tasks'):
+            manager._tasks = set()
+        manager._tasks.add(task)
     
     def on_inventory_update(data):
         message = json.dumps({
@@ -121,7 +138,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
             "data": data,
             "timestamp": data.get("timestamp")
         })
-        asyncio.create_task(manager.broadcast_to_channel(message, "inventory"))
+        task = asyncio.create_task(manager.broadcast_to_channel(message, "inventory"))
+        manager._tasks.add(task)
     
     def on_system_alert(data):
         message = json.dumps({
@@ -129,7 +147,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
             "data": data,
             "timestamp": data.get("timestamp")
         })
-        asyncio.create_task(manager.broadcast_to_all(message))
+        task = asyncio.create_task(manager.broadcast_to_all(message))
+        manager._tasks.add(task)
     
     # Subscribe to events
     pubsub_manager.subscribe(EventType.STOCK_CHANGE, on_stock_change)
@@ -157,12 +176,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
                 if message.get("type") == "subscribe":
                     # Handle dynamic subscription changes
                     new_channels = message.get("channels", [])
-                    for channel in new_channels:
-                        if channel not in channels:
-                            channels.append(channel)
-                            if channel not in manager.active_connections:
-                                manager.active_connections[channel] = set()
-                            manager.active_connections[channel].add(websocket)
+                    async with manager._connection_lock:
+                        for channel in new_channels:
+                            if channel not in channels:
+                                channels.append(channel)
+                                if channel not in manager.active_connections:
+                                    manager.active_connections[channel] = set()
+                                manager.active_connections[channel].add(websocket)
                     
                     await websocket.send_text(json.dumps({
                         "type": "subscription_updated",
@@ -230,7 +250,9 @@ async def websocket_test_page():
             
             function connect() {
                 userId = document.getElementById('userId').value;
-                const wsUrl = `ws://localhost:8000/ws/v1/ws/${userId}`;
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const host = window.location.host;
+                const wsUrl = `${protocol}//${host}/ws/v1/ws/${userId}`;
                 
                 ws = new WebSocket(wsUrl);
                 

@@ -411,10 +411,8 @@ class TestInventoryServiceIntegration:
         mock_inventory_repo.get_quantity.return_value = 10
         
         # Operation should still succeed despite cache error
-        try:
-            await inventory_service.add_to_total_inventory(1, 5, user_id=123)
-        except Exception:
-            pass  # Expected due to cache invalidation decorator
+        # The operation should complete and the underlying repo method should be called
+        await inventory_service.add_to_total_inventory(1, 5, user_id=123)
         
         # Verify inventory operation still happened
         mock_inventory_repo.add_quantity.assert_called_once_with(1, 5)
@@ -435,13 +433,17 @@ class TestInventoryServiceIntegration:
         mock_inventory_repo.get_quantity.return_value = 10
         
         # Operation should still succeed despite pubsub error
-        try:
-            await inventory_service.add_to_total_inventory(1, 5, user_id=123)
-        except Exception:
-            pass  # Expected due to cache invalidation decorator
+        await inventory_service.add_to_total_inventory(1, 5, user_id=123)
         
         # Verify inventory operation still happened
         mock_inventory_repo.add_quantity.assert_called_once_with(1, 5)
         
         # Verify cache operation still happened
         mock_redis.delete.assert_called_once_with("inventory_quantity:1")
+        
+        # Verify that the pubsub error was handled gracefully (operation still succeeds)
+        # The operation should complete without raising the PubSub error
+        await inventory_service.add_to_total_inventory(1, 5, user_id=123)
+        
+        # Verify the underlying repo operation still happened
+        mock_inventory_repo.add_quantity.assert_called_with(1, 5)

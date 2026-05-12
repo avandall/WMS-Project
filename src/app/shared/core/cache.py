@@ -5,6 +5,7 @@ import hashlib
 import json
 from typing import Any, Callable, Optional, Union
 import asyncio
+import inspect
 
 from app.shared.core.redis import redis_manager
 from app.shared.core.logging import get_logger
@@ -25,7 +26,21 @@ def cache_key_builder(
     
     if include_args and args:
         # Skip first argument if it's 'self' (instance method)
-        args_to_hash = args[1:] if args and hasattr(args[0], '__class__') else args
+        # Check if first argument looks like an instance (has __class__ but not a basic type)
+        if args and len(args) > 0:
+            first_arg = args[0]
+            # Check if first argument is likely 'self' (instance method)
+            # Basic types like int, str, bool, etc. are not 'self'
+            basic_types = (int, str, bool, float, type(None))
+            if hasattr(first_arg, '__class__') and not isinstance(first_arg, basic_types):
+                # This looks like an instance method, skip 'self'
+                args_to_hash = args[1:]
+            else:
+                # This looks like a regular function call, include all args
+                args_to_hash = args
+        else:
+            args_to_hash = args
+            
         if args_to_hash:
             args_str = json.dumps(args_to_hash, default=str, sort_keys=True)
             args_hash = hashlib.md5(args_str.encode()).hexdigest()[:8]
@@ -71,9 +86,12 @@ def cached(
                         cached_result = cached_result.decode('utf-8')
                     
                     # Try to parse as JSON if it looks like JSON
-                    if cached_result.startswith(('{', '[')):
-                        return json.loads(cached_result)
+                    if isinstance(cached_result, str) and cached_result.startswith(('{', '[')):
+                        parsed = json.loads(cached_result)
+                        # Preserve original types for domain entities
+                        return parsed
                     else:
+                        # Return as-is for primitive types (int, str, etc.)
                         return cached_result
                 except (json.JSONDecodeError, UnicodeDecodeError):
                     return cached_result

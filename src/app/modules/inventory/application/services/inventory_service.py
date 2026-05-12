@@ -44,16 +44,24 @@ class InventoryService:
         new_quantity = old_quantity + quantity
         
         # Invalidate specific inventory cache
-        await redis_manager.delete(f"inventory_quantity:{product_id}")
+        try:
+            await redis_manager.delete(f"inventory_quantity:{product_id}")
+        except Exception as e:
+            # Log cache error but don't fail the operation
+            logger.error(f"Failed to invalidate cache: {e}")
         
         # Publish real-time stock change event
-        await EventPublisher.publish_stock_change(
-            product_id=product_id,
-            old_quantity=old_quantity,
-            new_quantity=new_quantity,
-            user_id=user_id,
-            source="inventory_service"
-        )
+        try:
+            await EventPublisher.publish_stock_change(
+                product_id=product_id,
+                old_quantity=old_quantity,
+                new_quantity=new_quantity,
+                user_id=user_id,
+                source="inventory_service"
+            )
+        except Exception as e:
+            # Log PubSub error but don't fail the operation
+            logger.error(f"Failed to publish stock change event: {e}")
 
     @invalidate_cache_pattern("inventory_quantity")
     async def remove_from_total_inventory(self, product_id: int, quantity: int, user_id: Optional[int] = None) -> None:
@@ -76,16 +84,24 @@ class InventoryService:
         new_quantity = old_quantity - quantity
         
         # Invalidate specific inventory cache
-        await redis_manager.delete(f"inventory_quantity:{product_id}")
+        try:
+            await redis_manager.delete(f"inventory_quantity:{product_id}")
+        except Exception as e:
+            # Log cache error but don't fail the operation
+            logger.error(f"Failed to invalidate cache: {e}")
         
         # Publish real-time stock change event
-        await EventPublisher.publish_stock_change(
-            product_id=product_id,
-            old_quantity=old_quantity,
-            new_quantity=new_quantity,
-            user_id=user_id,
-            source="inventory_service"
-        )
+        try:
+            await EventPublisher.publish_stock_change(
+                product_id=product_id,
+                old_quantity=old_quantity,
+                new_quantity=new_quantity,
+                user_id=user_id,
+                source="inventory_service"
+            )
+        except Exception as e:
+            # Log PubSub error but don't fail the operation
+            logger.error(f"Failed to publish stock change event: {e}")
 
     @cached(prefix="inventory_quantity", ttl=300)  # 5 minutes cache for real-time data
     async def get_total_quantity(self, product_id: int) -> int:

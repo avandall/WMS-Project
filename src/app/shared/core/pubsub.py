@@ -5,6 +5,7 @@ import asyncio
 from typing import Any, Dict, List, Optional, Callable
 from dataclasses import dataclass
 from enum import Enum
+import time
 
 from app.shared.core.redis import redis_manager
 from app.shared.core.logging import get_logger
@@ -48,7 +49,9 @@ class PubSubManager:
         if self._running:
             return
         
-        self._pubsub = await redis_manager.subscribe("wms_events")
+        # Subscribe to all event type channels
+        event_channels = [f"wms_events:{event_type.value}" for event_type in EventType]
+        self._pubsub = await redis_manager.subscribe(*event_channels)
         self._listener_task = asyncio.create_task(self._listen_for_messages())
         self._running = True
         logger.info("PubSub manager initialized")
@@ -112,8 +115,16 @@ class PubSubManager:
     async def _handle_message(self, message: Dict[str, Any]) -> None:
         """Handle incoming pub/sub message."""
         try:
-            channel = message["channel"].decode("utf-8")
-            data = json.loads(message["data"].decode("utf-8"))
+            # Handle both string and bytes channel names
+            channel = message["channel"]
+            if isinstance(channel, bytes):
+                channel = channel.decode("utf-8")
+            
+            # Handle both string and bytes data
+            data = message["data"]
+            if isinstance(data, bytes):
+                data = data.decode("utf-8")
+            data = json.loads(data)
             
             # Find callbacks for this channel
             callbacks = self._subscriptions.get(channel, [])
@@ -152,7 +163,7 @@ class EventPublisher:
                 "change": new_quantity - old_quantity,
                 "warehouse_id": warehouse_id,
             },
-            timestamp=asyncio.get_event_loop().time(),
+            timestamp=time.time(),
             source=source,
             user_id=user_id,
             warehouse_id=warehouse_id,
@@ -178,7 +189,7 @@ class EventPublisher:
                 "quantity": quantity,
                 "operation": operation,
             },
-            timestamp=asyncio.get_event_loop().time(),
+            timestamp=time.time(),
             source=source,
             user_id=user_id,
             warehouse_id=warehouse_id,
@@ -200,7 +211,7 @@ class EventPublisher:
                 "document_id": document_id,
                 "status": status,
             },
-            timestamp=asyncio.get_event_loop().time(),
+            timestamp=time.time(),
             source=source,
             user_id=user_id,
         )
@@ -219,7 +230,7 @@ class EventPublisher:
                 "message": message,
                 "level": level,
             },
-            timestamp=asyncio.get_event_loop().time(),
+            timestamp=time.time(),
             source=source,
         )
         await pubsub_manager.publish(event)

@@ -39,26 +39,36 @@ class RateLimiter:
         return await self._memory_rate_limit(client_ip, limit)
 
     async def _redis_rate_limit(self, client_ip: str, limit: int) -> bool:
-        """Redis-based rate limiting using sliding window."""
+        """Redis-based rate limiting using sliding window with atomic operations."""
         key = f"rate_limit:{client_ip}"
         
-        # Get current count
-        current_count = await redis_manager.get(key)
-        if current_count is None:
-            current_count = 0
-        else:
-            current_count = int(current_count)
+        # Use Lua script for atomic rate limiting
+        lua_script = """
+        local current = redis.call('GET', KEYS[1])
+        local count = tonumber(current) or 0
         
-        if current_count >= limit:
-            logger.warning(f"Rate limit exceeded for IP: {client_ip}")
+        if count < tonumber(ARGV[1]) then
+            count = redis.call('INCR', KEYS[1])
+            if tonumber(current) == 0 then
+                redis.call('EXPIRE', KEYS[1], ARGV[2])
+            end
+            return {count = count, allowed = true}
+        else
+            return {count = count, allowed = false}
+        end
+        """
+        
+        try:
+            result = await redis_manager.client.eval(lua_script, 1, key, limit, 60)
+            if result['allowed']:
+                return True
+            else:
+                logger.warning(f"Rate limit exceeded for IP: {client_ip} (count: {result['count']})")
+                return False
+        except Exception as e:
+            logger.error(f"Rate limiting error: {e}")
+            # Fallback to simple check
             return False
-        
-        # Increment counter with expiration
-        new_count = await redis_manager.increment(key)
-        if new_count == 1:  # First request in this window
-            await redis_manager.expire(key, 60)  # 1 minute window
-        
-        return new_count <= limit
 
     async def _memory_rate_limit(self, client_ip: str, limit: int) -> bool:
         """In-memory rate limiting as fallback."""

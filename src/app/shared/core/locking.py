@@ -27,7 +27,7 @@ class DistributedLock:
         """Acquire the lock."""
         for attempt in range(self.max_retries):
             # Try to acquire lock using SET NX EX
-            success = await redis_manager.set(
+            success = await redis_manager.client.set(
                 self.key, 
                 self.identifier, 
                 ex=self.ttl, 
@@ -73,7 +73,7 @@ class DistributedLock:
             logger.error(f"Error releasing lock {self.key}: {e}")
             return False
     
-    async def extend(self, additional_ttl: int = None) -> bool:
+    async def extend(self, additional_ttl: Optional[int] = None) -> bool:
         """Extend lock TTL if we still own it."""
         if not self._acquired:
             return False

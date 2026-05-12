@@ -4,6 +4,7 @@ import json
 from typing import Any, Optional, Union
 import redis.asyncio as redis
 from redis.asyncio import ConnectionPool
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 from app.shared.core.settings import settings
 from app.shared.core.logging import get_logger
@@ -32,8 +33,13 @@ class RedisManager:
         try:
             # Ensure redis_url has decode_responses=True
             redis_url = settings.redis_url
-            if "decode_responses" not in redis_url:
-                redis_url += "?decode_responses=True"
+            parsed = urlparse(redis_url)
+            query_params = parse_qs(parsed.query or '')
+            
+            if "decode_responses" not in query_params:
+                query_params["decode_responses"] = ["True"]
+                new_query = urlencode(query_params, doseq=True)
+                redis_url = urlunparse(parsed._replace(query=new_query))
             
             # Create connection pool with health check
             self._pool = ConnectionPool.from_url(

@@ -16,11 +16,21 @@ class TestRedisManager:
     def redis_manager(self):
         """Create RedisManager instance for testing."""
         # Reset singleton for testing
+        original_instance = RedisManager._instance
+        original_pool = RedisManager._pool
+        original_client = RedisManager._client
+        
         RedisManager._instance = None
         RedisManager._pool = None
         RedisManager._client = None
         manager = RedisManager()
-        return manager
+        
+        yield manager
+        
+        # Restore original state
+        RedisManager._instance = original_instance
+        RedisManager._pool = original_pool
+        RedisManager._client = original_client
     
     @pytest.fixture
     def mock_redis_client(self):

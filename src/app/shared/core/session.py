@@ -64,12 +64,23 @@ class SessionManager:
         if session_data is None:
             return None
         
-        # Update last accessed time
+        # Update last accessed time and refresh user session index TTL
         if isinstance(session_data, str):
             session_data = json.loads(session_data)
         
         session_data["last_accessed"] = datetime.now(timezone.utc).isoformat()
-        await redis_manager.set(session_key, session_data, ex=self.default_ttl)
+        # Get current TTL to preserve it
+        current_ttl = await redis_manager.client.ttl(session_key)
+        if current_ttl > 0:
+            await redis_manager.set(session_key, session_data, ex=current_ttl)
+        else:
+            await redis_manager.set(session_key, session_data, ex=self.default_ttl)
+        
+        # Refresh user session index TTL
+        user_id = session_data.get("user_id")
+        if user_id:
+            user_sessions_key = f"{self.user_sessions_prefix}{user_id}"
+            await redis_manager.expire(user_sessions_key, self.default_ttl)
         
         return session_data
     
@@ -88,7 +99,12 @@ class SessionManager:
         session_data.update(updates)
         session_data["last_accessed"] = datetime.now(timezone.utc).isoformat()
         
-        await redis_manager.set(session_key, session_data, ex=self.default_ttl)
+        # Get current TTL to preserve it
+        current_ttl = await redis_manager.client.ttl(session_key)
+        if current_ttl > 0:
+            await redis_manager.set(session_key, session_data, ex=current_ttl)
+        else:
+            await redis_manager.set(session_key, session_data, ex=self.default_ttl)
         logger.debug(f"Updated session {session_id}")
         return True
     
@@ -157,7 +173,7 @@ class SessionManager:
         logger.debug("Session cleanup relies on Redis TTL")
         return 0
     
-    async def extend_session(self, session_id: str, additional_seconds: int = None) -> bool:
+    async def extend_session(self, session_id: str, additional_seconds: Optional[int] = None) -> bool:
         """Extend session TTL."""
         session_key = f"{self.session_prefix}{session_id}"
         exists = await redis_manager.exists(session_key)
@@ -168,8 +184,13 @@ class SessionManager:
         ttl = additional_seconds or self.default_ttl
         await redis_manager.expire(session_key, ttl)
         
-        # Also update last accessed time
-        await self.update_session(session_id, {"last_accessed": datetime.now(timezone.utc).isoformat()})
+        # Also update last accessed time without overriding TTL
+        session_data = await redis_manager.get(session_key)
+        if isinstance(session_data, str):
+            session_data = json.loads(session_data)
+        if session_data:
+            session_data["last_accessed"] = datetime.now(timezone.utc).isoformat()
+            await redis_manager.set(session_key, session_data, ex=ttl)
         
         logger.debug(f"Extended session {session_id} by {ttl} seconds")
         return True

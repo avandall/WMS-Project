@@ -26,6 +26,7 @@ class TestSessionManager:
         mock_manager.client.srem.return_value = 1
         mock_manager.client.smembers.return_value = set()
         mock_manager.client.scan.return_value = (0, [])
+        mock_manager.client.ttl.return_value = 3600  # Return integer TTL
         return mock_manager
     
     @pytest.fixture

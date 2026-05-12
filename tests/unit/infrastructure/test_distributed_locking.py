@@ -17,7 +17,7 @@ class TestDistributedLock:
     def mock_redis_manager(self):
         """Mock redis manager."""
         mock_manager = AsyncMock()
-        mock_manager.set.return_value = True
+        mock_manager.client.set.return_value = True
         mock_manager.delete.return_value = True
         mock_manager.exists.return_value = True
         mock_manager.expire.return_value = True
@@ -34,7 +34,7 @@ class TestDistributedLock:
     async def test_lock_acquire_success(self, setup_redis_mock):
         """Test successful lock acquisition."""
         mock_manager = setup_redis_mock
-        mock_manager.set.return_value = True  # NX EX succeeds
+        mock_manager.client.set.return_value = True  # NX EX succeeds
         
         lock = DistributedLock("test_lock", ttl=30)
         result = await lock.acquire()
@@ -43,8 +43,8 @@ class TestDistributedLock:
         assert lock.is_acquired()
         
         # Check Redis SET was called correctly
-        mock_manager.set.assert_called_once()
-        call_args = mock_manager.set.call_args
+        mock_manager.client.set.assert_called_once()
+        call_args = mock_manager.client.set.call_args
         assert call_args[0][0] == "lock:test_lock"
         assert call_args[0][1] == lock.identifier
         assert call_args[1]["ex"] == 30
@@ -54,7 +54,7 @@ class TestDistributedLock:
     async def test_lock_acquire_failure(self, setup_redis_mock):
         """Test lock acquisition failure."""
         mock_manager = setup_redis_mock
-        mock_manager.set.return_value = False  # NX EX fails
+        mock_manager.client.set.return_value = False  # NX EX fails
         
         lock = DistributedLock("test_lock", ttl=30, max_retries=3, retry_delay=0.01)
         result = await lock.acquire()
@@ -63,13 +63,13 @@ class TestDistributedLock:
         assert not lock.is_acquired()
         
         # Should have tried multiple times
-        assert mock_manager.set.call_count == 3
+        assert mock_manager.client.set.call_count == 3
     
     @pytest.mark.asyncio
     async def test_lock_release_success(self, setup_redis_mock):
         """Test successful lock release."""
         mock_manager = setup_redis_mock
-        mock_manager.set.return_value = True
+        mock_manager.client.set.return_value = True
         mock_manager.client.eval.return_value = 1  # Lua script succeeds
         
         lock = DistributedLock("test_lock", ttl=30)
@@ -91,7 +91,7 @@ class TestDistributedLock:
     async def test_lock_release_not_owner(self, setup_redis_mock):
         """Test lock release when not owner."""
         mock_manager = setup_redis_mock
-        mock_manager.set.return_value = True
+        mock_manager.client.set.return_value = True
         mock_manager.client.eval.return_value = 0  # Lua script fails
         
         lock = DistributedLock("test_lock", ttl=30)
@@ -115,7 +115,7 @@ class TestDistributedLock:
     async def test_lock_extend_success(self, setup_redis_mock):
         """Test successful lock extension."""
         mock_manager = setup_redis_mock
-        mock_manager.set.return_value = True
+        mock_manager.client.set.return_value = True
         mock_manager.client.eval.return_value = 60  # Return TTL value for extend operation
         
         lock = DistributedLock("test_lock", ttl=30)
@@ -134,7 +134,7 @@ class TestDistributedLock:
     async def test_lock_extend_not_owner(self, setup_redis_mock):
         """Test lock extension when not owner."""
         mock_manager = setup_redis_mock
-        mock_manager.set.return_value = True
+        mock_manager.client.set.return_value = True
         mock_manager.client.eval.return_value = 0  # Lua script fails
         
         lock = DistributedLock("test_lock", ttl=30)
@@ -157,7 +157,7 @@ class TestDistributedLock:
     async def test_lock_context_manager_success(self, setup_redis_mock):
         """Test lock as context manager - success."""
         mock_manager = setup_redis_mock
-        mock_manager.set.return_value = True
+        mock_manager.client.set.return_value = True
         mock_manager.client.eval.return_value = 1
         
         lock = DistributedLock("test_lock", ttl=30)
@@ -173,7 +173,7 @@ class TestDistributedLock:
     async def test_lock_context_manager_failure(self, setup_redis_mock):
         """Test lock as context manager - acquisition failure."""
         mock_manager = setup_redis_mock
-        mock_manager.set.return_value = False
+        mock_manager.client.set.return_value = False
         
         lock = DistributedLock("test_lock", ttl=30, max_retries=1)
         
@@ -416,7 +416,7 @@ class TestDistributedLockDecorator:
     async def test_distributed_lock_decorator_success(self, setup_redis_mock):
         """Test distributed lock decorator with successful execution."""
         mock_manager = setup_redis_mock
-        mock_manager.set.return_value = True
+        mock_manager.client.set.return_value = True
         mock_manager.client.eval.return_value = 1
         
         with patch('app.shared.core.locking.DistributedLock') as mock_lock_class:
@@ -448,7 +448,7 @@ class TestDistributedLockDecorator:
     async def test_distributed_lock_decorator_with_kwargs(self, setup_redis_mock):
         """Test distributed lock decorator with keyword arguments."""
         mock_manager = setup_redis_mock
-        mock_manager.set.return_value = True
+        mock_manager.client.set.return_value = True
         mock_manager.client.eval.return_value = 1
         
         with patch('app.shared.core.locking.DistributedLock') as mock_lock_class:
@@ -480,7 +480,7 @@ class TestDistributedLockDecorator:
     async def test_distributed_lock_decorator_pattern_failure(self, setup_redis_mock):
         """Test decorator when key pattern fails."""
         mock_manager = setup_redis_mock
-        mock_manager.set.return_value = True
+        mock_manager.client.set.return_value = True
         mock_manager.client.eval.return_value = 1
         
         with patch('app.shared.core.locking.DistributedLock') as mock_lock_class:
