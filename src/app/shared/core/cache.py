@@ -25,6 +25,49 @@ def get_serializer(type_name: str) -> Optional[Callable]:
     return _serializer_registry.get(type_name)
 
 
+def _product_from_dict(data: dict):
+    """Reconstruct Product from dict."""
+    from app.modules.products.domain.entities.product import Product
+    return Product(
+        product_id=data['product_id'],
+        name=data['name'],
+        description=data.get('description'),
+        price=data['price']
+    )
+
+
+def _warehouse_from_dict(data: dict):
+    """Reconstruct Warehouse from dict."""
+    from app.modules.warehouses.domain.entities.warehouse import Warehouse
+    from app.modules.inventory.domain.entities.inventory import InventoryItem
+    
+    # Reconstruct inventory items if present
+    inventory = []
+    if 'inventory' in data and data['inventory']:
+        for item_data in data['inventory']:
+            inventory.append(InventoryItem(
+                product_id=item_data['product_id'],
+                quantity=item_data['quantity']
+            ))
+    
+    return Warehouse(
+        warehouse_id=data['warehouse_id'],
+        location=data['location'],
+        inventory=inventory
+    )
+
+
+# Register serializers for domain entities
+def _register_domain_serializers():
+    """Register serializers for domain entities."""
+    register_serializer('Product', _product_from_dict)
+    register_serializer('Warehouse', _warehouse_from_dict)
+
+
+# Auto-register serializers when module is imported
+_register_domain_serializers()
+
+
 def cache_key_builder(
     prefix: str,
     func_name: str,
@@ -93,6 +136,8 @@ def cached(
             cached_result = await redis_manager.get(cache_key)
             if cached_result is not None:
                 try:
+                    cached_value = None
+
                     # Handle both string and bytes responses
                     if isinstance(cached_result, bytes):
                         cached_result = cached_result.decode('utf-8')
@@ -107,61 +152,59 @@ def cached(
                             
                             # Restore original type
                             if cached_type == 'int':
-                                return int(cached_value)
+                                cached_value = int(cached_value)
                             elif cached_type == 'float':
-                                return float(cached_value)
+                                cached_value = float(cached_value)
                             elif cached_type == 'bool':
-                                return cached_value.lower() == 'true'
+                                cached_value = cached_value.lower() == 'true'
                             elif cached_type == 'str':
-                                return str(cached_value)
+                                cached_value = str(cached_value)
                             elif cached_type == 'dict':
-                                return cached_value
+                                cached_value = cached_value
                             elif cached_type == 'list':
-                                return cached_value
+                                cached_value = cached_value
                             else:
-                                # For domain objects, try to reconstruct using registered serializers
+                                # For domain objects, require explicit serializers
                                 try:
                                     # Check if we have a registered serializer for this type
                                     serializer = get_serializer(cached_type)
                                     if serializer:
-                                        return serializer(cached_value)
-                                    
-                                    # Check if it's a Pydantic model (common case)
-                                    try:
-                                        # Try to detect Pydantic models by checking for common attributes
-                                        if isinstance(cached_value, dict):
-                                            # Check if the value looks like it could be a Pydantic model dict
-                                            # We'll try to handle it as a generic dict fallback
-                                            logger.debug(f"No serializer registered for type {cached_type}, returning as dict")
-                                            return cached_value
-                                    except Exception:
-                                        pass
-                                    
-                                    # No serializer registered and not a simple dict, return as-is with warning
-                                    logger.warning(f"No serializer registered for type {cached_type}, returning raw dict")
-                                    return cached_value
+                                        cached_value = serializer(cached_value)
+                                    else:
+                                        # No serializer registered - this is a configuration error
+                                        # We should not cache domain objects without explicit serializers
+                                        logger.error(
+                                            f"No serializer registered for domain type {cached_type}. "
+                                            f"Domain objects require explicit serializers to be cached. "
+                                            f"Register a serializer using register_serializer('{cached_type}', from_dict_callable)"
+                                        )
+                                        cached_value = None  # Treat as cache miss
                                     
                                 except Exception as e:
-                                    logger.warning(f"Failed to reconstruct cached object of type {cached_type}: {e}")
-                                    return cached_value
+                                    logger.error(f"Failed to reconstruct cached object of type {cached_type}: {e}")
+                                    cached_value = None  # Treat as cache miss
                         else:
                             # Legacy format or regular JSON
-                            return parsed
+                            cached_value = parsed
                     else:
                         # Handle primitive types stored directly (legacy)
                         try:
                             # Try to convert to int if possible
                             if isinstance(cached_result, str) and cached_result.isdigit():
-                                return int(cached_result)
+                                cached_value = int(cached_result)
                             # Try to convert to float if possible
                             elif isinstance(cached_result, str):
                                 try:
-                                    return float(cached_result)
+                                    cached_value = float(cached_result)
                                 except ValueError:
-                                    return cached_result
-                            return cached_result
+                                    cached_value = cached_result
+                            else:
+                                cached_value = cached_result
                         except (ValueError, AttributeError):
-                            return cached_result
+                            cached_value = cached_result
+
+                    if cached_value is not None:
+                        return cached_value
                 except (json.JSONDecodeError, UnicodeDecodeError):
                     return cached_result
             
@@ -184,34 +227,39 @@ def cached(
                         '__cached_value__': str(result)
                     }
                 else:
-                    # For domain objects and other types, store as JSON with all attributes
-                    # Use __dict__ to serialize object attributes
-                    try:
-                        if hasattr(result, '__dict__'):
-                            # For domain objects with __dict__, serialize all attributes
+                    # For domain objects, require explicit serializers
+                    result_type = type(result).__name__
+                    serializer = get_serializer(result_type)
+                    
+                    if serializer:
+                        # Use registered serializer to convert to dict
+                        try:
+                            serialized_value = result.__dict__ if hasattr(result, '__dict__') else str(result)
                             cache_value = {
-                                '__cached_type__': type(result).__name__,
-                                '__cached_value__': result.__dict__
+                                '__cached_type__': result_type,
+                                '__cached_value__': serialized_value
                             }
-                        else:
-                            # Fallback for objects without __dict__
-                            cache_value = {
-                                '__cached_type__': type(result).__name__,
-                                '__cached_value__': str(result)
-                            }
-                    except Exception:
-                        # Ultimate fallback to string representation
-                        cache_value = {
-                            '__cached_type__': type(result).__name__,
-                            '__cached_value__': str(result)
-                        }
+                        except Exception as e:
+                            logger.error(f"Failed to serialize {result_type} for caching: {e}")
+                            # Don't cache if serialization fails
+                            cache_value = None
+                    else:
+                        # No serializer registered - don't cache domain objects
+                        logger.error(f"Cannot cache {result_type}: no serializer registered. "
+                                   f"Domain objects require explicit serializers to be cached. "
+                                   f"Register a serializer using register_serializer('{result_type}', from_dict_callable)")
+                        # Don't cache domain objects without serializers
+                        cache_value = None
                 
-                # Cache the result
-                success = await redis_manager.set(cache_key, cache_value, ex=ttl)
-                if success:
-                    logger.debug(f"Cached result for key: {cache_key}")
+                # Cache the result only if we have a valid cache_value
+                if cache_value is not None:
+                    success = await redis_manager.set(cache_key, cache_value, ex=ttl)
+                    if success:
+                        logger.debug(f"Cached result for key: {cache_key}")
+                    else:
+                        logger.warning(f"Failed to cache result for key: {cache_key}")
                 else:
-                    logger.warning(f"Failed to cache result for key: {cache_key}")
+                    logger.debug(f"Skipping cache for key: {cache_key} (no serializer available)")
                 
                 return result
                 

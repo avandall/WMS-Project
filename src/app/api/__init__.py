@@ -27,6 +27,7 @@ class _MissingDependencyApp:
 
 def create_app() -> FastAPI:
     from contextlib import asynccontextmanager
+    from datetime import datetime
 
     from fastapi import FastAPI, Request
     from fastapi.middleware.cors import CORSMiddleware
@@ -38,7 +39,7 @@ def create_app() -> FastAPI:
     from app.shared.core.database import check_db_connection, init_db
     from app.shared.core.logging import clear_request_id, set_request_id, setup_logging
     from app.shared.core.redis import redis_manager
-    from app.shared.core.pubsub import pubsub_manager
+    from app.shared.core.pubsub import EventType, pubsub_manager
     from app.shared.core.settings import settings
     from app.shared.domain.business_exceptions import DomainError, EntityNotFoundError, ValidationError
 
@@ -68,9 +69,46 @@ def create_app() -> FastAPI:
             logger.info("Pub/Sub manager initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Pub/Sub manager: {e}")
+
+        # Start Redis Streams consumers for critical events (catch-up capable).
+        app.state._critical_stream_consumer_keys = []
+        try:
+            consumer_suffix = str(uuid.uuid4())[:8]
+            group_name = "wms_api_critical"
+
+            def _make_handler(event_type):
+                async def _handler(message: dict):
+                    await pubsub_manager.dispatch_critical_stream_message(event_type, message)
+                return _handler
+
+            for event_type in [
+                EventType.CRITICAL_STOCK_CHANGE,
+                EventType.CRITICAL_INVENTORY_UPDATE,
+                EventType.CRITICAL_DOCUMENT_STATUS,
+            ]:
+                key = pubsub_manager.start_critical_stream_consumer(
+                    event_type,
+                    group_name=group_name,
+                    consumer_name=f"api_{consumer_suffix}",
+                    handler=_make_handler(event_type),
+                    claim_idle_ms=60_000,
+                )
+                app.state._critical_stream_consumer_keys.append(key)
+            logger.info("Critical Redis Streams consumers started")
+        except Exception as e:
+            logger.error(f"Failed to start critical Redis Streams consumers: {e}")
         
         yield
         
+        # Stop stream consumers first (before shutting down Pub/Sub/Redis).
+        try:
+            keys = getattr(app.state, "_critical_stream_consumer_keys", [])
+            for key in keys:
+                await pubsub_manager.stop_critical_stream_consumer(key)
+            logger.info("Critical Redis Streams consumers stopped")
+        except Exception as e:
+            logger.error(f"Error stopping critical Redis Streams consumers: {e}")
+
         # Cleanup Pub/Sub manager
         try:
             await pubsub_manager.shutdown()
@@ -119,12 +157,25 @@ def create_app() -> FastAPI:
     async def health_check():
         db_healthy = check_db_connection()
         
-        # Check Redis health
+        # Check Redis health and get detailed stats
         redis_healthy = False
+        redis_info = {}
         try:
             if redis_manager.client:
                 await redis_manager.client.ping()
                 redis_healthy = True
+                # Get Redis memory and performance stats
+                info = await redis_manager.info()
+                redis_info = {
+                    "used_memory_human": info.get("used_memory_human", "unknown"),
+                    "used_memory_peak_human": info.get("used_memory_peak_human", "unknown"),
+                    "connected_clients": info.get("connected_clients", 0),
+                    "total_connections_received": info.get("total_connections_received", 0),
+                    "total_commands_processed": info.get("total_commands_processed", 0),
+                    "instantaneous_ops_per_sec": info.get("instantaneous_ops_per_sec", 0),
+                    "keyspace_hits": info.get("keyspace_hits", 0),
+                    "keyspace_misses": info.get("keyspace_misses", 0),
+                }
         except Exception:
             redis_healthy = False
         
@@ -138,7 +189,17 @@ def create_app() -> FastAPI:
             content={
                 "status": status,
                 "database": "connected" if db_healthy else "disconnected",
-                "redis": "connected" if redis_healthy else "disconnected",
+                "redis": {
+                    "status": "connected" if redis_healthy else "disconnected",
+                    "memory_used": redis_info.get("used_memory_human", "unknown"),
+                    "memory_peak": redis_info.get("used_memory_peak_human", "unknown"),
+                    "connected_clients": redis_info.get("connected_clients", 0),
+                    "ops_per_second": redis_info.get("instantaneous_ops_per_sec", 0),
+                    "cache_hit_ratio": (
+                        redis_info.get("keyspace_hits", 0) / 
+                        max(redis_info.get("keyspace_hits", 0) + redis_info.get("keyspace_misses", 0), 1)
+                    ) if redis_info.get("keyspace_hits", 0) + redis_info.get("keyspace_misses", 0) > 0 else 0,
+                },
                 "version": settings.version,
             },
         )
@@ -151,6 +212,30 @@ def create_app() -> FastAPI:
             "documentation": "/docs",
             "health_check": "/health",
         }
+
+    @app.get("/monitoring/redis", tags=["Monitoring"])
+    async def redis_monitoring():
+        """Get comprehensive Redis monitoring information."""
+        try:
+            health_status = await redis_manager.get_health_status()
+            memory_stats = await redis_manager.get_memory_usage()
+            performance_stats = await redis_manager.get_performance_stats()
+            
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "redis_health": health_status,
+                "memory": memory_stats,
+                "performance": performance_stats,
+            }
+        except Exception as e:
+            logger.error(f"Error getting Redis monitoring data: {e}")
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "Redis monitoring unavailable",
+                    "details": str(e),
+                },
+            )
 
     @app.exception_handler(DomainError)
     async def domain_error_handler(_request: Request, exc: DomainError):

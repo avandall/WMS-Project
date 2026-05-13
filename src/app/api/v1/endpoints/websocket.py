@@ -208,6 +208,8 @@ async def handle_system_alert(data):
 pubsub_manager.subscribe(EventType.STOCK_CHANGE, handle_stock_change)
 pubsub_manager.subscribe(EventType.INVENTORY_UPDATE, handle_inventory_update)
 pubsub_manager.subscribe(EventType.SYSTEM_ALERT, handle_system_alert)
+pubsub_manager.subscribe(EventType.CRITICAL_STOCK_CHANGE, handle_stock_change)
+pubsub_manager.subscribe(EventType.CRITICAL_INVENTORY_UPDATE, handle_inventory_update)
 
 
 @router.websocket("/ws/{user_id}")

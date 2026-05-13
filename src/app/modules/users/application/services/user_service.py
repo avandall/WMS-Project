@@ -5,6 +5,7 @@ from typing import Dict
 from app.shared.core.auth import create_token, hash_password, verify_password
 from app.shared.core.cache import cached, invalidate_cache_pattern
 from app.shared.core.redis import redis_manager
+from app.shared.core.session import session_manager
 from app.shared.core.settings import settings
 from app.shared.core.logging import get_logger
 
@@ -54,6 +55,15 @@ class UserService:
             settings.refresh_token_expire_minutes,
             {"role": user.role, "type": "refresh"},
         )
+        token_cache_data = {
+            "user_id": user.user_id,
+            "email": user.email,
+            "role": user.role,
+            "full_name": user.full_name,
+            "is_active": user.is_active,
+        }
+        await session_manager.create_token_session(access, token_cache_data, ex=settings.access_token_expire_minutes * 60)
+
         return {
             "access_token": access,
             "refresh_token": refresh,

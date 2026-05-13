@@ -27,6 +27,13 @@ class TestSessionManager:
         mock_manager.client.smembers.return_value = set()
         mock_manager.client.scan.return_value = (0, [])
         mock_manager.client.ttl.return_value = 3600  # Return integer TTL
+        # Mock pipeline for batched operations
+        pipeline = MagicMock()
+        pipeline.set.return_value = pipeline
+        pipeline.sadd.return_value = pipeline
+        pipeline.expire.return_value = pipeline
+        pipeline.execute = AsyncMock(return_value=[True, 1, True])
+        mock_manager.pipeline = MagicMock(return_value=pipeline)
         # Mock eval for atomic Lua scripts
         mock_manager.client.eval.return_value = json.dumps({
             "user_id": 1,
@@ -76,17 +83,20 @@ class TestSessionManager:
         assert len(session_id) > 0
         
         # Check session data was stored
-        mock_manager.set.assert_called_once()
-        call_args = mock_manager.set.call_args
-        assert call_args[0][0].startswith("session:")
-        assert call_args[0][1]["user_id"] == 1
-        assert call_args[0][1]["user_data"]["email"] == "test@example.com"
-        assert call_args[1]["ex"] == 3600  # 60 minutes * 60 seconds
+        mock_manager.pipeline.assert_called_once()
+        pipeline = mock_manager.pipeline.return_value
+        pipeline.set.assert_called_once()
+        set_args, set_kwargs = pipeline.set.call_args
+        assert set_args[0].startswith("session:")
+        stored = json.loads(set_args[1])
+        assert stored["user_id"] == 1
+        assert stored["user_data"]["email"] == "test@example.com"
+        assert set_kwargs["ex"] == 3600  # 60 minutes * 60 seconds
         
         # Check session was added to user's session list
-        mock_manager.client.sadd.assert_called_once()
-        assert mock_manager.client.sadd.call_args[0][0] == "user_sessions:1"
-        assert session_id in mock_manager.client.sadd.call_args[0][1]
+        pipeline.sadd.assert_called_once()
+        assert pipeline.sadd.call_args[0][0] == "user_sessions:1"
+        assert session_id in pipeline.sadd.call_args[0][1]
     
     @pytest.mark.asyncio
     async def test_create_session_with_custom_id(self, setup_redis_mock, setup_settings_mock):
@@ -100,9 +110,11 @@ class TestSessionManager:
         session_id = await manager.create_session(1, user_data, session_id=custom_session_id)
         
         assert session_id == custom_session_id
-        call_args = mock_manager.set.call_args
-        assert call_args[0][0] == f"session:{custom_session_id}"
-        assert call_args[0][1]["session_id"] == custom_session_id
+        pipeline = mock_manager.pipeline.return_value
+        set_args, _ = pipeline.set.call_args
+        assert set_args[0] == f"session:{custom_session_id}"
+        stored = json.loads(set_args[1])
+        assert stored["session_id"] == custom_session_id
     
     @pytest.mark.asyncio
     async def test_create_session_with_custom_ttl(self, setup_redis_mock, setup_settings_mock):
@@ -114,9 +126,61 @@ class TestSessionManager:
         
         session_id = await manager.create_session(1, user_data, ttl=7200)
         
-        call_args = mock_manager.set.call_args
-        assert call_args[1]["ex"] == 7200
-    
+        pipeline = mock_manager.pipeline.return_value
+        _, set_kwargs = pipeline.set.call_args
+        assert set_kwargs["ex"] == 7200
+
+    @pytest.mark.asyncio
+    async def test_create_token_session_success(self, setup_redis_mock, setup_settings_mock):
+        """Test creating a token session."""
+        mock_manager = setup_redis_mock
+        manager = SessionManager()
+        token = "token-123"
+        token_data = {
+            "user_id": 1,
+            "email": "test@example.com",
+            "role": "user",
+            "full_name": "Test User",
+            "is_active": True,
+        }
+        result = await manager.create_token_session(token, token_data, ex=1800)
+        
+        assert result is True
+        mock_manager.set.assert_called_once_with(
+            f"access_token:{token}", token_data, ex=1800
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_token_session_success(self, setup_redis_mock):
+        """Test retrieving a token session."""
+        mock_manager = setup_redis_mock
+        token_data = {
+            "user_id": 1,
+            "email": "test@example.com",
+            "role": "user",
+            "full_name": "Test User",
+            "is_active": True,
+        }
+        mock_manager.get.return_value = json.dumps(token_data)
+        
+        manager = SessionManager()
+        result = await manager.get_token_session("token-123")
+        
+        assert result == token_data
+        mock_manager.get.assert_called_once_with("access_token:token-123")
+
+    @pytest.mark.asyncio
+    async def test_get_token_session_not_found(self, setup_redis_mock):
+        """Test retrieving a missing token session."""
+        mock_manager = setup_redis_mock
+        mock_manager.get.return_value = None
+        
+        manager = SessionManager()
+        result = await manager.get_token_session("token-123")
+        
+        assert result is None
+        mock_manager.get.assert_called_once_with("access_token:token-123")
+
     @pytest.mark.asyncio
     async def test_get_session_success(self, setup_redis_mock):
         """Test successful session retrieval."""

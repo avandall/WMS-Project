@@ -88,12 +88,15 @@ class TestPubSubManager:
         assert manager._pubsub is mock_pubsub
         assert manager._listener_task is not None
         mock_manager.subscribe.assert_called_once_with(
-            "wms_events:stock_change", 
-            "wms_events:inventory_update", 
-            "wms_events:warehouse_update", 
-            "wms_events:user_activity", 
-            "wms_events:document_status", 
-            "wms_events:system_alert"
+            "wms_events:stock_change",
+            "wms_events:inventory_update",
+            "wms_events:warehouse_update",
+            "wms_events:user_activity",
+            "wms_events:document_status",
+            "wms_events:system_alert",
+            "wms_events:critical_stock_change",
+            "wms_events:critical_inventory_update",
+            "wms_events:critical_document_status"
         )
     
     @pytest.mark.asyncio
@@ -219,6 +222,71 @@ class TestPubSubManager:
         # Should not raise exception, just log error
         await manager.publish(event)
         mock_manager.publish.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_publish_critical_event_persists_to_stream(self, setup_redis_mock):
+        """Test that critical events also persist to Redis Streams."""
+        mock_manager, mock_pubsub = setup_redis_mock
+        mock_manager.publish.return_value = 1
+        mock_manager.xadd.return_value = "12345-0"
+        
+        manager = PubSubManager()
+        event = Event(
+            event_type=EventType.CRITICAL_INVENTORY_UPDATE,
+            data={"product_id": 1, "warehouse_id": 2, "quantity": 5, "operation": "transfer"},
+            timestamp=1234567890.0,
+            source="test_service"
+        )
+        
+        await manager.publish(event)
+        mock_manager.publish.assert_called_once()
+        mock_manager.xadd.assert_called_once()
+        xadd_args = mock_manager.xadd.call_args[0]
+        assert xadd_args[0] == "wms_critical_inventory_updates"
+        assert isinstance(xadd_args[1], dict)
+        assert xadd_args[1]["event_type"] == "critical_inventory_update"
+        assert "payload" in xadd_args[1]
+        assert isinstance(xadd_args[1]["payload"], str)
+
+    @pytest.mark.asyncio
+    async def test_start_critical_stream_consumer_processes_and_acks(self, setup_redis_mock):
+        """Test consuming from Redis Streams via consumer group (catch-up mechanism)."""
+        mock_manager, _ = setup_redis_mock
+        mock_manager.xgroup_create.return_value = True
+        mock_manager.xack.return_value = 1
+
+        # One batch of messages, then empty
+        mock_manager.xreadgroup.side_effect = [
+            [("wms_critical_inventory_updates", [("12345-0", {"event_type": "critical_inventory_update", "payload": "{\"ok\": true}"})])],
+            [],
+        ]
+
+        manager = PubSubManager()
+        manager._running = True  # emulate initialized manager loop
+
+        handler = AsyncMock()
+        key = manager.start_critical_stream_consumer(
+            EventType.CRITICAL_INVENTORY_UPDATE,
+            group_name="test_group",
+            consumer_name="test_consumer",
+            handler=handler,
+            block_ms=1,
+        )
+
+        # Let the consumer run at least once
+        await asyncio.sleep(0)
+
+        manager._running = False
+        await manager.stop_critical_stream_consumer(key)
+
+        mock_manager.xgroup_create.assert_called_once_with(
+            "wms_critical_inventory_updates", "test_group", id="0"
+        )
+        mock_manager.xreadgroup.assert_called()
+        handler.assert_called()
+        mock_manager.xack.assert_called_with(
+            "wms_critical_inventory_updates", "test_group", "12345-0"
+        )
     
     @pytest.mark.asyncio
     async def test_handle_message_success(self, setup_redis_mock):

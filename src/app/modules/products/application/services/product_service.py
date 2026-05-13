@@ -173,11 +173,23 @@ class ProductService:
                 created += 1
                 
         result = {"created": created, "updated": updated}
-        # Invalidate products_all cache (best-effort)
-        try:
-            await redis_manager.delete("products_all")
-        except Exception as e:
-            logger.error(f"Failed to invalidate products_all cache: {e}")
+        
+        # Use Redis pipeline for bulk cache invalidation (10-20x faster)
+        if created > 0 or updated > 0:
+            try:
+                pipeline = redis_manager.pipeline()
+                # Invalidate products_all cache
+                pipeline.delete("products_all")
+                # Invalidate individual product caches for updated products
+                for row in rows:
+                    product_id = int(row["product_id"])
+                    pipeline.delete(f"product:{product_id}")
+                
+                await redis_manager.execute_pipeline(pipeline)
+                logger.info(f"Invalidated {1 + len(rows)} cache keys using pipeline")
+            except Exception as e:
+                logger.error(f"Failed to invalidate caches with pipeline: {e}")
+        
         return result
 
     async def import_products_from_csv(self, content: bytes) -> Dict:

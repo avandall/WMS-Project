@@ -18,6 +18,7 @@ class SessionManager:
     def __init__(self):
         self.session_prefix = "session:"
         self.user_sessions_prefix = "user_sessions:"
+        self.token_prefix = "access_token:"
         self.default_ttl = settings.access_token_expire_minutes * 60  # Convert to seconds
     
     async def create_session(
@@ -44,15 +45,19 @@ class SessionManager:
             "ip_address": user_data.get("ip_address"),
             "user_agent": user_data.get("user_agent"),
         }
-        
-        # Store session data
+
+        # Store session data and index user sessions in a single Redis round trip.
         session_ttl = ttl or self.default_ttl
-        await redis_manager.set(session_key, session_data, ex=session_ttl)
-        
-        # Add session to user's session list
-        await redis_manager.client.sadd(user_sessions_key, session_id)
-        await redis_manager.expire(user_sessions_key, session_ttl)
-        
+        try:
+            pipeline = redis_manager.pipeline()
+            pipeline.set(session_key, json.dumps(session_data, default=str), ex=session_ttl)
+            pipeline.sadd(user_sessions_key, session_id)
+            pipeline.expire(user_sessions_key, session_ttl)
+            await pipeline.execute()
+        except Exception as e:
+            logger.error(f"Failed to create session pipeline for {session_id}: {e}")
+            raise
+
         logger.info(f"Created session {session_id} for user {user_id}")
         return session_id
     
@@ -181,6 +186,43 @@ class SessionManager:
         
         logger.info(f"Deleted session {session_id} for user {user_id}")
         return True
+    
+    async def create_token_session(
+        self, token: str, token_data: Dict[str, Any], ex: Optional[int] = None
+    ) -> bool:
+        """Create a token-backed session for access token caching."""
+        token_key = f"{self.token_prefix}{token}"
+        ttl = ex if ex is not None else self.default_ttl
+        try:
+            return await redis_manager.set(token_key, token_data, ex=ttl)
+        except Exception as e:
+            logger.error(f"Error creating token session for token '{token}': {e}")
+            return False
+    
+    async def get_token_session(self, token: str) -> Optional[Dict[str, Any]]:
+        """Get cached data for an access token."""
+        token_key = f"{self.token_prefix}{token}"
+        try:
+            token_data = await redis_manager.get(token_key)
+            if token_data is None:
+                return None
+            if isinstance(token_data, bytes):
+                token_data = token_data.decode("utf-8")
+            if isinstance(token_data, str):
+                return json.loads(token_data)
+            return token_data
+        except Exception as e:
+            logger.error(f"Error retrieving token session for token '{token}': {e}")
+            return None
+    
+    async def delete_token_session(self, token: str) -> bool:
+        """Delete a cached access token session."""
+        token_key = f"{self.token_prefix}{token}"
+        try:
+            return await redis_manager.delete(token_key)
+        except Exception as e:
+            logger.error(f"Error deleting token session for token '{token}': {e}")
+            return False
     
     async def get_user_sessions(self, user_id: int) -> list:
         """Get all active sessions for a user."""
