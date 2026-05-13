@@ -107,8 +107,34 @@ def cached(
                             elif cached_type == 'list':
                                 return cached_value
                             else:
-                                # For domain objects or other types, return as-is
-                                return cached_value
+                                # For domain objects, try to reconstruct from attributes
+                                try:
+                                    # Import the domain modules dynamically
+                                    from app.modules.warehouses.domain.entities.warehouse import Warehouse
+                                    from app.modules.products.domain.entities.product import Product
+                                    from app.modules.users.domain.entities.user import User
+                                    from app.modules.inventory.domain.entities.inventory import InventoryItem
+                                    
+                                    # Map type names to classes
+                                    type_map = {
+                                        'Warehouse': Warehouse,
+                                        'Product': Product, 
+                                        'User': User,
+                                        'InventoryItem': InventoryItem
+                                    }
+                                    
+                                    if cached_type in type_map:
+                                        # Reconstruct the object from its attributes
+                                        obj_class = type_map[cached_type]
+                                        obj = obj_class.__new__(obj_class)
+                                        obj.__dict__.update(cached_value)
+                                        return obj
+                                    else:
+                                        # Unknown type, return the dict representation
+                                        return cached_value
+                                except Exception as e:
+                                    logger.warning(f"Failed to reconstruct cached object of type {cached_type}: {e}")
+                                    return cached_value
                         else:
                             # Legacy format or regular JSON
                             return parsed
@@ -149,12 +175,27 @@ def cached(
                         '__cached_value__': str(result)
                     }
                 else:
-                    # For domain objects and other types, store their string representation
-                    # but mark the type so we can handle it appropriately
-                    cache_value = {
-                        '__cached_type__': type(result).__name__,
-                        '__cached_value__': str(result)
-                    }
+                    # For domain objects and other types, store as JSON with all attributes
+                    # Use __dict__ to serialize object attributes
+                    try:
+                        if hasattr(result, '__dict__'):
+                            # For domain objects with __dict__, serialize all attributes
+                            cache_value = {
+                                '__cached_type__': type(result).__name__,
+                                '__cached_value__': result.__dict__
+                            }
+                        else:
+                            # Fallback for objects without __dict__
+                            cache_value = {
+                                '__cached_type__': type(result).__name__,
+                                '__cached_value__': str(result)
+                            }
+                    except Exception:
+                        # Ultimate fallback to string representation
+                        cache_value = {
+                            '__cached_type__': type(result).__name__,
+                            '__cached_value__': str(result)
+                        }
                 
                 # Cache the result
                 success = await redis_manager.set(cache_key, cache_value, ex=ttl)

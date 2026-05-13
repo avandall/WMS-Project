@@ -6,8 +6,11 @@ from transformers import TrainingArguments
 
 def main():
     # --- 1. CẤU HÌNH ĐƯỜNG DẪN ---
-    DATA_PATH = "./src/ai_engine/fine-tunning/wms_data.jsonl" # Path tới file dữ liệu của bạn
-    OUTPUT_DIR = "./src/ai_engine/fine-tunning/wms_checkpoints"
+    import os
+    # Get absolute path to script directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    DATA_PATH = os.path.join(script_dir, "wms_data.jsonl") # Path tới file dữ liệu của bạn
+    OUTPUT_DIR = os.path.join(script_dir, "wms_checkpoints")
 
     # --- 2. LOAD MODEL (Tối ưu cho Laptop 6GB VRAM) ---
     model, tokenizer = FastLanguageModel.from_pretrained(

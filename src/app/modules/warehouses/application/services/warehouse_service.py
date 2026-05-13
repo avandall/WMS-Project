@@ -39,7 +39,7 @@ class WarehouseService:
         self.inventory_repo = inventory_repo
         self._warehouse_id_generator = id_generator or warehouse_id_generator()
 
-    def create_warehouse(self, location: str) -> Warehouse:
+    async def create_warehouse(self, location: str) -> Warehouse:
         warehouse_id = self._warehouse_id_generator()
         warehouse = Warehouse(warehouse_id=warehouse_id, location=location)
         self.warehouse_repo.create_warehouse(warehouse)

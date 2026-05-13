@@ -270,6 +270,8 @@ async def websocket_test_page():
         <div>
             <label>User ID: </label>
             <input type="number" id="userId" value="1" min="1">
+            <label>Token: </label>
+            <input type="text" id="tokenInput" value="your-jwt-token-here" style="width: 300px;">
             <button onclick="connect()">Connect</button>
             <button onclick="disconnect()">Disconnect</button>
         </div>
@@ -285,9 +287,11 @@ async def websocket_test_page():
             
             function connect() {
                 userId = document.getElementById('userId').value;
+                const token = document.getElementById('tokenInput').value || 'your-jwt-token-here';
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const host = window.location.host;
-                const wsUrl = `${protocol}//${host}/api/v1/ws/${userId}`;
+                // Note: Using token in URL for demo purposes, but Authorization header is preferred
+                const wsUrl = `${protocol}//${host}/api/v1/ws/${userId}?token=${encodeURIComponent(token)}`;
                 
                 ws = new WebSocket(wsUrl);
                 

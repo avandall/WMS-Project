@@ -105,35 +105,38 @@ class TestWarehouseService:
     # CREATE WAREHOUSE TESTS
     # ============================================================================
 
-    def test_create_warehouse_success(self, warehouse_service, mock_id_generator):
+    @pytest.mark.asyncio
+    async def test_create_warehouse_success(self, warehouse_service, mock_id_generator):
         """Test create_warehouse successful creation"""
         # Mock dependencies
         mock_id_generator.return_value = 123
         warehouse_service.warehouse_repo.create_warehouse = Mock()
         
-        result = warehouse_service.create_warehouse("Test Location")
+        result = await warehouse_service.create_warehouse("Test Location")
         
         assert result.warehouse_id == 123
         assert result.location == "Test Location"
         mock_id_generator.assert_called_once()
         warehouse_service.warehouse_repo.create_warehouse.assert_called_once()
 
-    def test_create_warehouse_with_empty_location(self, warehouse_service):
+    @pytest.mark.asyncio
+    async def test_create_warehouse_with_empty_location(self, warehouse_service):
         """Test create_warehouse with empty location"""
         # Mock dependencies
         warehouse_service.warehouse_repo.create_warehouse = Mock()
         
         # Should raise ValidationError for empty location
         with pytest.raises(ValidationError, match="location must be a non-empty string"):
-            warehouse_service.create_warehouse("")
+            await warehouse_service.create_warehouse("")
 
-    def test_create_warehouse_with_unicode_location(self, warehouse_service):
+    @pytest.mark.asyncio
+    async def test_create_warehouse_with_unicode_location(self, warehouse_service):
         """Test create_warehouse with Unicode location"""
         # Mock dependencies
         warehouse_service.warehouse_repo.create_warehouse = Mock()
         
         unicode_location = "Tëst Wäréhøüse Løçátïøn"
-        result = warehouse_service.create_warehouse(unicode_location)
+        result = await warehouse_service.create_warehouse(unicode_location)
         
         assert result.location == unicode_location
 
@@ -732,7 +735,7 @@ class TestWarehouseService:
         warehouse_service.warehouse_repo.create_warehouse = Mock()
         
         # Create warehouse with Unicode location
-        result = warehouse_service.create_warehouse(unicode_location)
+        result = await warehouse_service.create_warehouse(unicode_location)
         
         assert result.location == unicode_location
 
@@ -744,6 +747,6 @@ class TestWarehouseService:
         warehouse_service.warehouse_repo.create_warehouse = Mock()
         
         # Create warehouse with special characters
-        result = warehouse_service.create_warehouse(special_location)
+        result = await warehouse_service.create_warehouse(special_location)
         
         assert result.location == special_location

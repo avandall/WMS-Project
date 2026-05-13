@@ -128,8 +128,8 @@ def create_app() -> FastAPI:
         except Exception:
             redis_healthy = False
         
-        # Overall status
-        all_healthy = db_healthy and redis_healthy
+        # Overall status - only database is required for healthy status
+        all_healthy = db_healthy
         status = "healthy" if all_healthy else "unhealthy"
         status_code = 200 if all_healthy else 503
         

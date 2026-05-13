@@ -88,7 +88,7 @@ def require_permissions(*perms: Permission):
 
 
 async def get_current_user_ws(websocket: WebSocket, db=Depends(get_session)):
-    """WebSocket-specific authentication that extracts token from query params."""
+    """WebSocket-specific authentication that extracts token from headers."""
     if settings.testing:
         test_user = User(
             user_id=1,
@@ -100,10 +100,18 @@ async def get_current_user_ws(websocket: WebSocket, db=Depends(get_session)):
         )
         return test_user
 
-    # Extract token from query parameters
-    token = websocket.query_params.get("token")
+    # Extract token from Authorization header (preferred method)
+    auth_header = websocket.headers.get("authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header[7:]  # Remove "Bearer " prefix
+    else:
+        # Fallback to query params for compatibility (but log warning)
+        token = websocket.query_params.get("token")
+        if token:
+            logger.warning("WebSocket token passed via query params - insecure, use Authorization header instead")
+    
     if not token:
-        raise WebSocketException(code=1008, reason="Not authenticated: token required")
+        raise WebSocketException(code=1008, reason="Not authenticated: token required in Authorization header")
 
     try:
         payload = decode_token(token)
