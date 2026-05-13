@@ -73,28 +73,32 @@ def create_app() -> FastAPI:
         # Start Redis Streams consumers for critical events (catch-up capable).
         app.state._critical_stream_consumer_keys = []
         try:
-            consumer_suffix = str(uuid.uuid4())[:8]
-            group_name = "wms_api_critical"
+            if not settings.redis_critical_streams_enabled:
+                logger.info("Skipping critical Redis Streams consumers because REDIS_CRITICAL_STREAMS_ENABLED=False")
+            else:
+                consumer_suffix = str(uuid.uuid4())[:8]
+                group_name = settings.redis_critical_streams_group
+                consumer_name = settings.redis_critical_streams_consumer or f"{settings.redis_critical_streams_consumer_prefix}_{consumer_suffix}"
 
-            def _make_handler(event_type):
-                async def _handler(message: dict):
-                    await pubsub_manager.dispatch_critical_stream_message(event_type, message)
-                return _handler
+                def _make_handler(event_type):
+                    async def _handler(message: dict):
+                        await pubsub_manager.dispatch_critical_stream_message(event_type, message)
+                    return _handler
 
-            for event_type in [
-                EventType.CRITICAL_STOCK_CHANGE,
-                EventType.CRITICAL_INVENTORY_UPDATE,
-                EventType.CRITICAL_DOCUMENT_STATUS,
-            ]:
-                key = pubsub_manager.start_critical_stream_consumer(
-                    event_type,
-                    group_name=group_name,
-                    consumer_name=f"api_{consumer_suffix}",
-                    handler=_make_handler(event_type),
-                    claim_idle_ms=60_000,
-                )
-                app.state._critical_stream_consumer_keys.append(key)
-            logger.info("Critical Redis Streams consumers started")
+                for event_type in [
+                    EventType.CRITICAL_STOCK_CHANGE,
+                    EventType.CRITICAL_INVENTORY_UPDATE,
+                    EventType.CRITICAL_DOCUMENT_STATUS,
+                ]:
+                    key = pubsub_manager.start_critical_stream_consumer(
+                        event_type,
+                        group_name=group_name,
+                        consumer_name=consumer_name,
+                        handler=_make_handler(event_type),
+                        claim_idle_ms=settings.redis_critical_streams_claim_idle_ms,
+                    )
+                    app.state._critical_stream_consumer_keys.append(key)
+                logger.info(f"Critical Redis Streams consumers started (group={group_name}, consumer={consumer_name})")
         except Exception as e:
             logger.error(f"Failed to start critical Redis Streams consumers: {e}")
         
