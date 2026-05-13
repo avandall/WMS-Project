@@ -57,25 +57,20 @@ class RateLimiter:
         end
         """
         
-        try:
-            result = await redis_manager.client.eval(lua_script, 1, key, limit, 60)
-            # Redis EVAL returns a list, not a dict
-            if isinstance(result, (list, tuple)) and len(result) >= 2:
-                allowed = bool(result[0])
-                count = result[1]
-                if allowed:
-                    return True
-                else:
-                    logger.warning(f"Rate limit exceeded for IP: {client_ip} (count: {count})")
-                    return False
+        result = await redis_manager.client.eval(lua_script, 1, key, limit, 60)
+        # Redis EVAL returns a list, not a dict
+        if isinstance(result, (list, tuple)) and len(result) >= 2:
+            allowed = bool(result[0])
+            count = result[1]
+            if allowed:
+                return True
             else:
-                # Fallback: if result format is unexpected, deny the request
-                logger.warning(f"Unexpected rate limiter result format: {result}")
+                logger.warning(f"Rate limit exceeded for IP: {client_ip} (count: {count})")
                 return False
-        except Exception as e:
-            logger.error(f"Rate limiting error: {e}")
-            # Fallback to in-memory rate limiting
-            return await self._memory_rate_limit(client_ip, limit)
+        else:
+            # Fallback: if result format is unexpected, deny the request
+            logger.warning(f"Unexpected rate limiter result format: {result}")
+            return False
 
     async def _memory_rate_limit(self, client_ip: str, limit: int) -> bool:
         """In-memory rate limiting as fallback."""

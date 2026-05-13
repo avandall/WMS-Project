@@ -51,7 +51,17 @@ async def refresh(payload: RefreshRequest, service: UserService = Depends(get_us
     except jwt.PyJWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
-    user = await service.get_user(int(decoded.get("sub")))
+    # Validate and safely convert user_id from token
+    sub_value = decoded.get("sub")
+    if sub_value is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token: missing subject")
+    
+    try:
+        user_id = int(sub_value)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token: malformed subject")
+    
+    user = await service.get_user(user_id)
     access = create_token(
         str(user.user_id),
         settings.access_token_expire_minutes,

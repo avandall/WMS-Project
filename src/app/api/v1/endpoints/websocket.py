@@ -3,16 +3,58 @@
 import json
 import asyncio
 from typing import Dict, Set, List
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse
 from app.api.auth_deps import get_current_user_ws
 
 from app.shared.core.pubsub import pubsub_manager, EventType
 from app.shared.core.logging import get_logger
+from app.shared.core.permissions import Permission, role_has_permissions
+from app.shared.core.permissions_store import get_user_overrides
+from app.shared.core.settings import settings
 
 logger = get_logger(__name__)
 
+# Channel permission mapping - only allow specific channels with required permissions
+CHANNEL_PERMISSIONS = {
+    "general": None,  # No permissions required for general channel
+    "stock_changes": Permission.VIEW_INVENTORY,
+    "inventory": Permission.VIEW_INVENTORY,
+    "warehouse_updates": Permission.VIEW_WAREHOUSES,
+    "document_status": Permission.VIEW_DOCUMENTS,
+    "system_alerts": Permission.VIEW_REPORTS,
+}
+
 router = APIRouter()
+
+
+def has_channel_permission(user, channel: str) -> bool:
+    """Check if user has permission to subscribe to a channel."""
+    if channel.startswith("user_"):
+        # Users can always subscribe to their own user channel
+        try:
+            user_id = int(channel.split("_")[1])
+            return user.user_id == user_id
+        except (ValueError, IndexError):
+            return False
+    
+    if channel not in CHANNEL_PERMISSIONS:
+        return False
+    
+    required_permission = CHANNEL_PERMISSIONS[channel]
+    if required_permission is None:
+        return True  # No permission required
+    
+    if user.role == "admin":
+        return True
+    
+    # Check user overrides first
+    overrides = get_user_overrides(user.user_id)
+    if overrides and required_permission in overrides:
+        return True
+    
+    # Check role permissions
+    return role_has_permissions(user.role, {required_permission})
 
 
 class ConnectionManager:
@@ -176,23 +218,25 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, current_user = 
         await websocket.close(code=1008, reason="Unauthorized: Cannot access another user's WebSocket")
         return
     
-    # Validate channel names to prevent injection
-    channels = ["general", f"user_{user_id}"]
-    for channel in channels:
-        if not channel.replace("_", "").isalnum():
-            await websocket.close(code=1008, reason="Invalid channel name")
-            return
+    # Start with default channels that user has permission for
+    default_channels = ["general", f"user_{user_id}"]
+    allowed_channels = []
     
-        
+    for channel in default_channels:
+        if has_channel_permission(current_user, channel):
+            allowed_channels.append(channel)
+        else:
+            logger.warning(f"User {user_id} denied access to channel {channel}")
+    
     try:
-        await manager.connect(websocket, user_id, channels)
+        await manager.connect(websocket, user_id, allowed_channels)
         
-        # Send welcome message
+        # Send welcome message with allowed channels
         await websocket.send_text(json.dumps({
             "type": "connection",
             "message": "Connected to WMS real-time updates",
             "user_id": user_id,
-            "channels": channels
+            "channels": allowed_channels
         }))
         
         # Keep connection alive
@@ -203,26 +247,50 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, current_user = 
                 message = json.loads(data)
                 
                 if message.get("type") == "subscribe":
-                    # Handle dynamic subscription changes
+                    # Handle dynamic subscription changes with permission validation
                     new_channels = message.get("channels", [])
+                    added_channels = []
+                    
                     async with manager._connection_lock:
                         for channel in new_channels:
-                            # Validate channel name
+                            # Validate channel name format
                             if not channel.replace("_", "").isalnum():
+                                await websocket.send_text(json.dumps({
+                                    "type": "error",
+                                    "message": f"Invalid channel name: {channel}"
+                                }))
                                 continue
+                            
+                            # Check if user has permission for this channel
+                            if not has_channel_permission(current_user, channel):
+                                await websocket.send_text(json.dumps({
+                                    "type": "error", 
+                                    "message": f"Permission denied for channel: {channel}"
+                                }))
+                                logger.warning(f"User {user_id} denied subscription to channel {channel}")
+                                continue
+                            
                             # Limit number of channels per connection
-                            if len(channels) >= 20:
+                            if len(allowed_channels) >= 20:
+                                await websocket.send_text(json.dumps({
+                                    "type": "error",
+                                    "message": "Channel limit reached"
+                                }))
                                 break
-                            if channel not in channels:
-                                channels.append(channel)
+                            
+                            if channel not in allowed_channels:
+                                allowed_channels.append(channel)
+                                added_channels.append(channel)
                                 if channel not in manager.active_connections:
                                     manager.active_connections[channel] = set()
                                 manager.active_connections[channel].add(websocket)
                     
-                    await websocket.send_text(json.dumps({
-                        "type": "subscription_updated",
-                        "channels": channels
-                    }))
+                    if added_channels:
+                        await websocket.send_text(json.dumps({
+                            "type": "subscription_updated",
+                            "added_channels": added_channels,
+                            "channels": allowed_channels
+                        }))
                 
             except WebSocketDisconnect:
                 break
@@ -239,6 +307,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, current_user = 
 @router.get("/ws-test", response_class=HTMLResponse)
 async def websocket_test_page():
     """Simple WebSocket test page."""
+    if not settings.debug:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return """
     <!DOCTYPE html>
     <html>

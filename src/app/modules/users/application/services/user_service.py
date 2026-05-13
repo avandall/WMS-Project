@@ -10,6 +10,7 @@ from app.shared.core.logging import get_logger
 
 logger = get_logger(__name__)
 from app.modules.users.domain.entities.user import User
+from app.modules.users.application.dtos.user import UserResponse
 from app.shared.domain.business_exceptions import EntityNotFoundError, ValidationError
 from app.modules.users.domain.interfaces.user_repo import IUserRepo
 
@@ -60,17 +61,36 @@ class UserService:
             "user": user,
         }
 
-    @cached(prefix="user", ttl=1800)  # 30 minutes cache
     async def get_user(self, user_id: int) -> User:
+        """Get full user entity including sensitive data (not cached)."""
         user = self.user_repo.get(user_id)
         if not user:
             raise EntityNotFoundError("User not found")
         return user
 
+    @cached(prefix="user_public", ttl=1800)  # 30 minutes cache
+    async def get_user_public(self, user_id: int) -> UserResponse:
+        """Get public user data without sensitive information (cached)."""
+        user = self.user_repo.get(user_id)
+        if not user:
+            raise EntityNotFoundError("User not found")
+        return UserResponse(
+            user_id=user.user_id,
+            email=user.email,
+            full_name=user.full_name,
+            is_active=user.is_active,
+            created_at=user.created_at,
+            last_login=user.last_login
+        )
+
+    async def get_user_credentials(self, user_id: int) -> User:
+        """Get user entity with credentials for authentication (not cached)."""
+        return await self.get_user(user_id)
+
     async def list_users(self) -> Dict[int, User]:
         return self.user_repo.get_all()
 
-    @invalidate_cache_pattern("user")
+    @invalidate_cache_pattern("user_public")
     async def update_role(self, user_id: int, role: str) -> User:
         user = await self.get_user(user_id)
         updated = User(
@@ -85,11 +105,12 @@ class UserService:
         # Invalidate specific user cache (best-effort)
         try:
             await redis_manager.delete(f"user:{user_id}")
+            await redis_manager.delete(f"user_public:{user_id}")
         except Exception as e:
             logger.error(f"Failed to invalidate user cache: {e}")
         return result
 
-    @invalidate_cache_pattern("user")
+    @invalidate_cache_pattern("user_public")
     async def change_password(self, user_id: int, old_password: str, new_password: str) -> User:
         user = await self.get_user(user_id)
         if not verify_password(old_password, user.hashed_password):
@@ -109,16 +130,18 @@ class UserService:
         # Invalidate specific user cache (best-effort)
         try:
             await redis_manager.delete(f"user:{user_id}")
+            await redis_manager.delete(f"user_public:{user_id}")
         except Exception as e:
             logger.error(f"Failed to invalidate user cache: {e}")
         return result
 
-    @invalidate_cache_pattern("user")
+    @invalidate_cache_pattern("user_public")
     async def delete_user(self, user_id: int) -> None:
         await self.get_user(user_id)
         self.user_repo.delete(user_id)
         # Invalidate specific user cache (best-effort)
         try:
             await redis_manager.delete(f"user:{user_id}")
+            await redis_manager.delete(f"user_public:{user_id}")
         except Exception as e:
             logger.error(f"Failed to invalidate user cache: {e}")

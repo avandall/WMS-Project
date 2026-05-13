@@ -10,10 +10,13 @@ from app.shared.core.auth import decode_token
 from app.shared.core.permissions import Permission, role_has_permissions
 from app.shared.core.permissions_store import get_user_overrides
 from app.shared.core.settings import settings
+from app.shared.core.logging import get_logger
 from app.modules.users.domain.entities.user import User
 from app.modules.users.infrastructure.repositories.user_repo import UserRepo
 from app.shared.core.database import get_session
 from app.modules.users.application.services.user_service import UserService
+
+logger = get_logger(__name__)
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -87,7 +90,7 @@ def require_permissions(*perms: Permission):
     return _checker
 
 
-async def get_current_user_ws(websocket: WebSocket, db=Depends(get_session)):
+async def get_current_user_ws(websocket: WebSocket):
     """WebSocket-specific authentication that extracts token from headers."""
     if settings.testing:
         test_user = User(
@@ -119,10 +122,15 @@ async def get_current_user_ws(websocket: WebSocket, db=Depends(get_session)):
     except jwt.PyJWTError:
         raise WebSocketException(code=1008, reason="Invalid token")
 
-    service = UserService(UserRepo(db))
-    user = await service.get_user(user_id)
-    if not user.is_active:
-        raise WebSocketException(code=1008, reason="Inactive user")
-    
-    return user
+    # Use short-lived DB session for authentication only
+    from app.shared.core.database import SessionLocal
+    db = SessionLocal()
+    try:
+        service = UserService(UserRepo(db))
+        user = await service.get_user(user_id)
+        if not user.is_active:
+            raise WebSocketException(code=1008, reason="Inactive user")
+        return user
+    finally:
+        db.close()
 

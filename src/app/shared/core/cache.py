@@ -12,6 +12,18 @@ from app.shared.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Serializer registry for generic object reconstruction
+_serializer_registry = {}
+
+def register_serializer(type_name: str, from_dict_callable: Callable) -> None:
+    """Register a serializer for reconstructing objects from cached dictionaries."""
+    _serializer_registry[type_name] = from_dict_callable
+    logger.debug(f"Registered serializer for type: {type_name}")
+
+def get_serializer(type_name: str) -> Optional[Callable]:
+    """Get registered serializer for a type name."""
+    return _serializer_registry.get(type_name)
+
 
 def cache_key_builder(
     prefix: str,
@@ -107,31 +119,28 @@ def cached(
                             elif cached_type == 'list':
                                 return cached_value
                             else:
-                                # For domain objects, try to reconstruct from attributes
+                                # For domain objects, try to reconstruct using registered serializers
                                 try:
-                                    # Import the domain modules dynamically
-                                    from app.modules.warehouses.domain.entities.warehouse import Warehouse
-                                    from app.modules.products.domain.entities.product import Product
-                                    from app.modules.users.domain.entities.user import User
-                                    from app.modules.inventory.domain.entities.inventory import InventoryItem
+                                    # Check if we have a registered serializer for this type
+                                    serializer = get_serializer(cached_type)
+                                    if serializer:
+                                        return serializer(cached_value)
                                     
-                                    # Map type names to classes
-                                    type_map = {
-                                        'Warehouse': Warehouse,
-                                        'Product': Product, 
-                                        'User': User,
-                                        'InventoryItem': InventoryItem
-                                    }
+                                    # Check if it's a Pydantic model (common case)
+                                    try:
+                                        # Try to detect Pydantic models by checking for common attributes
+                                        if isinstance(cached_value, dict):
+                                            # Check if the value looks like it could be a Pydantic model dict
+                                            # We'll try to handle it as a generic dict fallback
+                                            logger.debug(f"No serializer registered for type {cached_type}, returning as dict")
+                                            return cached_value
+                                    except Exception:
+                                        pass
                                     
-                                    if cached_type in type_map:
-                                        # Reconstruct the object from its attributes
-                                        obj_class = type_map[cached_type]
-                                        obj = obj_class.__new__(obj_class)
-                                        obj.__dict__.update(cached_value)
-                                        return obj
-                                    else:
-                                        # Unknown type, return the dict representation
-                                        return cached_value
+                                    # No serializer registered and not a simple dict, return as-is with warning
+                                    logger.warning(f"No serializer registered for type {cached_type}, returning raw dict")
+                                    return cached_value
+                                    
                                 except Exception as e:
                                     logger.warning(f"Failed to reconstruct cached object of type {cached_type}: {e}")
                                     return cached_value

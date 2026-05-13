@@ -328,8 +328,11 @@ class TestSemaphore:
         call_args = mock_manager.client.eval.call_args
         assert call_args[0][1] == 1  # KEYS count
         assert call_args[0][2] == "semaphore:test_semaphore"  # KEY
-        assert call_args[0][3] == 3600  # TTL
-        assert call_args[0][4] == 5  # max_concurrent
+        # Arguments: now, ttl, max_concurrent, identifier
+        assert len(call_args[0]) >= 6  # Should have at least 6 arguments
+        assert call_args[0][3] > 0  # now (timestamp)
+        assert call_args[0][4] == 3600  # TTL
+        assert call_args[0][5] == 5  # max_concurrent
     
     @pytest.mark.asyncio
     async def test_semaphore_acquire_full(self, setup_redis_mock):

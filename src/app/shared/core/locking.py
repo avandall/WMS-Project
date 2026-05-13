@@ -78,22 +78,31 @@ class DistributedLock:
         if not self._acquired:
             return False
         
-        ttl = additional_ttl or self.ttl
+        extension = additional_ttl or self.ttl
         
-        # Use Lua script for atomic extension
+        # Use Lua script for atomic extension with remaining TTL calculation
         lua_script = """
         if redis.call("GET", KEYS[1]) == ARGV[1] then
-            redis.call("EXPIRE", KEYS[1], ARGV[2])
-            return ARGV[2]
+            local remaining = redis.call("TTL", KEYS[1])
+            if remaining < 0 then
+                -- Key has no expiry or doesn't exist, set to extension amount
+                redis.call("EXPIRE", KEYS[1], ARGV[2])
+                return ARGV[2]
+            else
+                -- Add extension to remaining TTL
+                local new_ttl = remaining + tonumber(ARGV[2])
+                redis.call("EXPIRE", KEYS[1], new_ttl)
+                return new_ttl
+            end
         else
             return 0
         end
         """
         
         try:
-            result = await redis_manager.client.eval(lua_script, 1, self.key, self.identifier, ttl)
+            result = await redis_manager.client.eval(lua_script, 1, self.key, self.identifier, extension)
             if result:
-                logger.debug(f"Extended lock {self.key} by {ttl} seconds")
+                logger.debug(f"Extended lock {self.key} by {extension} seconds (new TTL: {result})")
                 return True
             else:
                 logger.warning(f"Failed to extend lock {self.key} - not owner")
@@ -189,16 +198,23 @@ class Semaphore:
         self._acquired = False
     
     async def acquire(self) -> bool:
-        """Acquire a semaphore slot."""
-        # Use Lua script to atomically check and increment
+        """Acquire a semaphore slot with per-token ownership."""
+        # Use Lua script with sorted set for per-token permits
         lua_script = """
-        local current = redis.call("GET", KEYS[1])
-        if current == false then
-            redis.call("SET", KEYS[1], "1", "EX", ARGV[1])
-            return 1
-        elseif tonumber(current) < tonumber(ARGV[2]) then
-            redis.call("INCR", KEYS[1])
-            redis.call("EXPIRE", KEYS[1], ARGV[1])
+        local now = tonumber(ARGV[1])
+        local ttl = tonumber(ARGV[2])
+        local max_concurrent = tonumber(ARGV[3])
+        local identifier = ARGV[4]
+        
+        -- Remove expired tokens
+        redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, now - 1)
+        
+        -- Check current active permits
+        local current = redis.call('ZCARD', KEYS[1])
+        
+        if current < max_concurrent then
+            -- Add new permit with expiry timestamp
+            redis.call('ZADD', KEYS[1], now + ttl, identifier)
             return 1
         else
             return 0
@@ -206,13 +222,15 @@ class Semaphore:
         """
         
         try:
+            import time
+            now = int(time.time())
             result = await redis_manager.client.eval(
-                lua_script, 1, self.key, self.ttl, self.max_concurrent
+                lua_script, 1, self.key, now, self.ttl, self.max_concurrent, self.identifier
             )
             
             if result:
                 self._acquired = True
-                logger.debug(f"Acquired semaphore slot {self.key}")
+                logger.debug(f"Acquired semaphore slot {self.key} (identifier: {self.identifier[:8]})")
                 return True
             else:
                 logger.debug(f"Semaphore {self.key} is full")
@@ -222,31 +240,25 @@ class Semaphore:
             return False
     
     async def release(self) -> bool:
-        """Release a semaphore slot."""
+        """Release a semaphore slot by removing specific identifier token."""
         if not self._acquired:
             return False
         
-        # Use Lua script to atomically decrement
+        # Use Lua script to atomically remove specific identifier
         lua_script = """
-        local current = redis.call("GET", KEYS[1])
-        if current == false then
-            return 0
-        elseif tonumber(current) > 0 then
-            redis.call("DECR", KEYS[1])
-            return 1
-        else
-            return 0
-        end
+        local identifier = ARGV[1]
+        local removed = redis.call('ZREM', KEYS[1], identifier)
+        return removed
         """
         
         try:
-            result = await redis_manager.client.eval(lua_script, 1, self.key)
+            result = await redis_manager.client.eval(lua_script, 1, self.key, self.identifier)
             if result:
                 self._acquired = False
-                logger.debug(f"Released semaphore slot {self.key}")
+                logger.debug(f"Released semaphore slot {self.key} (identifier: {self.identifier[:8]})")
                 return True
             else:
-                logger.warning(f"Failed to release semaphore slot {self.key}")
+                logger.warning(f"Failed to release semaphore slot {self.key} - identifier not found or already expired")
                 return False
         except Exception as e:
             logger.error(f"Error releasing semaphore {self.key}: {e}")

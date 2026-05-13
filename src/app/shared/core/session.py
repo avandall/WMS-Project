@@ -57,58 +57,106 @@ class SessionManager:
         return session_id
     
     async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """Get session data by session ID."""
+        """Get session data by session ID with atomic update."""
         session_key = f"{self.session_prefix}{session_id}"
-        session_data = await redis_manager.get(session_key)
         
-        if session_data is None:
+        # Use atomic Lua script to get and update session
+        lua_script = """
+        local session_data = redis.call('GET', KEYS[1])
+        if session_data == false then
+            return nil
+        end
+        
+        -- Parse JSON and update last_accessed
+        local data = cjson.decode(session_data)
+        data['last_accessed'] = ARGV[1]
+        
+        -- Get current TTL and preserve it
+        local current_ttl = redis.call('TTL', KEYS[1])
+        local ttl_to_use = current_ttl > 0 and current_ttl or tonumber(ARGV[2])
+        
+        -- Update session with preserved TTL
+        redis.call('SET', KEYS[1], cjson.encode(data), 'EX', ttl_to_use)
+        
+        return cjson.encode(data)
+        """
+        
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            result = await redis_manager.client.eval(
+                lua_script, 1, session_key, now, self.default_ttl
+            )
+            
+            if result is None:
+                return None
+            
+            # Parse result and refresh user session index TTL
+            if isinstance(result, bytes):
+                result = result.decode('utf-8')
+            session_data = json.loads(result)
+            
+            # Refresh user session index TTL
+            user_id = session_data.get("user_id")
+            if user_id:
+                user_sessions_key = f"{self.user_sessions_prefix}{user_id}"
+                await redis_manager.expire(user_sessions_key, self.default_ttl)
+            
+            return session_data
+            
+        except Exception as e:
+            logger.error(f"Error getting session {session_id}: {e}")
             return None
-        
-        # Update last accessed time and refresh user session index TTL
-        if isinstance(session_data, str):
-            session_data = json.loads(session_data)
-        elif isinstance(session_data, bytes):
-            session_data = json.loads(session_data.decode('utf-8'))
-        
-        session_data["last_accessed"] = datetime.now(timezone.utc).isoformat()
-        # Get current TTL to preserve it
-        current_ttl = await redis_manager.client.ttl(session_key)
-        if current_ttl > 0:
-            await redis_manager.set(session_key, session_data, ex=current_ttl)
-        else:
-            await redis_manager.set(session_key, session_data, ex=self.default_ttl)
-        
-        # Refresh user session index TTL
-        user_id = session_data.get("user_id")
-        if user_id:
-            user_sessions_key = f"{self.user_sessions_prefix}{user_id}"
-            await redis_manager.expire(user_sessions_key, self.default_ttl)
-        
-        return session_data
     
     async def update_session(self, session_id: str, updates: Dict[str, Any]) -> bool:
-        """Update session data."""
+        """Update session data with atomic operations."""
         session_key = f"{self.session_prefix}{session_id}"
-        session_data = await redis_manager.get(session_key)
         
-        if session_data is None:
+        # Use atomic Lua script to update session
+        lua_script = """
+        local session_data = redis.call('GET', KEYS[1])
+        if session_data == false then
+            return 0
+        end
+        
+        -- Parse JSON and apply updates
+        local data = cjson.decode(session_data)
+        local updates = cjson.decode(ARGV[1])
+        
+        -- Apply all updates to session data
+        for key, value in pairs(updates) do
+            data[key] = value
+        end
+        
+        -- Update last_accessed
+        data['last_accessed'] = ARGV[2]
+        
+        -- Get current TTL and preserve it
+        local current_ttl = redis.call('TTL', KEYS[1])
+        local ttl_to_use = current_ttl > 0 and current_ttl or tonumber(ARGV[3])
+        
+        -- Update session with preserved TTL
+        redis.call('SET', KEYS[1], cjson.encode(data), 'EX', ttl_to_use)
+        
+        return 1
+        """
+        
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            updates_json = json.dumps(updates)
+            result = await redis_manager.client.eval(
+                lua_script, 1, session_key, updates_json, now, self.default_ttl
+            )
+            
+            if result:
+                logger.debug(f"Updated session {session_id}")
+                return True
+            else:
+                logger.debug(f"Session {session_id} not found for update")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error updating session {session_id}: {e}")
             return False
-        
-        if isinstance(session_data, str):
-            session_data = json.loads(session_data)
-        
-        # Update session data
-        session_data.update(updates)
-        session_data["last_accessed"] = datetime.now(timezone.utc).isoformat()
-        
-        # Get current TTL to preserve it
-        current_ttl = await redis_manager.client.ttl(session_key)
-        if current_ttl > 0:
-            await redis_manager.set(session_key, session_data, ex=current_ttl)
-        else:
-            await redis_manager.set(session_key, session_data, ex=self.default_ttl)
-        logger.debug(f"Updated session {session_id}")
-        return True
     
     async def delete_session(self, session_id: str) -> bool:
         """Delete a session."""
@@ -175,27 +223,75 @@ class SessionManager:
         logger.debug("Session cleanup relies on Redis TTL")
         return 0
     
-    async def extend_session(self, session_id: str, additional_seconds: Optional[int] = None) -> bool:
-        """Extend session TTL."""
+    async def extend_session(self, session_id: str, ttl_seconds: Optional[int] = None) -> bool:
+        """Extend session TTL with validation and edge case handling."""
         session_key = f"{self.session_prefix}{session_id}"
-        exists = await redis_manager.exists(session_key)
         
-        if not exists:
+        # Get current TTL to validate against shrinking
+        current_ttl = await redis_manager.client.ttl(session_key)
+        if current_ttl < 0:  # Key doesn't exist or has no expiry
             return False
         
-        ttl = additional_seconds if additional_seconds is not None else self.default_ttl
-        await redis_manager.expire(session_key, ttl)
+        # Determine final TTL
+        final_ttl = ttl_seconds if ttl_seconds is not None else self.default_ttl
         
-        # Also update last accessed time without overriding TTL
-        session_data = await redis_manager.get(session_key)
-        if isinstance(session_data, str):
-            session_data = json.loads(session_data)
-        if session_data:
-            session_data["last_accessed"] = datetime.now(timezone.utc).isoformat()
-            await redis_manager.set(session_key, session_data, ex=ttl)
+        # Prevent shrinking existing session
+        if ttl_seconds is not None and ttl_seconds < current_ttl:
+            logger.debug(f"Rejected TTL shrink for session {session_id}: {ttl_seconds} < {current_ttl}")
+            return False
         
-        logger.debug(f"Extended session {session_id} by {ttl} seconds")
-        return True
+        # Handle invalid TTL values
+        if final_ttl <= 0:
+            # Delete session and remove from user_sessions index
+            session_data = await redis_manager.get(session_key)
+            if session_data:
+                if isinstance(session_data, str):
+                    session_data = json.loads(session_data)
+                elif isinstance(session_data, bytes):
+                    session_data = json.loads(session_data.decode('utf-8'))
+                
+                user_id = session_data.get("user_id")
+                if user_id:
+                    user_sessions_key = f"{self.user_sessions_prefix}{user_id}"
+                    await redis_manager.client.srem(user_sessions_key, session_id)
+            
+            await redis_manager.delete(session_key)
+            logger.info(f"Deleted session {session_id} due to zero/negative TTL")
+            return True
+        
+        # Use atomic Lua script to update session with new TTL
+        lua_script = """
+        local session_data = redis.call('GET', KEYS[1])
+        if session_data == false then
+            return 0
+        end
+        
+        -- Parse JSON and update last_accessed
+        local data = cjson.decode(session_data)
+        data['last_accessed'] = ARGV[1]
+        
+        -- Update session with new TTL
+        redis.call('SET', KEYS[1], cjson.encode(data), 'EX', ARGV[2])
+        
+        return 1
+        """
+        
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            result = await redis_manager.client.eval(
+                lua_script, 1, session_key, now, final_ttl
+            )
+            
+            if result:
+                logger.debug(f"Extended session {session_id} to TTL {final_ttl} seconds")
+                return True
+            else:
+                logger.debug(f"Session {session_id} not found for extension")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error extending session {session_id}: {e}")
+            return False
     
     async def is_session_valid(self, session_id: str) -> bool:
         """Check if session is valid and not expired."""
